@@ -11,9 +11,9 @@ Raw user text must never be inserted into ChatGPT, Claude, Gemini, OpenAI, or an
 - Detect and privatize locally.
 - Insert only privatized text into supported AI chat pages.
 - Keep raw prompts in memory only.
-- Keep privatization mappings in memory only.
-- Do not persist raw prompts or mappings.
-- Do not log raw prompts, detected values, or mappings.
+- Keep masking mappings in memory only.
+- Do not persist raw prompts or masking mappings.
+- Do not log raw prompts, detected values, or masking mappings.
 - Do not add analytics, telemetry, or remote API calls.
 - Do not request broad host permissions such as `<all_urls>`.
 - Do not inject anything if the extension cannot prove the text is privatized.

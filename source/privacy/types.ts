@@ -31,12 +31,12 @@ export type SensitiveItem = {
     source: DetectionSource;
 };
 
-// mapping from original sensitive items to replacements used in output
-export type ReplacementMapping = {
+// mapping from original sensitive items to masks used in output
+export type MaskingMapping = {
     id: string;
     category: SensitiveItemCategory;
     original: string;
-    replacement: string;
+    mask: string;
     itemIds: string[];
 };
 
@@ -45,6 +45,6 @@ export type PrivatizedPromptResult = {
     privatizedPrompt: string;
     method: PrivatizationMethod;
     items: SensitiveItem[];
-    mappings: ReplacementMapping[];
+    maskingMappings: MaskingMapping[];
     safeToInject: boolean;
 };

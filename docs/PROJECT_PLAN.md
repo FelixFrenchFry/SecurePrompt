@@ -20,7 +20,7 @@ User-facing copy, code identifiers, and technical documentation should use `priv
 
 The current default privatization method is `placeholder`: sensitive values are replaced with placeholders such as `EMAIL_001` or `ACCOUNT_001`.
 
-Future privatization methods may include `removal` and `pseudonymized` replacement, but they are not part of the current implementation.
+Future privatization methods may include `removal` and `pseudonymized` masking, but they are not part of the current implementation.
 
 ## Initial Scope
 
@@ -30,7 +30,7 @@ The first working version should stay simple:
 - WXT, TypeScript, React, and plain CSS
 - Side panel prompt editor
 - Rules-based PII detection
-- Local replacement mapping
+- Local masking mappings
 - Privatized prompt view
 - ChatGPT injection of privatized text only
 - Unit tests for privacy logic
@@ -59,7 +59,7 @@ Expected areas:
 - Pure TypeScript privacy module for detection, overlap merging, privatization, and restoration
 - Site adapter for ChatGPT DOM insertion
 - Background/service worker code only where coordination is needed
-- Tests for detectors, validators, mapping, restoration, and raw-value leakage regressions
+- Tests for detectors, validators, masking mappings, restoration, and raw-value leakage regressions
 
 Initial privatization pipeline:
 
@@ -69,12 +69,12 @@ createPrivatizedPrompt(inputText)
        -> if enabled, detectSensitiveItemsWithRules(inputText)
        -> later, if enabled, detectSensitiveItemsWithLocalModel(inputText)
   -> resolveSensitiveItemOverlaps(detectedItems)
-  -> createReplacementMappings(finalItems)
-  -> applyReplacementsToItems(inputText, finalItems, mappings)
+  -> createMaskingMappings(finalItems)
+  -> applyMasksToItems(inputText, finalItems, maskingMappings)
   -> return PrivatizedPromptResult
 ```
 
-The first implementation should define this orchestration shape before filling in real detection, overlap handling, and replacement logic. Until those internals exist, the pipeline must fail closed and avoid injecting raw prompt text.
+The first implementation should define this orchestration shape before filling in real detection, overlap handling, and masking logic. Until those internals exist, the pipeline must fail closed and avoid injecting raw prompt text.
 
 Start with narrow host permissions:
 

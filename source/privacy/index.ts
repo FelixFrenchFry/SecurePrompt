@@ -6,16 +6,17 @@ import {
 import { detectSensitiveItemsWithLocalModel } from './detect/detection-local-model';
 import { detectSensitiveItemsWithRules } from './detect/detection-rules';
 import type {
+    MaskingMapping,
     PrivatizedPromptResult,
-    ReplacementMapping,
     SensitiveItem,
+    SensitiveItemCategory,
 } from './types';
 
 export type {
     DetectionSource,
+    MaskingMapping,
     PrivatizationMethod,
     PrivatizedPromptResult,
-    ReplacementMapping,
     SensitiveItem,
     SensitiveItemCategory,
 } from './types';
@@ -33,17 +34,17 @@ export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResul
     // 2. resolve overlaps and conflicts between detected items
     const finalItems = resolveSensitiveItemOverlaps(detectedItems);
 
-    // 3. create many-to-one mapping from items to replacement values
-    const mappings = createReplacementMappings(finalItems);
+    // 3. create many-to-one masking mappings from items to masks
+    const maskingMappings = createMaskingMappings(finalItems);
 
-    // 4. apply the replacement values to the items to create the privatized prompt
-    const privatizedPrompt = applyReplacementsToItems(inputText, finalItems, mappings);
+    // 4. apply masks to create the privatized prompt, depending on the chosen privatization method
+    const privatizedPrompt = applyMasksToItems(inputText, finalItems, maskingMappings);
 
     return {
         privatizedPrompt,
         method: DEFAULT_PRIVATIZATION_METHOD,
         items: finalItems,
-        mappings,
+        maskingMappings,
         safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
     };
 };
@@ -68,15 +69,66 @@ const resolveSensitiveItemOverlaps = (items: SensitiveItem[]): SensitiveItem[] =
     return items;
 };
 
-const createReplacementMappings = (_items: SensitiveItem[]): ReplacementMapping[] =>
+const createNumberedId = (prefix: string, index: number) =>
 {
-    return [];
+    return `${prefix}-${String(index).padStart(3, '0')}`;
 };
 
-const applyReplacementsToItems = (
+const createMask = (category: SensitiveItemCategory, categoryIndex: number) =>
+{
+    return `${category}_${String(categoryIndex).padStart(3, '0')}`;
+};
+
+// TODO: add normalization so that "timo" and "Timo" get the same mask?
+const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
+{
+    const maskingMappings: MaskingMapping[] = [];
+    const categoryCounts = new Map<SensitiveItemCategory, number>();
+    const mappingsByCategory = new Map<SensitiveItemCategory, Map<string, MaskingMapping>>();
+
+    for (const item of items)
+    {
+        // group exact original values within each category
+        let mappingsByOriginal = mappingsByCategory.get(item.category);
+
+        if (mappingsByOriginal == null)
+        {
+            mappingsByOriginal = new Map<string, MaskingMapping>();
+            mappingsByCategory.set(item.category, mappingsByOriginal);
+        }
+
+        const existingMapping = mappingsByOriginal.get(item.value);
+
+        // make  repeated values share the first mask they received
+        if (existingMapping != null)
+        {
+            existingMapping.itemIds.push(item.id);
+            continue;
+        }
+
+        // first-seen values get the next mask number for their category
+        const categoryIndex = (categoryCounts.get(item.category) ?? 0) + 1;
+        categoryCounts.set(item.category, categoryIndex);
+
+        const maskingMapping = {
+            id: createNumberedId('masking-mapping', maskingMappings.length + 1),
+            category: item.category,
+            original: item.value,
+            mask: createMask(item.category, categoryIndex),
+            itemIds: [item.id],
+        };
+
+        mappingsByOriginal.set(item.value, maskingMapping);
+        maskingMappings.push(maskingMapping);
+    }
+
+    return maskingMappings;
+};
+
+const applyMasksToItems = (
     inputText: string,
     _items: SensitiveItem[],
-    _mappings: ReplacementMapping[],
+    _maskingMappings: MaskingMapping[],
 ) =>
 {
     return inputText;
