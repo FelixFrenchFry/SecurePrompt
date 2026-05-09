@@ -28,7 +28,8 @@ type RuntimeGlobal = typeof globalThis & {
     chrome?: ChromeRuntimeApi;
 };
 
-const getExtensionRuntime = () => {
+const getExtensionRuntime = () =>
+{
     const runtimeGlobal = globalThis as RuntimeGlobal;
 
     if (runtimeGlobal.browser?.runtime?.id != null) {
@@ -51,7 +52,8 @@ declare global {
     }
 }
 
-const findComposerInput = () => {
+const findComposerInput = () =>
+{
     for (const selector of INPUT_SELECTORS) {
         const input = document.querySelector<HTMLElement>(selector);
 
@@ -63,17 +65,20 @@ const findComposerInput = () => {
     return null;
 };
 
-const setNativeValue = (element: HTMLTextAreaElement, value: string) => {
+const setNativeValue = (element: HTMLTextAreaElement, value: string) =>
+{
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
     setter?.call(element, value);
 };
 
-const dispatchInputEvents = (element: HTMLElement) => {
+const dispatchInputEvents = (element: HTMLElement) =>
+{
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
 };
 
-const insertTextIntoContentEditable = (element: HTMLElement, text: string) => {
+const insertTextIntoContentEditable = (element: HTMLElement, text: string) =>
+{
     element.focus();
 
     const selection = window.getSelection();
@@ -90,7 +95,8 @@ const insertTextIntoContentEditable = (element: HTMLElement, text: string) => {
     }
 };
 
-const insertPromptIntoComposer = (text: string): RuntimeResponse => {
+const insertPromptIntoComposer = (text: string): RuntimeResponse =>
+{
     const input = findComposerInput();
 
     if (input == null) {
@@ -115,7 +121,8 @@ const insertPromptIntoComposer = (text: string): RuntimeResponse => {
 export default defineContentScript({
     matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
     runAt: 'document_idle',
-    main() {
+    main()
+    {
         const extensionRuntime = getExtensionRuntime();
 
         if (extensionRuntime == null) {
@@ -163,18 +170,21 @@ export default defineContentScript({
             borderRadius: '5px',
         });
 
-        button.addEventListener('click', () => {
+        button.addEventListener('click', () =>
+        {
             void Promise.resolve(
                 extensionRuntime.sendMessage({ type: OPEN_SIDEPANEL_MESSAGE }),
             ).catch(() => undefined);
         });
 
-        button.addEventListener('mouseenter', () => {
+        button.addEventListener('mouseenter', () =>
+        {
             button.style.background = '#1b2559';
             button.style.borderColor = '#1b2559';
         });
 
-        button.addEventListener('mouseleave', () => {
+        button.addEventListener('mouseleave', () =>
+        {
             button.style.background = '#243172';
             button.style.borderColor = '#243172';
         });
@@ -182,7 +192,8 @@ export default defineContentScript({
         document.documentElement.append(button);
 
         if (window.__securepromptMessageListenerRegistered !== true) {
-            extensionRuntime.onMessage.addListener((message, _sender, sendResponse) => {
+            extensionRuntime.onMessage.addListener((message, _sender, sendResponse) =>
+            {
                 if (message.type !== INJECT_PROMPT_MESSAGE || typeof message.text !== 'string') {
                     return false;
                 }

@@ -28,11 +28,13 @@ const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
 
-const formatCount = (count: number) => {
+const formatCount = (count: number) =>
+{
     return count > MAX_VISIBLE_COUNT ? `${MAX_VISIBLE_COUNT}+` : String(count);
 };
 
-export function App() {
+export function App()
+{
     const [prompt, setPrompt] = useState('');
     const [privatizedPrompt, setPrivatizedPrompt] = useState('');
     const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
@@ -47,12 +49,15 @@ export function App() {
     const itemCountLabel = `${formatCount(detectedItems.length)} ${
         detectedItems.length === 1 ? 'item' : 'items'
     }`;
-    const countItemsByCategory = (category: SensitiveItemCategory) => {
+    const countItemsByCategory = (category: SensitiveItemCategory) =>
+    {
         return detectedItems.filter((item) => item.category === category).length;
     };
 
-    useEffect(() => {
-        return () => {
+    useEffect(() =>
+    {
+        return () =>
+        {
             if (copyResetTimerRef.current !== undefined) {
                 window.clearTimeout(copyResetTimerRef.current);
             }
@@ -63,7 +68,8 @@ export function App() {
         };
     }, []);
 
-    const privatizePrompt = () => {
+    const privatizePrompt = () =>
+    {
         if (!prompt) {
             return;
         }
@@ -84,7 +90,8 @@ export function App() {
         setSendStatus('');
     };
 
-    const clearPrompts = () => {
+    const clearPrompts = () =>
+    {
         setPrompt('');
         setPrivatizedPrompt('');
         setDetectedItems([]);
@@ -102,13 +109,15 @@ export function App() {
             window.clearTimeout(clearResetTimerRef.current);
         }
 
-        clearResetTimerRef.current = window.setTimeout(() => {
+        clearResetTimerRef.current = window.setTimeout(() =>
+        {
             setCleared(false);
             clearResetTimerRef.current = undefined;
         }, ACTION_FEEDBACK_MS);
     };
 
-    const copyPrivatizedPrompt = async () => {
+    const copyPrivatizedPrompt = async () =>
+    {
         if (!privatizedPrompt) {
             return;
         }
@@ -123,7 +132,8 @@ export function App() {
                 window.clearTimeout(copyResetTimerRef.current);
             }
 
-            copyResetTimerRef.current = window.setTimeout(() => {
+            copyResetTimerRef.current = window.setTimeout(() =>
+            {
                 setCopied(false);
                 copyResetTimerRef.current = undefined;
             }, ACTION_FEEDBACK_MS);
@@ -132,7 +142,8 @@ export function App() {
         }
     };
 
-    const sendToChatGpt = async () => {
+    const sendToChatGpt = async () =>
+    {
         if (!privatizedPrompt) {
             return;
         }

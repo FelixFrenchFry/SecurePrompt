@@ -30,10 +30,12 @@ type ChromeRuntimeApi = {
 const chromeRuntime = (globalThis as typeof globalThis & { chrome: ChromeRuntimeApi }).chrome
     .runtime;
 
-export default defineBackground(() => {
+export default defineBackground(() =>
+{
     let lastChatGptTabId: number | undefined;
 
-    const isChatGptUrl = (url: string | undefined) => {
+    const isChatGptUrl = (url: string | undefined) =>
+    {
         if (url == null) {
             return false;
         }
@@ -46,7 +48,8 @@ export default defineBackground(() => {
         }
     };
 
-    const getTab = async (tabId: number | undefined) => {
+    const getTab = async (tabId: number | undefined) =>
+    {
         if (tabId == null) {
             return undefined;
         }
@@ -58,7 +61,8 @@ export default defineBackground(() => {
         }
     };
 
-    const findTargetChatGptTab = async () => {
+    const findTargetChatGptTab = async () =>
+    {
         const [activeTab] = await browser.tabs.query({
             active: true,
             lastFocusedWindow: true,
@@ -78,13 +82,15 @@ export default defineBackground(() => {
         return undefined;
     };
 
-    const rememberChatGptTab = (tabId: number | undefined, url: string | undefined) => {
+    const rememberChatGptTab = (tabId: number | undefined, url: string | undefined) =>
+    {
         if (tabId != null && isChatGptUrl(url)) {
             lastChatGptTabId = tabId;
         }
     };
 
-    const openSidePanelForTab = async (tabId: number | undefined, url: string | undefined) => {
+    const openSidePanelForTab = async (tabId: number | undefined, url: string | undefined) =>
+    {
         if (tabId == null || browser.sidePanel?.open == null) {
             return;
         }
@@ -93,7 +99,8 @@ export default defineBackground(() => {
         await browser.sidePanel.open({ tabId });
     };
 
-    const isRuntimeResponse = (response: unknown): response is RuntimeResponse => {
+    const isRuntimeResponse = (response: unknown): response is RuntimeResponse =>
+    {
         return (
             typeof response === 'object' &&
             response !== null &&
@@ -102,7 +109,8 @@ export default defineBackground(() => {
         );
     };
 
-    const normalizeRuntimeResponse = (response: unknown): RuntimeResponse => {
+    const normalizeRuntimeResponse = (response: unknown): RuntimeResponse =>
+    {
         if (isRuntimeResponse(response)) {
             return response;
         }
@@ -113,7 +121,8 @@ export default defineBackground(() => {
         };
     };
 
-    const sendPromptToTab = async (tabId: number, text: string): Promise<RuntimeResponse> => {
+    const sendPromptToTab = async (tabId: number, text: string): Promise<RuntimeResponse> =>
+    {
         const message = {
             type: INJECT_PROMPT_MESSAGE,
             text,
@@ -130,7 +139,8 @@ export default defineBackground(() => {
         }
     };
 
-    const injectPromptIntoActiveTab = async (text: string): Promise<RuntimeResponse> => {
+    const injectPromptIntoActiveTab = async (text: string): Promise<RuntimeResponse> =>
+    {
         const targetTab = await findTargetChatGptTab();
 
         if (targetTab?.id == null) {
@@ -149,15 +159,18 @@ export default defineBackground(() => {
         })
         .catch(() => undefined);
 
-    browser.action.onClicked.addListener((tab) => {
+    browser.action.onClicked.addListener((tab) =>
+    {
         void openSidePanelForTab(tab.id, tab.url).catch(() => undefined);
     });
 
-    chromeRuntime.onMessage.addListener((message, sender, sendResponse) => {
+    chromeRuntime.onMessage.addListener((message, sender, sendResponse) =>
+    {
         if (message.type === INJECT_PROMPT_MESSAGE && typeof message.text === 'string') {
             void injectPromptIntoActiveTab(message.text)
                 .then(sendResponse)
-                .catch(() => {
+                .catch(() =>
+                {
                     sendResponse({
                         ok: false,
                         error: 'Could not send to ChatGPT.',

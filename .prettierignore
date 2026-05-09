@@ -8,3 +8,7 @@ build
 *.zip
 *.crx
 *.xpi
+entrypoints/**/*.ts
+entrypoints/**/*.tsx
+source/**/*.ts
+wxt.config.ts

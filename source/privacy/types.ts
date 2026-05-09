@@ -1,19 +1,24 @@
 // supported categories of sensitive items that can be detected in prompt data
 export type SensitiveItemCategory =
-    | 'EMAIL'
-    | 'PHONE'
-    | 'PERSON'
-    | 'ADDRESS'
-    | 'ACCOUNT'
-    | 'DATE'
-    | 'URL'
-    | 'SECRET'
-    | 'OTHER';
+    | 'EMAIL' // email addresses
+    | 'PHONE' // phone and mobile numbers
+    | 'PERSON' // names of private persons
+    | 'ADDRESS' // street addresses and postal addresses
+    | 'ACCOUNT' // account identifiers, e.g. IBANs, credit cards, tax IDs
+    | 'DATE' // calendar dates
+    | 'URL' // links, e.g. web links, tracking links, private document URLs
+    | 'SECRET' // credentials, e.g. API keys, tokens, passwords
+    | 'OTHER'; // sensitive item that does not fit a known category
 
-// rules -> detected by predefined patterns or heuristics
-// model -> detected by an AI model trained to identify sensitive information
-// manual -> identified manually by a user
-export type DetectionSource = 'rules' | 'model' | 'manual';
+export type PrivatizationMethod =
+    | 'removal' // items get removed
+    | 'placeholder' // items get replaced with numbered category marker
+    | 'pseudonymized'; // items get replaced with realistic pseudonyms
+
+export type DetectionSource =
+    | 'rules' // detected by predefined patterns or heuristics
+    | 'model' // detected by an AI model trained to identify sensitive information
+    | 'manual'; // identified manually by a user
 
 // sensitive item found in the prompt data
 export type SensitiveItem = {
@@ -26,19 +31,20 @@ export type SensitiveItem = {
     source: DetectionSource;
 };
 
-// mapping from original sensitive items to placeholders used in output
-export type PlaceholderMapping = {
+// mapping from original sensitive items to replacements used in output
+export type ReplacementMapping = {
     id: string;
     category: SensitiveItemCategory;
     original: string;
-    placeholder: string;
+    replacement: string;
     itemIds: string[];
 };
 
 // complete result for one prompt
-export type PseudoPromptResult = {
-    pseudoPrompt: string;
+export type PrivatizedPromptResult = {
+    privatizedPrompt: string;
+    method: PrivatizationMethod;
     items: SensitiveItem[];
-    mappings: PlaceholderMapping[];
+    mappings: ReplacementMapping[];
     safeToInject: boolean;
 };
