@@ -8,6 +8,7 @@ const NETWORK_DETECTION_CONFIDENCE = 0.95;
 const NETWORK_CONTEXT_LOOKBEHIND = 60;
 const NETWORK_SCHEME_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>()[\]{}]+/gi;
 const MAILTO_PATTERN = /\bmailto:[^\s"'<>()[\]{}]+/gi;
+const LOCALHOST_PATTERN = /\blocalhost(?::\d{1,5})?\b/gi;
 const PRIVATE_HOST_PATTERN =
     /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:corp|home|internal|intranet|lan|local)(?::\d{1,5})?\b/gi;
 
@@ -48,6 +49,7 @@ export const detectNetworkItems = (inputText: string): SensitiveItem[] =>
         ...detectSchemeNetworkCandidates(inputText),
         ...detectMailtoNetworkCandidates(inputText),
         ...detectEmailNetworkExtensionCandidates(inputText),
+        ...detectLocalhostNetworkCandidates(inputText),
         ...detectPrivateHostNetworkCandidates(inputText),
         ...detectIpAddressNetworkCandidates(inputText),
     ];
@@ -121,6 +123,20 @@ const detectEmailNetworkExtensionCandidates = (
 const detectIpAddressNetworkCandidates = (inputText: string): NetworkCandidate[] =>
 {
     return [...inputText.matchAll(ipRegex())]
+        .map((match) =>
+        {
+            return createNetworkCandidate(
+                inputText,
+                match.index,
+                match.index + match[0].length,
+            );
+        })
+        .filter((candidate) => candidate != null);
+};
+
+const detectLocalhostNetworkCandidates = (inputText: string): NetworkCandidate[] =>
+{
+    return [...inputText.matchAll(LOCALHOST_PATTERN)]
         .map((match) =>
         {
             return createNetworkCandidate(
@@ -335,7 +351,7 @@ const isValidHostValue = (value: string) =>
 
 const isLocalhostValue = (value: string) =>
 {
-    return /^localhost:\d{1,5}$/i.test(value);
+    return /^localhost(?::\d{1,5})?$/i.test(value);
 };
 
 const isValidUrlHostname = (hostname: string) =>
@@ -406,6 +422,7 @@ const isRejectedNetworkContext = (
         isInsideFilePathContext(inputText, candidate) ||
         hasNonNetworkContextLabel(inputText, candidate) ||
         hasSeparatedAtSignContext(inputText, candidate) ||
+        hasAdjacentEmailAtSignContext(inputText, candidate) ||
         isInsidePackagePathContext(inputText, candidate)
     );
 };
@@ -448,7 +465,17 @@ const hasSeparatedAtSignContext = (
 {
     const beforeCandidate = inputText.slice(Math.max(0, candidate.start - 8), candidate.start);
 
-    return /@\s*$/.test(beforeCandidate);
+    return /@\s*["'(<[]*$/.test(beforeCandidate);
+};
+
+const hasAdjacentEmailAtSignContext = (
+    inputText: string,
+    candidate: NetworkCandidate,
+) =>
+{
+    const afterCandidate = inputText.slice(candidate.end, candidate.end + 8);
+
+    return /^["')>\]]*\s*@/.test(afterCandidate);
 };
 
 const isInsidePackagePathContext = (
