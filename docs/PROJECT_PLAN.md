@@ -30,7 +30,7 @@ The first working version should stay simple:
 - WXT, TypeScript, React, and plain CSS
 - Side panel prompt editor
 - Rules-based PII detection
-- Local placeholder mapping
+- Local replacement mapping
 - Privatized prompt view
 - ChatGPT injection of privatized text only
 - Unit tests for privacy logic
@@ -61,17 +61,20 @@ Expected areas:
 - Background/service worker code only where coordination is needed
 - Tests for detectors, validators, mapping, restoration, and raw-value leakage regressions
 
-Initial rules pipeline:
+Initial privatization pipeline:
 
 ```text
 createPrivatizedPrompt(inputText)
-  -> createPrivatizedPromptByRules(inputText)
-  -> detectByRules(inputText)
-  -> resolveSensitiveItemOverlaps(inputText, detectedItems)
-  -> createPlaceholderMappings(items)
-  -> replaceSensitiveItems(inputText, items, mappings)
+  -> detectSensitiveItems(inputText)
+       -> if enabled, detectSensitiveItemsWithRules(inputText)
+       -> later, if enabled, detectSensitiveItemsWithLocalModel(inputText)
+  -> resolveSensitiveItemOverlaps(detectedItems)
+  -> createReplacementMappings(finalItems)
+  -> applyReplacementsToItems(inputText, finalItems, mappings)
   -> return PrivatizedPromptResult
 ```
+
+The first implementation should define this orchestration shape before filling in real detection, overlap handling, and replacement logic. Until those internals exist, the pipeline must fail closed and avoid injecting raw prompt text.
 
 Start with narrow host permissions:
 

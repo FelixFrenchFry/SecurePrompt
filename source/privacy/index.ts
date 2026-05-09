@@ -1,71 +1,83 @@
-import type { PseudoPromptResult, SensitiveItem, SensitiveItemCategory } from './types';
+import {
+    DEFAULT_PRIVATIZATION_METHOD,
+    USE_LOCAL_MODEL_DETECTION,
+    USE_RULES_DETECTION,
+} from './config';
+import { detectSensitiveItemsWithLocalModel } from './detect/detection-local-model';
+import { detectSensitiveItemsWithRules } from './detect/detection-rules';
+import type {
+    PrivatizedPromptResult,
+    ReplacementMapping,
+    SensitiveItem,
+} from './types';
 
 export type {
     DetectionSource,
-    PlaceholderMapping,
-    PseudoPromptResult,
+    PrivatizationMethod,
+    PrivatizedPromptResult,
+    ReplacementMapping,
     SensitiveItem,
     SensitiveItemCategory,
 } from './types';
 
-const RULES: Array<{ category: SensitiveItemCategory; pattern: RegExp }> = [
-    { category: 'EMAIL', pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi },
-    { category: 'PHONE', pattern: /\b(?:\+?\d[\d\s().-]{6,}\d)\b/g },
-    { category: 'ACCOUNT', pattern: /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b/gi },
-    { category: 'URL', pattern: /\bhttps?:\/\/[^\s<>"']+/gi },
-    { category: 'SECRET', pattern: /\b(?:sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{20,})\b/g },
-];
+export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 
-export const detectByRules = (text: string): SensitiveItem[] => {
-    const items: SensitiveItem[] = [];
+const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
 
-    for (const rule of RULES) {
-        rule.pattern.lastIndex = 0;
+// main privatization pipeline
+export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
+{
+    // 1. detect sensitive items in the input text
+    const detectedItems = detectSensitiveItems(inputText);
 
-        for (let match = rule.pattern.exec(text); match != null; match = rule.pattern.exec(text)) {
-            items.push({
-                id: `item-${items.length + 1}`,
-                category: rule.category,
-                start: match.index,
-                end: match.index + match[0].length,
-                value: match[0],
-                confidence: 1,
-                source: 'rules',
-            });
-        }
-    }
+    // 2. resolve overlaps and conflicts between detected items
+    const finalItems = resolveSensitiveItemOverlaps(detectedItems);
 
-    return items.sort((left, right) => left.start - right.start);
-};
+    // 3. create many-to-one mapping from items to replacement values
+    const mappings = createReplacementMappings(finalItems);
 
-const placeholderFor = (item: SensitiveItem, index: number) => {
-    return `[${item.category}_${index}]`;
-};
-
-export const createPseudoPrompt = (text: string, items: SensitiveItem[]): PseudoPromptResult => {
-    let cursor = 0;
-    let pseudoPrompt = '';
-
-    const mappings = items.map((item, index) => {
-        const placeholder = placeholderFor(item, index + 1);
-        pseudoPrompt += text.slice(cursor, item.start) + placeholder;
-        cursor = item.end;
-
-        return {
-            id: `mapping-${index + 1}`,
-            category: item.category,
-            original: item.value,
-            placeholder,
-            itemIds: [item.id],
-        };
-    });
-
-    pseudoPrompt += text.slice(cursor);
+    // 4. apply the replacement values to the items to create the privatized prompt
+    const privatizedPrompt = applyReplacementsToItems(inputText, finalItems, mappings);
 
     return {
-        pseudoPrompt,
-        items,
+        privatizedPrompt,
+        method: DEFAULT_PRIVATIZATION_METHOD,
+        items: finalItems,
         mappings,
-        safeToInject: true,
+        safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
     };
+};
+
+const detectSensitiveItems = (inputText: string): SensitiveItem[] =>
+{
+    const detectedItems: SensitiveItem[] = [];
+
+    if (USE_RULES_DETECTION) {
+        detectedItems.push(...detectSensitiveItemsWithRules(inputText));
+    }
+
+    if (USE_LOCAL_MODEL_DETECTION) {
+        detectedItems.push(...detectSensitiveItemsWithLocalModel(inputText));
+    }
+
+    return detectedItems;
+};
+
+const resolveSensitiveItemOverlaps = (items: SensitiveItem[]): SensitiveItem[] =>
+{
+    return items;
+};
+
+const createReplacementMappings = (_items: SensitiveItem[]): ReplacementMapping[] =>
+{
+    return [];
+};
+
+const applyReplacementsToItems = (
+    inputText: string,
+    _items: SensitiveItem[],
+    _mappings: ReplacementMapping[],
+) =>
+{
+    return inputText;
 };
