@@ -23,6 +23,8 @@
     },
     "type": "module",
     "dependencies": {
+        "awesome-phonenumber": "^7.8.0",
+        "libphonenumber-js": "^1.12.43",
         "linkifyjs": "^4.3.2",
         "lucide-react": "^1.14.0",
         "react": "^19.2.6",

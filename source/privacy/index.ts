@@ -3,8 +3,8 @@ import {
     USE_LOCAL_MODEL_DETECTION,
     USE_RULES_DETECTION,
 } from './config';
-import { detectSensitiveItemsWithLocalModel } from './detect/detection-local-model';
-import { detectSensitiveItemsWithRules } from './detect/detection-rules';
+import { detectSensitiveItemsWithLocalModel } from './detect/local-model-based/detection-local-model-based';
+import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rule-based';
 import type {
     MaskingMapping,
     PrivatizationMethod,

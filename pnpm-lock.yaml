@@ -7,6 +7,12 @@ settings:
 importers:
     .:
         dependencies:
+            awesome-phonenumber:
+                specifier: ^7.8.0
+                version: 7.8.0
+            libphonenumber-js:
+                specifier: ^1.12.43
+                version: 1.12.43
             linkifyjs:
                 specifier: ^4.3.2
                 version: 4.3.2
@@ -800,6 +806,13 @@ packages:
             {
                 integrity: sha512-P4w9o2dqARji6P7MHprklbfiArZAWvo07yW7qs3pdljb3BWr12FIB7W+p0zJiuiVsUpRO0iZn1kFFcpPegg0tQ==,
             }
+
+    awesome-phonenumber@7.8.0:
+        resolution:
+            {
+                integrity: sha512-zw23nvKt6gLGgCrKZ5Z7ZK0lm3k39/uZTw+cWp5tpiXVfEFSt9AEVFDzSycws76G64xOMrIVp2upYvJxwRgzvw==,
+            }
+        engines: { node: '>=18' }
 
     balanced-match@1.0.2:
         resolution:
@@ -1732,6 +1745,12 @@ packages:
                 integrity: sha512-7W0vV3rqv5tokqkBAFV1LbR7HPOWzXQDpDgEuib/aJ1jsZZx6x3c2mBI+TJhJzOhkGeaLbCKEHXEXLfirtG2JA==,
             }
         engines: { node: '>=18' }
+
+    libphonenumber-js@1.12.43:
+        resolution:
+            {
+                integrity: sha512-5n+HnmkNpgZCfaNVxrTGZHr6Lhv3gd0UtbD5lrzun3T2YNyVvCuJz9vkap2E0YWZWU1XF+0XljYAkrAJBbwbrg==,
+            }
 
     lie@3.3.0:
         resolution:
@@ -3319,6 +3338,8 @@ snapshots:
             stubborn-fs: 2.0.0
             when-exit: 2.1.5
 
+    awesome-phonenumber@7.8.0: {}
+
     balanced-match@1.0.2: {}
 
     bluebird@3.7.2: {}
@@ -3787,6 +3808,8 @@ snapshots:
     latest-version@9.0.0:
         dependencies:
             package-json: 10.0.1
+
+    libphonenumber-js@1.12.43: {}
 
     lie@3.3.0:
         dependencies:

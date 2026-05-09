@@ -1,4 +1,4 @@
-import type { SensitiveItem } from '../types';
+import type { SensitiveItem } from '../../types';
 
 export const detectSensitiveItemsWithLocalModel = (_inputText: string): SensitiveItem[] =>
 {
