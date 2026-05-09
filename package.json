@@ -1,0 +1,38 @@
+{
+    "name": "secureprompt",
+    "version": "0.1.0",
+    "description": "Censor private information in your prompts before sending them to AI chatbots. Sensitive text is detected and replaced locally on your device.",
+    "private": true,
+    "scripts": {
+        "dev": "wxt",
+        "build": "tsc --noEmit && wxt build",
+        "check:secrets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check_secrets.ps1",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "typecheck": "tsc --noEmit",
+        "zip": "wxt zip",
+        "postinstall": "wxt prepare"
+    },
+    "license": "UNLICENSED",
+    "devEngines": {
+        "packageManager": {
+            "name": "pnpm",
+            "version": "11.0.8",
+            "onFail": "download"
+        }
+    },
+    "type": "module",
+    "dependencies": {
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@wxt-dev/module-react": "^1.2.2",
+        "prettier": "^3.8.3",
+        "typescript": "^6.0.3",
+        "wxt": "^0.20.25"
+    }
+}

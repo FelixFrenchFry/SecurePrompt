@@ -1,0 +1,10 @@
+node_modules
+.wxt
+.output
+coverage
+dist
+build
+*.png
+*.zip
+*.crx
+*.xpi
