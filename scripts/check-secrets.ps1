@@ -104,7 +104,7 @@ if ($findings.Count -gt 0) {
     Write-Host 'Potential secrets found. Commit blocked.' -ForegroundColor Red
     $findings | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     Write-Host ''
-    Write-Host 'If this is a false positive, move the value out of the repo or adjust scripts/check_secrets.ps1 deliberately.' -ForegroundColor Yellow
+    Write-Host 'If this is a false positive, move the value out of the repo or adjust scripts/check-secrets.ps1 deliberately.' -ForegroundColor Yellow
     exit 1
 }
 

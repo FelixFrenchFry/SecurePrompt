@@ -36,8 +36,8 @@ export type PlaceholderMapping = {
 };
 
 // complete result for one prompt
-export type PseudonymizationResult = {
-    pseudonymizedText: string;
+export type PseudoPromptResult = {
+    pseudoPrompt: string;
     items: SensitiveItem[];
     mappings: PlaceholderMapping[];
     safeToInject: boolean;

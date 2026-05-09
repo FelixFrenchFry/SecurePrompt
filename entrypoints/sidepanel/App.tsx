@@ -19,8 +19,7 @@ import {
 import { browser } from 'wxt/browser';
 import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messaging';
 import {
-    detectByRules,
-    pseudonymize,
+    createPrivatizedPrompt,
     type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
@@ -35,7 +34,7 @@ const formatCount = (count: number) => {
 
 export function App() {
     const [prompt, setPrompt] = useState('');
-    const [sanitizedPrompt, setSanitizedPrompt] = useState('');
+    const [privatizedPrompt, setPrivatizedPrompt] = useState('');
     const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
@@ -44,7 +43,7 @@ export function App() {
     const copyResetTimerRef = useRef<number | undefined>(undefined);
     const clearResetTimerRef = useRef<number | undefined>(undefined);
 
-    const previewText = sanitizedPrompt || EMPTY_PREVIEW_TEXT;
+    const previewText = privatizedPrompt || EMPTY_PREVIEW_TEXT;
     const itemCountLabel = `${formatCount(detectedItems.length)} ${
         detectedItems.length === 1 ? 'item' : 'items'
     }`;
@@ -64,23 +63,30 @@ export function App() {
         };
     }, []);
 
-    const sanitizePrompt = () => {
+    const privatizePrompt = () => {
         if (!prompt) {
             return;
         }
 
-        const items = detectByRules(prompt);
-        const result = pseudonymize(prompt, items);
+        const result = createPrivatizedPrompt(prompt);
 
-        setSanitizedPrompt(result.pseudonymizedText);
+        if (!result.safeToInject) {
+            setPrivatizedPrompt('');
+            setDetectedItems(result.items);
+            setClipboardStatus('Could not safely privatize prompt.');
+            setSendStatus('');
+            return;
+        }
+
+        setPrivatizedPrompt(result.privatizedPrompt);
         setDetectedItems(result.items);
-        setClipboardStatus('Privatized prompt preview updated.');
+        setClipboardStatus('Privatized prompt updated.');
         setSendStatus('');
     };
 
     const clearPrompts = () => {
         setPrompt('');
-        setSanitizedPrompt('');
+        setPrivatizedPrompt('');
         setDetectedItems([]);
         setClipboardStatus('');
         setSendStatus('');
@@ -102,13 +108,13 @@ export function App() {
         }, ACTION_FEEDBACK_MS);
     };
 
-    const copySanitizedPrompt = async () => {
-        if (!sanitizedPrompt) {
+    const copyPrivatizedPrompt = async () => {
+        if (!privatizedPrompt) {
             return;
         }
 
         try {
-            await navigator.clipboard.writeText(sanitizedPrompt);
+            await navigator.clipboard.writeText(privatizedPrompt);
             setCopied(true);
             setClipboardStatus('');
             setSendStatus('');
@@ -127,7 +133,7 @@ export function App() {
     };
 
     const sendToChatGpt = async () => {
-        if (!sanitizedPrompt) {
+        if (!privatizedPrompt) {
             return;
         }
 
@@ -135,7 +141,7 @@ export function App() {
             setClipboardStatus('');
             const response = (await browser.runtime.sendMessage({
                 type: INJECT_PROMPT_MESSAGE,
-                text: sanitizedPrompt,
+                text: privatizedPrompt,
             })) as RuntimeResponse | undefined;
 
             if (response?.ok) {
@@ -172,7 +178,7 @@ export function App() {
                         className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
                         type="button"
                         onClick={clearPrompts}
-                        disabled={!prompt && !sanitizedPrompt && !cleared}
+                        disabled={!prompt && !privatizedPrompt && !cleared}
                     >
                         {cleared ? (
                             <Check size={16} aria-hidden="true" />
@@ -193,7 +199,7 @@ export function App() {
                 <button
                     className="secondary-button panel-action"
                     type="button"
-                    onClick={sanitizePrompt}
+                    onClick={privatizePrompt}
                     disabled={prompt.trim().length === 0}
                 >
                     <StepForward size={19} aria-hidden="true" />
@@ -246,8 +252,8 @@ export function App() {
                     <button
                         className={`ghost-button copy-button${copied ? ' is-copied' : ''}`}
                         type="button"
-                        onClick={copySanitizedPrompt}
-                        disabled={!sanitizedPrompt}
+                        onClick={copyPrivatizedPrompt}
+                        disabled={!privatizedPrompt}
                     >
                         {copied ? (
                             <Check size={16} aria-hidden="true" />
@@ -264,7 +270,7 @@ export function App() {
                     className="primary-button panel-action"
                     type="button"
                     onClick={sendToChatGpt}
-                    disabled={!sanitizedPrompt}
+                    disabled={!privatizedPrompt}
                 >
                     <Send size={18} aria-hidden="true" />
                     Send to ChatGPT

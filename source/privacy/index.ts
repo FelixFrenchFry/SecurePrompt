@@ -1,9 +1,9 @@
-import type { PseudonymizationResult, SensitiveItem, SensitiveItemCategory } from './types';
+import type { PseudoPromptResult, SensitiveItem, SensitiveItemCategory } from './types';
 
 export type {
     DetectionSource,
     PlaceholderMapping,
-    PseudonymizationResult,
+    PseudoPromptResult,
     SensitiveItem,
     SensitiveItemCategory,
 } from './types';
@@ -42,13 +42,13 @@ const placeholderFor = (item: SensitiveItem, index: number) => {
     return `[${item.category}_${index}]`;
 };
 
-export const pseudonymize = (text: string, items: SensitiveItem[]): PseudonymizationResult => {
+export const createPseudoPrompt = (text: string, items: SensitiveItem[]): PseudoPromptResult => {
     let cursor = 0;
-    let pseudonymizedText = '';
+    let pseudoPrompt = '';
 
     const mappings = items.map((item, index) => {
         const placeholder = placeholderFor(item, index + 1);
-        pseudonymizedText += text.slice(cursor, item.start) + placeholder;
+        pseudoPrompt += text.slice(cursor, item.start) + placeholder;
         cursor = item.end;
 
         return {
@@ -60,10 +60,10 @@ export const pseudonymize = (text: string, items: SensitiveItem[]): Pseudonymiza
         };
     });
 
-    pseudonymizedText += text.slice(cursor);
+    pseudoPrompt += text.slice(cursor);
 
     return {
-        pseudonymizedText,
+        pseudoPrompt,
         items,
         mappings,
         safeToInject: true,
