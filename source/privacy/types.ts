@@ -4,10 +4,10 @@ export type SensitiveItemCategory =
     | 'PHONE' // phone and mobile numbers
     | 'PERSON' // names of private persons
     | 'ADDRESS' // street addresses and postal addresses
-    | 'ACCOUNT' // account identifiers, e.g. IBANs, credit cards, tax IDs
+    | 'ACCOUNT' // IBANs, credit cards, tax IDs, etc...
     | 'DATE' // calendar dates
-    | 'URL' // links, e.g. web links, tracking links, private document URLs
-    | 'SECRET' // credentials, e.g. API keys, tokens, passwords
+    | 'NETWORK' // URLs, domains, hostnames, IP addresses, etc...
+    | 'SECRET' // API keys, tokens, passwords, logins, etc...
     | 'OTHER'; // sensitive item that does not fit a known category
 
 export type PrivatizationMethod =

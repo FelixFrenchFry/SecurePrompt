@@ -7,6 +7,7 @@ import { detectSensitiveItemsWithLocalModel } from './detect/detection-local-mod
 import { detectSensitiveItemsWithRules } from './detect/detection-rules';
 import type {
     MaskingMapping,
+    PrivatizationMethod,
     PrivatizedPromptResult,
     SensitiveItem,
     SensitiveItemCategory,
@@ -37,8 +38,28 @@ export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResul
     // 3. create many-to-one masking mappings from items to masks
     const maskingMappings = createMaskingMappings(finalItems);
 
-    // 4. apply masks to create the privatized prompt, depending on the chosen privatization method
-    const privatizedPrompt = applyMasksToItems(inputText, finalItems, maskingMappings);
+    let privatizedPrompt = '';
+
+    try
+    {
+        // 4. apply masks to create the privatized prompt, depending on the chosen privatization method
+        privatizedPrompt = applyMasksToItems(
+            inputText,
+            finalItems,
+            maskingMappings,
+            DEFAULT_PRIVATIZATION_METHOD,
+        );
+    }
+    catch
+    {
+        return {
+            privatizedPrompt: '',
+            method: DEFAULT_PRIVATIZATION_METHOD,
+            items: finalItems,
+            maskingMappings,
+            safeToInject: false,
+        };
+    }
 
     return {
         privatizedPrompt,
@@ -99,7 +120,7 @@ const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
 
         const existingMapping = mappingsByOriginal.get(item.value);
 
-        // make  repeated values share the first mask they received
+        // repeated values share the first mask they received
         if (existingMapping != null)
         {
             existingMapping.itemIds.push(item.id);
@@ -125,11 +146,102 @@ const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
     return maskingMappings;
 };
 
-const applyMasksToItems = (
-    inputText: string,
-    _items: SensitiveItem[],
-    _maskingMappings: MaskingMapping[],
+const compareItemsByPosition = (left: SensitiveItem, right: SensitiveItem) =>
+{
+    return left.start - right.start || right.end - left.end;
+};
+
+const isValidItemRange = (inputText: string, item: SensitiveItem) =>
+{
+    return (
+        Number.isInteger(item.start) &&
+        Number.isInteger(item.end) &&
+        item.start >= 0 &&
+        item.end <= inputText.length &&
+        item.end > item.start &&
+        inputText.slice(item.start, item.end) === item.value
+    );
+};
+
+const createMaskByItemId = (
+    maskingMappings: MaskingMapping[],
+    method: PrivatizationMethod,
 ) =>
 {
-    return inputText;
+    const maskByItemId = new Map<string, string>();
+
+    for (const maskingMapping of maskingMappings)
+    {
+        const mask = getMaskForMethod(maskingMapping, method);
+
+        for (const itemId of maskingMapping.itemIds)
+        {
+            if (maskByItemId.has(itemId))
+            {
+                throw new Error('Sensitive item has multiple masks.');
+            }
+
+            maskByItemId.set(itemId, mask);
+        }
+    }
+
+    return maskByItemId;
+};
+
+const getMaskForMethod = (
+    maskingMapping: MaskingMapping,
+    method: PrivatizationMethod,
+) =>
+{
+    if (method === 'placeholder')
+    {
+        return maskingMapping.mask;
+    }
+
+    if (method === 'removal')
+    {
+        return '';
+    }
+
+    throw new Error('Pseudonymized masking is not implemented yet.');
+};
+
+const applyMasksToItems = (
+    inputText: string,
+    items: SensitiveItem[],
+    maskingMappings: MaskingMapping[],
+    method: PrivatizationMethod,
+) =>
+{
+    const maskByItemId = createMaskByItemId(maskingMappings, method);
+    const sortedItems = [...items].sort(compareItemsByPosition);
+    const outputParts: string[] = [];
+    let cursor = 0;
+
+    for (const item of sortedItems)
+    {
+        if (!isValidItemRange(inputText, item))
+        {
+            throw new Error('Sensitive item range is invalid.');
+        }
+
+        if (item.start < cursor)
+        {
+            throw new Error('Sensitive item ranges overlap.');
+        }
+
+        const mask = maskByItemId.get(item.id);
+
+        if (mask == null)
+        {
+            throw new Error('Sensitive item has no mask.');
+        }
+
+        outputParts.push(inputText.slice(cursor, item.start), mask);
+        cursor = item.end;
+    }
+
+    outputParts.push(inputText.slice(cursor));
+
+    return outputParts.join('');
 };

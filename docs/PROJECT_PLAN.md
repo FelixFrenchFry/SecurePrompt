@@ -39,9 +39,8 @@ Initial detectors should focus on structured data that can be found reliably wit
 
 - Email addresses
 - Phone numbers
-- URLs
+- URLs, domains, and IP addresses
 - IBANs
-- IPv4 and IPv6 addresses
 - Credit-card-like numbers with Luhn validation
 - German tax-ID-like numbers
 - API-key-like secrets
@@ -70,7 +69,7 @@ createPrivatizedPrompt(inputText)
        -> later, if enabled, detectSensitiveItemsWithLocalModel(inputText)
   -> resolveSensitiveItemOverlaps(detectedItems)
   -> createMaskingMappings(finalItems)
-  -> applyMasksToItems(inputText, finalItems, maskingMappings)
+  -> applyMasksToItems(inputText, finalItems, maskingMappings, method)
   -> return PrivatizedPromptResult
 ```
 
