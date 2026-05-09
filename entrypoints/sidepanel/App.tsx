@@ -37,6 +37,7 @@ export function App()
 {
     const [prompt, setPrompt] = useState('');
     const [privatizedPrompt, setPrivatizedPrompt] = useState('');
+    const [canUsePrivatizedPrompt, setCanUsePrivatizedPrompt] = useState(false);
     const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
@@ -76,24 +77,24 @@ export function App()
 
         const result = createPrivatizedPrompt(prompt);
 
+        setPrivatizedPrompt(result.privatizedPrompt);
+        setCanUsePrivatizedPrompt(result.safeToInject);
+        setDetectedItems(result.items);
+        setSendStatus('');
+
         if (!result.safeToInject) {
-            setPrivatizedPrompt('');
-            setDetectedItems(result.items);
-            setClipboardStatus('Could not safely privatize prompt.');
-            setSendStatus('');
+            setClipboardStatus('Preview only. Sending is disabled.');
             return;
         }
 
-        setPrivatizedPrompt(result.privatizedPrompt);
-        setDetectedItems(result.items);
         setClipboardStatus('Privatized prompt updated.');
-        setSendStatus('');
     };
 
     const clearPrompts = () =>
     {
         setPrompt('');
         setPrivatizedPrompt('');
+        setCanUsePrivatizedPrompt(false);
         setDetectedItems([]);
         setClipboardStatus('');
         setSendStatus('');
@@ -118,7 +119,7 @@ export function App()
 
     const copyPrivatizedPrompt = async () =>
     {
-        if (!privatizedPrompt) {
+        if (!privatizedPrompt || !canUsePrivatizedPrompt) {
             return;
         }
 
@@ -144,7 +145,7 @@ export function App()
 
     const sendToChatGpt = async () =>
     {
-        if (!privatizedPrompt) {
+        if (!privatizedPrompt || !canUsePrivatizedPrompt) {
             return;
         }
 
@@ -264,7 +265,7 @@ export function App()
                         className={`ghost-button copy-button${copied ? ' is-copied' : ''}`}
                         type="button"
                         onClick={copyPrivatizedPrompt}
-                        disabled={!privatizedPrompt}
+                        disabled={!privatizedPrompt || !canUsePrivatizedPrompt}
                     >
                         {copied ? (
                             <Check size={16} aria-hidden="true" />
@@ -281,7 +282,7 @@ export function App()
                     className="primary-button panel-action"
                     type="button"
                     onClick={sendToChatGpt}
-                    disabled={!privatizedPrompt}
+                    disabled={!privatizedPrompt || !canUsePrivatizedPrompt}
                 >
                     <Send size={18} aria-hidden="true" />
                     Send to ChatGPT
