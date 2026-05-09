@@ -26,6 +26,18 @@ export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
 
+const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
+    'SECRET',
+    'ACCOUNT',
+    'EMAIL',
+    'PHONE',
+    'ADDRESS',
+    'PERSON',
+    'NETWORK',
+    'DATE',
+    'OTHER',
+];
+
 // main privatization pipeline
 export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
 {
@@ -33,7 +45,7 @@ export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResul
     const detectedItems = detectSensitiveItems(inputText);
 
     // 2. resolve overlaps and conflicts between detected items
-    const finalItems = resolveSensitiveItemOverlaps(detectedItems);
+    const finalItems = resolveSensitiveItemOverlaps(inputText, detectedItems);
 
     // 3. create many-to-one masking mappings from items to masks
     const maskingMappings = createMaskingMappings(finalItems);
@@ -74,20 +86,162 @@ const detectSensitiveItems = (inputText: string): SensitiveItem[] =>
 {
     const detectedItems: SensitiveItem[] = [];
 
-    if (USE_RULES_DETECTION) {
+    if (USE_RULES_DETECTION)
+    {
         detectedItems.push(...detectSensitiveItemsWithRules(inputText));
     }
 
-    if (USE_LOCAL_MODEL_DETECTION) {
+    if (USE_LOCAL_MODEL_DETECTION)
+    {
         detectedItems.push(...detectSensitiveItemsWithLocalModel(inputText));
     }
 
     return detectedItems;
 };
 
-const resolveSensitiveItemOverlaps = (items: SensitiveItem[]): SensitiveItem[] =>
+const resolveSensitiveItemOverlaps = (
+    inputText: string,
+    items: SensitiveItem[],
+): SensitiveItem[] =>
 {
-    return items;
+    // invalid detector output is left untouched so masking fails closed later
+    if (items.some((item) => !isValidItemRange(inputText, item)))
+    {
+        return [...items].sort(compareItemsByPosition);
+    }
+
+    return groupOverlappingItems(items)
+        .map((group, index) => resolveOverlapGroup(inputText, group, index + 1))
+        .sort(compareItemsByPosition);
+};
+
+const groupOverlappingItems = (items: SensitiveItem[]): SensitiveItem[][] =>
+{
+    const sortedItems = [...items].sort(compareItemsByPosition);
+    const groups: SensitiveItem[][] = [];
+    let currentGroup: SensitiveItem[] = [];
+    let currentGroupEnd = 0;
+
+    for (const item of sortedItems)
+    {
+        if (currentGroup.length === 0)
+        {
+            currentGroup = [item];
+            currentGroupEnd = item.end;
+            continue;
+        }
+
+        // connected overlaps are resolved as one group
+        if (item.start < currentGroupEnd)
+        {
+            currentGroup.push(item);
+            currentGroupEnd = Math.max(currentGroupEnd, item.end);
+            continue;
+        }
+
+        groups.push(currentGroup);
+        currentGroup = [item];
+        currentGroupEnd = item.end;
+    }
+
+    if (currentGroup.length > 0)
+    {
+        groups.push(currentGroup);
+    }
+
+    return groups;
+};
+
+const resolveOverlapGroup = (
+    inputText: string,
+    group: SensitiveItem[],
+    groupIndex: number,
+): SensitiveItem =>
+{
+    if (group.length === 1)
+    {
+        return group[0];
+    }
+
+    const groupRange = getOverlapGroupRange(group);
+    const containingItems = group.filter((item) =>
+    {
+        return item.start <= groupRange.start && item.end >= groupRange.end;
+    });
+
+    if (containingItems.length > 0)
+    {
+        return chooseOverlapRepresentative(containingItems);
+    }
+
+    return createMergedSensitiveItem(inputText, group, groupRange, groupIndex);
+};
+
+const getOverlapGroupRange = (group: SensitiveItem[]) =>
+{
+    return {
+        start: Math.min(...group.map((item) => item.start)),
+        end: Math.max(...group.map((item) => item.end)),
+    };
+};
+
+const createMergedSensitiveItem = (
+    inputText: string,
+    group: SensitiveItem[],
+    groupRange: Pick<SensitiveItem, 'start' | 'end'>,
+    groupIndex: number,
+): SensitiveItem =>
+{
+    const representative = chooseOverlapRepresentative(group);
+
+    return {
+        id: createNumberedId('resolved-sensitive-item', groupIndex),
+        category: representative.category,
+        start: groupRange.start,
+        end: groupRange.end,
+        value: inputText.slice(groupRange.start, groupRange.end),
+        // merged overlap confidence should not exceed the weakest involved item
+        confidence: Math.min(...group.map((item) => item.confidence)),
+        source: representative.source,
+    };
+};
+
+const chooseOverlapRepresentative = (items: SensitiveItem[]): SensitiveItem =>
+{
+    return [...items].sort(compareOverlapRepresentatives)[0];
+};
+
+const compareOverlapRepresentatives = (left: SensitiveItem, right: SensitiveItem) =>
+{
+    const categoryDifference =
+        getSensitiveItemCategoryPriority(left.category) -
+        getSensitiveItemCategoryPriority(right.category);
+
+    if (categoryDifference !== 0)
+    {
+        return categoryDifference;
+    }
+
+    const confidenceDifference = right.confidence - left.confidence;
+
+    if (confidenceDifference !== 0)
+    {
+        return confidenceDifference;
+    }
+
+    return compareItemsByPosition(left, right);
+};
+
+const getSensitiveItemCategoryPriority = (category: SensitiveItemCategory) =>
+{
+    const index = SENSITIVE_ITEM_CATEGORY_PRIORITY.indexOf(category);
+
+    if (index === -1)
+    {
+        return SENSITIVE_ITEM_CATEGORY_PRIORITY.length;
+    }
+
+    return index;
 };
 
 const createNumberedId = (prefix: string, index: number) =>
