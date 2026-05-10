@@ -8,6 +8,9 @@ import {
     useState,
 } from 'react';
 import {
+    ArrowDown,
+    ArrowUp,
+    ArrowUpDown,
     Calendar,
     Check,
     CircleHelp,
@@ -25,6 +28,7 @@ import {
     Send,
     ShieldCheck,
     StepForward,
+    Trash2,
     UserRound,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
@@ -32,8 +36,10 @@ import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messag
 import {
     createPrivatizedPrompt,
     createPrivatizedPromptAsync,
+    createPrivatizedPromptPreview,
+    type MaskingMapping,
     type PrivatizedPromptSegment,
-    type SensitiveItem,
+    type PrivatizedPromptResult,
     type SensitiveItemCategory,
 } from '../../source/privacy';
 
@@ -63,6 +69,8 @@ type PreviewTooltip = {
 type PreviewTooltipEvent = MouseEvent<HTMLElement> | FocusEvent<HTMLElement>;
 
 type ShowPreviewTooltip = (event: PreviewTooltipEvent, text: string) => void;
+
+type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
 type CategoryColors = {
     primary: string;
@@ -194,6 +202,167 @@ const getCategoryColorStyle = (category: SensitiveItemCategory): CategoryColorSt
     };
 };
 
+const getPrivacyScanCategoryColorStyle = (
+    category: SensitiveItemCategory,
+    count: number,
+): CategoryColorStyle =>
+{
+    const colorCategory = count === 0 ? 'OTHER' : category;
+
+    return getCategoryColorStyle(colorCategory);
+};
+
+const getPrivacyScanCategory = (category: SensitiveItemCategory) =>
+{
+    return PRIVACY_SCAN_CATEGORIES.find((scanCategory) =>
+    {
+        return scanCategory.category === category;
+    });
+};
+
+const getActiveMaskingMappings = (
+    maskingMappings: MaskingMapping[],
+    ignoredMappingIds: string[],
+) =>
+{
+    const ignoredMappingIdSet = new Set(ignoredMappingIds);
+
+    return maskingMappings.filter((maskingMapping) =>
+    {
+        return !ignoredMappingIdSet.has(maskingMapping.id);
+    });
+};
+
+const getMaskingMappingItemCount = (maskingMappings: MaskingMapping[]) =>
+{
+    return maskingMappings.reduce((count, maskingMapping) =>
+    {
+        return count + maskingMapping.itemIds.length;
+    }, 0);
+};
+
+const getMaskingMappingsByCategory = (
+    maskingMappings: MaskingMapping[],
+    category: SensitiveItemCategory,
+) =>
+{
+    return maskingMappings.filter((maskingMapping) =>
+    {
+        return maskingMapping.category === category;
+    });
+};
+
+const compareMaskingMappingsByMask = (
+    left: MaskingMapping,
+    right: MaskingMapping,
+) =>
+{
+    const numberDifference =
+        getMaskNumber(left.mask) - getMaskNumber(right.mask);
+
+    if (numberDifference !== 0)
+    {
+        return numberDifference;
+    }
+
+    return left.mask.localeCompare(right.mask);
+};
+
+const getSortedMaskingMappings = (
+    maskingMappings: MaskingMapping[],
+    sortDirection: ScanDetailSortDirection,
+) =>
+{
+    if (sortDirection === 'neutral')
+    {
+        return [...maskingMappings].sort(compareMaskingMappingsByMask);
+    }
+
+    return [...maskingMappings].sort((left, right) =>
+    {
+        const countDifference =
+            left.itemIds.length - right.itemIds.length;
+        const sortedCountDifference =
+            sortDirection === 'ascending' ? countDifference : -countDifference;
+
+        return sortedCountDifference || compareMaskingMappingsByMask(left, right);
+    });
+};
+
+const getMaskNumber = (mask: string) =>
+{
+    const match = /_(\d+)$/.exec(mask);
+
+    if (match == null)
+    {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    return Number(match[1]);
+};
+
+const getNextScanDetailSortDirection = (
+    sortDirection: ScanDetailSortDirection,
+): ScanDetailSortDirection =>
+{
+    if (sortDirection === 'neutral')
+    {
+        return 'ascending';
+    }
+
+    if (sortDirection === 'ascending')
+    {
+        return 'descending';
+    }
+
+    return 'neutral';
+};
+
+const getScanDetailSortLabel = (sortDirection: ScanDetailSortDirection) =>
+{
+    if (sortDirection === 'ascending')
+    {
+        return 'Sorted by occurrence count low to high';
+    }
+
+    if (sortDirection === 'descending')
+    {
+        return 'Sorted by occurrence count high to low';
+    }
+
+    return 'Sorted by mask number';
+};
+
+const getScanDetailSortButtonLabel = (sortDirection: ScanDetailSortDirection) =>
+{
+    if (sortDirection === 'ascending')
+    {
+        return 'Sort by occurrence count high to low';
+    }
+
+    if (sortDirection === 'descending')
+    {
+        return 'Sort by mask number';
+    }
+
+    return 'Sort by occurrence count low to high';
+};
+
+const getScanDetailSortIcon = (sortDirection: ScanDetailSortDirection) =>
+{
+    if (sortDirection === 'ascending')
+    {
+        return ArrowUp;
+    }
+
+    if (sortDirection === 'descending')
+    {
+        return ArrowDown;
+    }
+
+    return ArrowUpDown;
+};
+
 const clamp = (value: number, minimum: number, maximum: number) =>
 {
     return Math.min(maximum, Math.max(minimum, value));
@@ -313,9 +482,16 @@ export function App()
 {
     const [prompt, setPrompt] = useState('');
     const [privatizedPrompt, setPrivatizedPrompt] = useState('');
+    const [privatizedInputText, setPrivatizedInputText] = useState('');
+    const [privatizedResult, setPrivatizedResult] =
+        useState<PrivatizedPromptResult | null>(null);
     const [previewSegments, setPreviewSegments] = useState<PrivatizedPromptSegment[]>([]);
     const [canUsePrivatizedPrompt, setCanUsePrivatizedPrompt] = useState(false);
-    const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
+    const [ignoredMappingIds, setIgnoredMappingIds] = useState<string[]>([]);
+    const [activeScanCategory, setActiveScanCategory] =
+        useState<SensitiveItemCategory | null>(null);
+    const [scanDetailSortDirection, setScanDetailSortDirection] =
+        useState<ScanDetailSortDirection>('neutral');
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
@@ -343,28 +519,144 @@ export function App()
         showPreviewTooltip,
         hidePreviewTooltip,
     );
-    const itemCountLabel = `${formatCount(detectedItems.length)} ${
-        detectedItems.length === 1 ? 'item' : 'items'
+    const activeMaskingMappings = getActiveMaskingMappings(
+        privatizedResult?.maskingMappings ?? [],
+        ignoredMappingIds,
+    );
+    const activeItemCount = getMaskingMappingItemCount(activeMaskingMappings);
+    const itemCountLabel = `${formatCount(activeItemCount)} ${
+        activeItemCount === 1 ? 'item' : 'items'
     }`;
     const countItemsByCategory = (category: SensitiveItemCategory) =>
     {
-        return detectedItems.filter((item) => item.category === category).length;
+        return getMaskingMappingItemCount(
+            getMaskingMappingsByCategory(activeMaskingMappings, category),
+        );
+    };
+    const toggleScanCategory = (category: SensitiveItemCategory) =>
+    {
+        setActiveScanCategory((currentCategory) =>
+        {
+            return currentCategory === category ? null : category;
+        });
     };
     const renderPrivacyScanCategory = (
         scanCategory: PrivacyScanCategory,
     ) =>
     {
         const { category, label, Icon } = scanCategory;
+        const count = countItemsByCategory(category);
+        const isActive = activeScanCategory === category;
+        const isDimmed = activeScanCategory != null && !isActive;
 
         return (
-            <span
+            <button
                 key={category}
-                className="chip"
-                style={getCategoryColorStyle(category)}
+                className={`chip${isActive ? ' is-active' : ''}${isDimmed ? ' is-dimmed' : ''}`}
+                style={getPrivacyScanCategoryColorStyle(category, count)}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => toggleScanCategory(category)}
             >
                 <Icon size={17} aria-hidden="true" />
-                {label} {formatCount(countItemsByCategory(category))}
-            </span>
+                {label} {formatCount(count)}
+            </button>
+        );
+    };
+    const activeScanCategoryConfig =
+        activeScanCategory == null ? null : getPrivacyScanCategory(activeScanCategory);
+    const activeScanMappings =
+        activeScanCategory == null
+            ? []
+            : getSortedMaskingMappings(
+                  getMaskingMappingsByCategory(activeMaskingMappings, activeScanCategory),
+                  scanDetailSortDirection,
+              );
+    const activeScanCount = getMaskingMappingItemCount(activeScanMappings);
+    const ScanDetailSortIcon = getScanDetailSortIcon(scanDetailSortDirection);
+    const scanDetailSortLabel = getScanDetailSortLabel(scanDetailSortDirection);
+    const scanDetailSortButtonLabel =
+        getScanDetailSortButtonLabel(scanDetailSortDirection);
+    const scanDetailSortTitle =
+        `${scanDetailSortLabel}. ${scanDetailSortButtonLabel}.`;
+    const cycleScanDetailSortDirection = () =>
+    {
+        setScanDetailSortDirection((currentSortDirection) =>
+        {
+            return getNextScanDetailSortDirection(currentSortDirection);
+        });
+    };
+    const applyPrivatizedResult = (
+        inputText: string,
+        result: PrivatizedPromptResult,
+    ) =>
+    {
+        setPreviewTooltip(null);
+        setIgnoredMappingIds([]);
+        setScanDetailSortDirection('neutral');
+        setPrivatizedInputText(inputText);
+        setPrivatizedResult(result);
+        setPrivatizedPrompt(result.privatizedPrompt);
+        setPreviewSegments(result.segments);
+        setCanUsePrivatizedPrompt(result.safeToInject);
+    };
+    const restoreMaskingMapping = (maskingMapping: MaskingMapping) =>
+    {
+        if (privatizedResult == null || ignoredMappingIds.includes(maskingMapping.id))
+        {
+            return;
+        }
+
+        const nextIgnoredMappingIds = [...ignoredMappingIds, maskingMapping.id];
+        let preview: ReturnType<typeof createPrivatizedPromptPreview>;
+
+        try
+        {
+            preview = createPrivatizedPromptPreview(
+                privatizedInputText,
+                privatizedResult,
+                {
+                    ignoredMappingIds: nextIgnoredMappingIds,
+                },
+            );
+        }
+        catch
+        {
+            setClipboardStatus(`Could not restore ${maskingMapping.mask}.`);
+            return;
+        }
+
+        setPreviewTooltip(null);
+        setIgnoredMappingIds(nextIgnoredMappingIds);
+        setPrivatizedPrompt(preview.privatizedPrompt);
+        setPreviewSegments(preview.segments);
+        setCanUsePrivatizedPrompt(false);
+        setSendStatus('');
+        setClipboardStatus(`${maskingMapping.mask} restored in preview.`);
+    };
+    const renderScanDetailRow = (maskingMapping: MaskingMapping) =>
+    {
+        return (
+            <li key={maskingMapping.id} className="scan-detail-row">
+                <span className="scan-detail-mask">
+                    {maskingMapping.mask}
+                </span>
+                <span className="scan-detail-original" title={maskingMapping.original}>
+                    {maskingMapping.original}
+                </span>
+                <span className="scan-detail-count">
+                    {formatCount(maskingMapping.itemIds.length)}x
+                </span>
+                <button
+                    className="scan-detail-restore-button"
+                    type="button"
+                    title="Restore original text"
+                    aria-label={`Restore ${maskingMapping.mask} original text`}
+                    onClick={() => restoreMaskingMapping(maskingMapping)}
+                >
+                    <Trash2 size={15} aria-hidden="true" />
+                </button>
+            </li>
         );
     };
 
@@ -403,6 +695,29 @@ export function App()
             window.removeEventListener('scroll', hideTooltip, true);
         };
     }, [previewTooltip]);
+
+    useEffect(() =>
+    {
+        if (activeScanCategory == null)
+        {
+            return;
+        }
+
+        const closeScanDetailOnEscape = (event: KeyboardEvent) =>
+        {
+            if (event.key === 'Escape')
+            {
+                setActiveScanCategory(null);
+            }
+        };
+
+        window.addEventListener('keydown', closeScanDetailOnEscape);
+
+        return () =>
+        {
+            window.removeEventListener('keydown', closeScanDetailOnEscape);
+        };
+    }, [activeScanCategory]);
 
     useLayoutEffect(() =>
     {
@@ -445,11 +760,7 @@ export function App()
 
         const result = createPrivatizedPrompt(prompt);
 
-        setPreviewTooltip(null);
-        setPrivatizedPrompt(result.privatizedPrompt);
-        setPreviewSegments(result.segments);
-        setCanUsePrivatizedPrompt(result.safeToInject);
-        setDetectedItems(result.items);
+        applyPrivatizedResult(prompt, result);
         setSendStatus('');
 
         if (!result.safeToInject) {
@@ -482,11 +793,7 @@ export function App()
                 useLocalModelDetection: true,
             });
 
-            setPreviewTooltip(null);
-            setPrivatizedPrompt(result.privatizedPrompt);
-            setPreviewSegments(result.segments);
-            setCanUsePrivatizedPrompt(result.safeToInject);
-            setDetectedItems(result.items);
+            applyPrivatizedResult(prompt, result);
 
             if (!result.safeToInject) {
                 setClipboardStatus('Local model preview only. Sending is disabled.');
@@ -497,11 +804,7 @@ export function App()
         } catch (error) {
             const fallbackResult = createPrivatizedPrompt(prompt);
 
-            setPreviewTooltip(null);
-            setPrivatizedPrompt(fallbackResult.privatizedPrompt);
-            setPreviewSegments(fallbackResult.segments);
-            setCanUsePrivatizedPrompt(fallbackResult.safeToInject);
-            setDetectedItems(fallbackResult.items);
+            applyPrivatizedResult(prompt, fallbackResult);
             setClipboardStatus(getLocalModelFailureStatus(error));
         } finally {
             setIsTestingLocalModel(false);
@@ -512,10 +815,14 @@ export function App()
     {
         setPrompt('');
         setPrivatizedPrompt('');
+        setPrivatizedInputText('');
+        setPrivatizedResult(null);
         setPreviewSegments([]);
         setPreviewTooltip(null);
+        setIgnoredMappingIds([]);
+        setActiveScanCategory(null);
+        setScanDetailSortDirection('neutral');
         setCanUsePrivatizedPrompt(false);
-        setDetectedItems([]);
         setClipboardStatus('');
         setSendStatus('');
         setCopied(false);
@@ -661,6 +968,44 @@ export function App()
                 <div className="chip-row" aria-label="Detected item categories">
                     {PRIVACY_SCAN_CATEGORIES.map(renderPrivacyScanCategory)}
                 </div>
+                {activeScanCategoryConfig != null ? (
+                    <div
+                        className="scan-detail"
+                        style={getCategoryColorStyle(activeScanCategoryConfig.category)}
+                    >
+                        <div className="scan-detail-header">
+                            <span>
+                                {activeScanCategoryConfig.label} -{' '}
+                                {formatCount(activeScanCount)} masked
+                            </span>
+                        </div>
+                        {activeScanMappings.length > 0 ? (
+                            <>
+                                <div className="scan-detail-columns">
+                                    <span>Mask</span>
+                                    <span>Original</span>
+                                    <button
+                                        className="scan-detail-sort-button"
+                                        type="button"
+                                        title={scanDetailSortTitle}
+                                        aria-label={scanDetailSortButtonLabel}
+                                        onClick={cycleScanDetailSortDirection}
+                                    >
+                                        <ScanDetailSortIcon size={14} aria-hidden="true" />
+                                    </button>
+                                    <span aria-hidden="true" />
+                                </div>
+                                <ul className="scan-detail-list">
+                                    {activeScanMappings.map(renderScanDetailRow)}
+                                </ul>
+                            </>
+                        ) : (
+                            <p className="scan-detail-empty">
+                                No {activeScanCategoryConfig.label.toLowerCase()} items masked.
+                            </p>
+                        )}
+                    </div>
+                ) : null}
             </section>
 
             <section className="panel">

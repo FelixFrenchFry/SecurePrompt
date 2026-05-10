@@ -8,6 +8,7 @@ import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rul
 import type {
     MaskingMapping,
     PrivatizationMethod,
+    PrivatizedPromptPreview,
     PrivatizedPromptResult,
     PrivatizedPromptSegment,
     SensitiveItem,
@@ -18,6 +19,7 @@ export type {
     DetectionSource,
     MaskingMapping,
     PrivatizationMethod,
+    PrivatizedPromptPreview,
     PrivatizedPromptResult,
     PrivatizedPromptSegment,
     SensitiveItem,
@@ -31,9 +33,8 @@ export type PrivatizationPipelineOptions = {
     useRulesDetection?: boolean;
 };
 
-type MaskedPrompt = {
-    privatizedPrompt: string;
-    segments: PrivatizedPromptSegment[];
+export type PrivatizedPromptPreviewOptions = {
+    ignoredMappingIds?: readonly string[];
 };
 
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
@@ -75,6 +76,21 @@ export const createPrivatizedPromptAsync = async (
     const detectedItems = await detectSensitiveItemsAsync(inputText, options);
 
     return createPrivatizedPromptFromItems(inputText, detectedItems);
+};
+
+export const createPrivatizedPromptPreview = (
+    inputText: string,
+    result: Pick<PrivatizedPromptResult, 'items' | 'maskingMappings' | 'method'>,
+    options: PrivatizedPromptPreviewOptions = {},
+): PrivatizedPromptPreview =>
+{
+    return applyMasksToItems(
+        inputText,
+        result.items,
+        result.maskingMappings,
+        result.method,
+        new Set(options.ignoredMappingIds ?? []),
+    );
 };
 
 const createPrivatizedPromptFromItems = (
@@ -573,7 +589,8 @@ const applyMasksToItems = (
     items: SensitiveItem[],
     maskingMappings: MaskingMapping[],
     method: PrivatizationMethod,
-): MaskedPrompt =>
+    ignoredMappingIds: ReadonlySet<string> = new Set(),
+): PrivatizedPromptPreview =>
 {
     const mappingByItemId = createMaskingMappingByItemId(maskingMappings);
     const sortedItems = [...items].sort(compareItemsByPosition);
@@ -597,6 +614,13 @@ const applyMasksToItems = (
         if (maskingMapping == null)
         {
             throw new Error('Sensitive item has no mask.');
+        }
+
+        if (ignoredMappingIds.has(maskingMapping.id))
+        {
+            appendTextSegment(segments, inputText.slice(cursor, item.end));
+            cursor = item.end;
+            continue;
         }
 
         appendTextSegment(segments, inputText.slice(cursor, item.start));

@@ -54,12 +54,16 @@ export type PrivatizedPromptSegment =
           mappingId: string;
       };
 
-// complete result for one prompt
-export type PrivatizedPromptResult = {
+// rendered privatized prompt data
+export type PrivatizedPromptPreview = {
     privatizedPrompt: string;
+    segments: PrivatizedPromptSegment[];
+};
+
+// complete result for one prompt
+export type PrivatizedPromptResult = PrivatizedPromptPreview & {
     method: PrivatizationMethod;
     items: SensitiveItem[];
     maskingMappings: MaskingMapping[];
-    segments: PrivatizedPromptSegment[];
     safeToInject: boolean;
 };
