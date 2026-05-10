@@ -38,6 +38,7 @@ import {
     createPrivatizedPrompt,
     createPrivatizedPromptAsync,
     createPrivatizedPromptPreview,
+    createPrivatizedPromptWithManualItem,
     type MaskingMapping,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
@@ -54,6 +55,7 @@ const PREVIEW_TOOLTIP_MIN_ABOVE_SPACE = 80;
 const PREVIEW_TOOLTIP_HIDE_DELAY_MS = 220;
 const PREVIEW_TOOLTIP_BRIDGE_PADDING = 10;
 const PREVIEW_TOOLTIP_BRIDGE_OVERLAP = 2;
+const PREVIEW_SELECTION_POPOVER_MAX_WIDTH = 236;
 const MODEL_HOST_PERMISSIONS = [
     'https://huggingface.co/*',
     'https://*.huggingface.co/*',
@@ -88,6 +90,17 @@ type PreviewTooltip = {
     placement: 'above' | 'below';
     anchorRect: PreviewTooltipRect;
     bridge: PreviewTooltipBridge | null;
+};
+
+type PreviewSelectionPopover = {
+    text: string;
+    start: number;
+    end: number;
+    left: number;
+    top: number;
+    anchorLeft: number;
+    arrowLeft: number;
+    placement: 'above' | 'below';
 };
 
 type PreviewTooltipEvent =
@@ -411,7 +424,12 @@ const renderPreviewSegment = (
 {
     if (segment.type === 'text') {
         return (
-            <span key={`preview-text-${index}`}>
+            <span
+                key={`preview-text-${index}`}
+                className="preview-text"
+                data-source-start={segment.sourceStart}
+                data-source-end={segment.sourceEnd}
+            >
                 {segment.text}
             </span>
         );
@@ -595,6 +613,259 @@ const isSamePreviewTooltipBridge = (
     );
 };
 
+const getPreviewSelectionPopoverPosition = (
+    anchorRect: PreviewTooltipRect,
+): Pick<
+    PreviewSelectionPopover,
+    'left' | 'top' | 'anchorLeft' | 'arrowLeft' | 'placement'
+> =>
+{
+    const maxWidth = Math.min(
+        PREVIEW_SELECTION_POPOVER_MAX_WIDTH,
+        window.innerWidth - PREVIEW_TOOLTIP_MARGIN * 2,
+    );
+    const anchorLeft = anchorRect.left + anchorRect.width / 2;
+    const left = getClampedPreviewTooltipLeft(anchorLeft, maxWidth);
+    const arrowLeft = getClampedPreviewTooltipArrowLeft(anchorLeft, left, maxWidth);
+
+    if (anchorRect.top >= PREVIEW_TOOLTIP_MIN_ABOVE_SPACE)
+    {
+        return {
+            left,
+            top: anchorRect.top - PREVIEW_TOOLTIP_GAP,
+            anchorLeft,
+            arrowLeft,
+            placement: 'above',
+        };
+    }
+
+    return {
+        left,
+        top: anchorRect.bottom + PREVIEW_TOOLTIP_GAP,
+        anchorLeft,
+        arrowLeft,
+        placement: 'below',
+    };
+};
+
+const getPreviewSelectionPopover = (
+    selection: Selection | null,
+    previewElement: HTMLElement | null,
+    inputText: string,
+): PreviewSelectionPopover | null =>
+{
+    if (
+        selection == null ||
+        selection.rangeCount === 0 ||
+        selection.isCollapsed ||
+        previewElement == null ||
+        inputText.length === 0
+    )
+    {
+        return null;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    if (!isSelectionInsidePreview(range, previewElement))
+    {
+        return null;
+    }
+
+    if (selectionOverlapsPreviewMask(range, previewElement))
+    {
+        return null;
+    }
+
+    const selectedRange = getSelectedSourceRange(range, inputText);
+
+    if (selectedRange == null)
+    {
+        return null;
+    }
+
+    const anchorRect = getPreviewSelectionRect(range);
+
+    if (anchorRect == null)
+    {
+        return null;
+    }
+
+    return {
+        ...selectedRange,
+        ...getPreviewSelectionPopoverPosition(anchorRect),
+    };
+};
+
+const isSelectionInsidePreview = (range: Range, previewElement: HTMLElement) =>
+{
+    return (
+        isNodeInsideElement(range.startContainer, previewElement) &&
+        isNodeInsideElement(range.endContainer, previewElement)
+    );
+};
+
+const isNodeInsideElement = (node: Node, element: HTMLElement) =>
+{
+    return node === element || element.contains(node);
+};
+
+const selectionOverlapsPreviewMask = (range: Range, previewElement: HTMLElement) =>
+{
+    return Array.from(previewElement.querySelectorAll('.preview-mask')).some((node) =>
+    {
+        return range.intersectsNode(node);
+    });
+};
+
+const getSelectedSourceRange = (
+    range: Range,
+    inputText: string,
+): Pick<PreviewSelectionPopover, 'text' | 'start' | 'end'> | null =>
+{
+    const startElement = getPreviewTextElement(range.startContainer);
+    const endElement = getPreviewTextElement(range.endContainer);
+
+    if (startElement == null || endElement == null || startElement !== endElement)
+    {
+        return null;
+    }
+
+    const sourceStart = getPreviewTextSourceOffset(
+        startElement,
+        range.startContainer,
+        range.startOffset,
+    );
+    const sourceEnd = getPreviewTextSourceOffset(
+        endElement,
+        range.endContainer,
+        range.endOffset,
+    );
+
+    if (sourceStart == null || sourceEnd == null || sourceEnd <= sourceStart)
+    {
+        return null;
+    }
+
+    const trimmedRange = trimPreviewSelectionSourceRange(
+        inputText,
+        sourceStart,
+        sourceEnd,
+    );
+    const text = inputText.slice(trimmedRange.start, trimmedRange.end);
+
+    if (text.length === 0)
+    {
+        return null;
+    }
+
+    return {
+        text,
+        start: trimmedRange.start,
+        end: trimmedRange.end,
+    };
+};
+
+const getPreviewTextElement = (node: Node): HTMLElement | null =>
+{
+    const element =
+        node.nodeType === Node.ELEMENT_NODE
+            ? (node as Element)
+            : node.parentElement;
+    const previewTextElement = element?.closest('.preview-text');
+
+    if (previewTextElement instanceof HTMLElement)
+    {
+        return previewTextElement;
+    }
+
+    return null;
+};
+
+const getPreviewTextSourceOffset = (
+    element: HTMLElement,
+    container: Node,
+    offset: number,
+) =>
+{
+    const sourceStart = Number(element.dataset.sourceStart);
+
+    if (!Number.isFinite(sourceStart))
+    {
+        return null;
+    }
+
+    const range = document.createRange();
+
+    try
+    {
+        range.selectNodeContents(element);
+        range.setEnd(container, offset);
+
+        return sourceStart + range.toString().length;
+    }
+    catch
+    {
+        return null;
+    }
+    finally
+    {
+        range.detach();
+    }
+};
+
+const trimPreviewSelectionSourceRange = (
+    inputText: string,
+    start: number,
+    end: number,
+) =>
+{
+    let trimmedStart = start;
+    let trimmedEnd = end;
+
+    while (trimmedStart < trimmedEnd && /\s/.test(inputText[trimmedStart]))
+    {
+        trimmedStart += 1;
+    }
+
+    while (trimmedEnd > trimmedStart && /\s/.test(inputText[trimmedEnd - 1]))
+    {
+        trimmedEnd -= 1;
+    }
+
+    return {
+        start: trimmedStart,
+        end: trimmedEnd,
+    };
+};
+
+const getPreviewSelectionRect = (range: Range): PreviewTooltipRect | null =>
+{
+    const rects = Array.from(range.getClientRects()).filter((rect) =>
+    {
+        return rect.width > 0 || rect.height > 0;
+    });
+
+    if (rects.length === 0)
+    {
+        return null;
+    }
+
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const right = Math.max(...rects.map((rect) => rect.right));
+    const bottom = Math.max(...rects.map((rect) => rect.bottom));
+
+    return {
+        left,
+        top,
+        right,
+        bottom,
+        width: right - left,
+        height: bottom - top,
+    };
+};
+
 const getClampedPreviewTooltipLeft = (anchorLeft: number, width: number) =>
 {
     const maxLeft = window.innerWidth - PREVIEW_TOOLTIP_MARGIN - width;
@@ -636,10 +907,15 @@ export function App()
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
     const [previewTooltip, setPreviewTooltip] = useState<PreviewTooltip | null>(null);
+    const [previewSelectionPopover, setPreviewSelectionPopover] =
+        useState<PreviewSelectionPopover | null>(null);
     const copyResetTimerRef = useRef<number | undefined>(undefined);
     const clearResetTimerRef = useRef<number | undefined>(undefined);
     const previewTooltipHideTimerRef = useRef<number | undefined>(undefined);
+    const previewSelectionFrameRef = useRef<number | undefined>(undefined);
+    const previewRef = useRef<HTMLDivElement | null>(null);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
+    const previewSelectionPopoverRef = useRef<HTMLDivElement | null>(null);
 
     const clearPreviewTooltipHideTimer = () =>
     {
@@ -653,6 +929,10 @@ export function App()
     {
         clearPreviewTooltipHideTimer();
         setPreviewTooltip(null);
+    };
+    const hidePreviewSelectionPopover = () =>
+    {
+        setPreviewSelectionPopover(null);
     };
     const queueHidePreviewTooltip = () =>
     {
@@ -672,11 +952,42 @@ export function App()
     ) =>
     {
         clearPreviewTooltipHideTimer();
+        hidePreviewSelectionPopover();
         setPreviewTooltip({
             text,
             mappingId,
             mask,
             ...getPreviewTooltipPosition(event.currentTarget),
+        });
+    };
+    const updatePreviewSelectionPopover = () =>
+    {
+        const selectionPopover = getPreviewSelectionPopover(
+            window.getSelection(),
+            previewRef.current,
+            privatizedInputText,
+        );
+
+        if (selectionPopover == null)
+        {
+            hidePreviewSelectionPopover();
+            return;
+        }
+
+        hidePreviewTooltip();
+        setPreviewSelectionPopover(selectionPopover);
+    };
+    const schedulePreviewSelectionPopover = () =>
+    {
+        if (previewSelectionFrameRef.current !== undefined)
+        {
+            window.cancelAnimationFrame(previewSelectionFrameRef.current);
+        }
+
+        previewSelectionFrameRef.current = window.requestAnimationFrame(() =>
+        {
+            previewSelectionFrameRef.current = undefined;
+            updatePreviewSelectionPopover();
         });
     };
     const previewContent = getPreviewContent(
@@ -760,6 +1071,7 @@ export function App()
     ) =>
     {
         setPreviewTooltip(null);
+        hidePreviewSelectionPopover();
         setIgnoredMappingIds([]);
         setScanDetailSortDirection('neutral');
         setPrivatizedInputText(inputText);
@@ -795,6 +1107,7 @@ export function App()
         }
 
         hidePreviewTooltip();
+        hidePreviewSelectionPopover();
         setIgnoredMappingIds(nextIgnoredMappingIds);
         setPrivatizedPrompt(preview.privatizedPrompt);
         setPreviewSegments(preview.segments);
@@ -816,6 +1129,142 @@ export function App()
         }
 
         restoreMaskingMapping(maskingMapping);
+    };
+    const preserveIgnoredMappingIds = (
+        currentResult: PrivatizedPromptResult,
+        nextResult: PrivatizedPromptResult,
+        manualCategory: SensitiveItemCategory,
+        manualOriginals: readonly string[],
+    ) =>
+    {
+        const ignoredMappings = currentResult.maskingMappings.filter((maskingMapping) =>
+        {
+            return ignoredMappingIds.includes(maskingMapping.id);
+        });
+        const ignoredItemIds = new Set(
+            ignoredMappings.flatMap((maskingMapping) => maskingMapping.itemIds),
+        );
+        const isIgnoredItemFragment = (itemId: string) =>
+        {
+            for (const ignoredItemId of ignoredItemIds)
+            {
+                if (itemId.startsWith(`${ignoredItemId}-fragment-`))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        return nextResult.maskingMappings
+            .filter((nextMapping) =>
+            {
+                const isManualOriginal =
+                    nextMapping.category === manualCategory &&
+                    manualOriginals.includes(nextMapping.original);
+
+                if (isManualOriginal)
+                {
+                    return false;
+                }
+
+                if (nextMapping.itemIds.some(isIgnoredItemFragment))
+                {
+                    return true;
+                }
+
+                return ignoredMappings.some((ignoredMapping) =>
+                {
+                    return (
+                        ignoredMapping.category === nextMapping.category &&
+                        ignoredMapping.original === nextMapping.original
+                    );
+                });
+            })
+            .map((maskingMapping) =>
+            {
+                return maskingMapping.id;
+            });
+    };
+    const getManualSelectionOriginals = (
+        result: PrivatizedPromptResult,
+        category: SensitiveItemCategory,
+        selection: PreviewSelectionPopover,
+    ) =>
+    {
+        return result.items
+            .filter((item) =>
+            {
+                return (
+                    item.source === 'manual' &&
+                    item.category === category &&
+                    item.start >= selection.start &&
+                    item.end <= selection.end
+                );
+            })
+            .map((item) =>
+            {
+                return item.value;
+            });
+    };
+    const manuallyPrivatizeSelection = (category: SensitiveItemCategory) =>
+    {
+        if (privatizedResult == null || previewSelectionPopover == null)
+        {
+            return;
+        }
+
+        try
+        {
+            const nextResult = createPrivatizedPromptWithManualItem(
+                privatizedInputText,
+                privatizedResult,
+                {
+                    category,
+                    start: previewSelectionPopover.start,
+                    end: previewSelectionPopover.end,
+                },
+            );
+            const manualOriginals = getManualSelectionOriginals(
+                nextResult,
+                category,
+                previewSelectionPopover,
+            );
+            const nextIgnoredMappingIds = preserveIgnoredMappingIds(
+                privatizedResult,
+                nextResult,
+                category,
+                manualOriginals,
+            );
+            const preview = createPrivatizedPromptPreview(
+                privatizedInputText,
+                nextResult,
+                {
+                    ignoredMappingIds: nextIgnoredMappingIds,
+                },
+            );
+            const scanCategory = getPrivacyScanCategory(category);
+
+            window.getSelection()?.removeAllRanges();
+            hidePreviewTooltip();
+            hidePreviewSelectionPopover();
+            setPrivatizedResult(nextResult);
+            setIgnoredMappingIds(nextIgnoredMappingIds);
+            setPrivatizedPrompt(preview.privatizedPrompt);
+            setPreviewSegments(preview.segments);
+            setCanUsePrivatizedPrompt(
+                nextResult.safeToInject && nextIgnoredMappingIds.length === 0,
+            );
+            setSendStatus('');
+            setClipboardStatus(
+                `Selected text privatized as ${scanCategory?.label ?? category}.`,
+            );
+        }
+        catch
+        {
+            setClipboardStatus('Could not privatize selected text.');
+        }
     };
     const renderScanDetailRow = (maskingMapping: MaskingMapping) =>
     {
@@ -858,30 +1307,35 @@ export function App()
             if (previewTooltipHideTimerRef.current !== undefined) {
                 window.clearTimeout(previewTooltipHideTimerRef.current);
             }
+
+            if (previewSelectionFrameRef.current !== undefined) {
+                window.cancelAnimationFrame(previewSelectionFrameRef.current);
+            }
         };
     }, []);
 
     useEffect(() =>
     {
-        if (previewTooltip == null)
+        if (previewTooltip == null && previewSelectionPopover == null)
         {
             return;
         }
 
-        const hideTooltip = () =>
+        const hidePreviewPopovers = () =>
         {
             setPreviewTooltip(null);
+            setPreviewSelectionPopover(null);
         };
 
-        window.addEventListener('resize', hideTooltip);
-        window.addEventListener('scroll', hideTooltip, true);
+        window.addEventListener('resize', hidePreviewPopovers);
+        window.addEventListener('scroll', hidePreviewPopovers, true);
 
         return () =>
         {
-            window.removeEventListener('resize', hideTooltip);
-            window.removeEventListener('scroll', hideTooltip, true);
+            window.removeEventListener('resize', hidePreviewPopovers);
+            window.removeEventListener('scroll', hidePreviewPopovers, true);
         };
-    }, [previewTooltip]);
+    }, [previewTooltip, previewSelectionPopover]);
 
     useEffect(() =>
     {
@@ -905,6 +1359,105 @@ export function App()
             window.removeEventListener('keydown', closeScanDetailOnEscape);
         };
     }, [activeScanCategory]);
+
+    useEffect(() =>
+    {
+        if (previewSelectionPopover == null)
+        {
+            return;
+        }
+
+        const closePreviewSelectionPopoverOnEscape = (event: KeyboardEvent) =>
+        {
+            if (event.key === 'Escape')
+            {
+                hidePreviewSelectionPopover();
+            }
+        };
+
+        window.addEventListener('keydown', closePreviewSelectionPopoverOnEscape);
+
+        return () =>
+        {
+            window.removeEventListener('keydown', closePreviewSelectionPopoverOnEscape);
+        };
+    }, [previewSelectionPopover]);
+
+    useEffect(() =>
+    {
+        if (previewSelectionPopover == null)
+        {
+            return;
+        }
+
+        let selectionFrame: number | undefined;
+        const closePreviewSelectionPopoverOnInvalidSelection = () =>
+        {
+            if (selectionFrame !== undefined)
+            {
+                window.cancelAnimationFrame(selectionFrame);
+            }
+
+            selectionFrame = window.requestAnimationFrame(() =>
+            {
+                selectionFrame = undefined;
+
+                if (
+                    getPreviewSelectionPopover(
+                        window.getSelection(),
+                        previewRef.current,
+                        privatizedInputText,
+                    ) == null
+                )
+                {
+                    hidePreviewSelectionPopover();
+                }
+            });
+        };
+        const closePreviewSelectionPopoverOnOutsidePointerDown = (event: PointerEvent) =>
+        {
+            if (!(event.target instanceof Node))
+            {
+                return;
+            }
+
+            if (
+                previewSelectionPopoverRef.current?.contains(event.target) ||
+                previewRef.current?.contains(event.target)
+            )
+            {
+                return;
+            }
+
+            hidePreviewSelectionPopover();
+        };
+
+        document.addEventListener(
+            'selectionchange',
+            closePreviewSelectionPopoverOnInvalidSelection,
+        );
+        document.addEventListener(
+            'pointerdown',
+            closePreviewSelectionPopoverOnOutsidePointerDown,
+        );
+
+        return () =>
+        {
+            document.removeEventListener(
+                'selectionchange',
+                closePreviewSelectionPopoverOnInvalidSelection,
+            );
+            document.removeEventListener(
+                'pointerdown',
+                closePreviewSelectionPopoverOnOutsidePointerDown,
+            );
+
+            if (selectionFrame !== undefined)
+            {
+                window.cancelAnimationFrame(selectionFrame);
+            }
+        };
+    }, [previewSelectionPopover, privatizedInputText]);
 
     useLayoutEffect(() =>
     {
@@ -947,6 +1500,44 @@ export function App()
             bridge,
         });
     }, [previewTooltip]);
+
+    useLayoutEffect(() =>
+    {
+        if (
+            previewSelectionPopover == null ||
+            previewSelectionPopoverRef.current == null
+        )
+        {
+            return;
+        }
+
+        const popoverRect = getPreviewTooltipRect(
+            previewSelectionPopoverRef.current.getBoundingClientRect(),
+        );
+        const left = getClampedPreviewTooltipLeft(
+            previewSelectionPopover.anchorLeft,
+            popoverRect.width,
+        );
+        const arrowLeft = getClampedPreviewTooltipArrowLeft(
+            previewSelectionPopover.anchorLeft,
+            left,
+            popoverRect.width,
+        );
+
+        if (
+            Math.abs(left - previewSelectionPopover.left) < 0.5 &&
+            Math.abs(arrowLeft - previewSelectionPopover.arrowLeft) < 0.5
+        )
+        {
+            return;
+        }
+
+        setPreviewSelectionPopover({
+            ...previewSelectionPopover,
+            left,
+            arrowLeft,
+        });
+    }, [previewSelectionPopover]);
 
     const privatizePrompt = () =>
     {
@@ -1015,6 +1606,7 @@ export function App()
         setPrivatizedResult(null);
         setPreviewSegments([]);
         setPreviewTooltip(null);
+        setPreviewSelectionPopover(null);
         setIgnoredMappingIds([]);
         setActiveScanCategory(null);
         setScanDetailSortDirection('neutral');
@@ -1224,7 +1816,13 @@ export function App()
                         Copy
                     </button>
                 </div>
-                <div className="preview" aria-live="polite">
+                <div
+                    ref={previewRef}
+                    className="preview"
+                    aria-live="polite"
+                    onPointerUp={schedulePreviewSelectionPopover}
+                    onKeyUp={schedulePreviewSelectionPopover}
+                >
                     {previewContent}
                 </div>
                 {previewTooltip != null ? (
@@ -1286,6 +1884,41 @@ export function App()
                             </div>
                         </div>
                     </>
+                ) : null}
+                {previewSelectionPopover != null ? (
+                    <div
+                        ref={previewSelectionPopoverRef}
+                        className={`preview-tooltip preview-selection-popover preview-tooltip-${previewSelectionPopover.placement}`}
+                        style={{
+                            left: previewSelectionPopover.left,
+                            top: previewSelectionPopover.top,
+                            '--preview-tooltip-arrow-left': `${previewSelectionPopover.arrowLeft}px`,
+                        } as CSSProperties}
+                        role="dialog"
+                        aria-label="Privatize selected text"
+                    >
+                        <div className="preview-tooltip-content preview-selection-content">
+                            <div className="preview-selection-title">
+                                Privatize as...
+                            </div>
+                            <div className="preview-selection-grid">
+                                {PRIVACY_SCAN_CATEGORIES.map(({ category, label, Icon }) => (
+                                    <button
+                                        key={category}
+                                        className="preview-selection-category-button"
+                                        style={getCategoryColorStyle(category)}
+                                        type="button"
+                                        title={`Privatize as ${label.toLowerCase()}`}
+                                        aria-label={`Privatize selected text as ${label.toLowerCase()}`}
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() => manuallyPrivatizeSelection(category)}
+                                    >
+                                        <Icon size={15} aria-hidden="true" />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 ) : null}
                 <button
                     className="primary-button panel-action"

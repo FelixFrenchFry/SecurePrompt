@@ -342,6 +342,10 @@ h2 {
     outline-offset: 2px;
 }
 
+.preview-text {
+    white-space: pre-wrap;
+}
+
 .preview-mask.is-dimmed {
     opacity: 0.4;
 }
@@ -413,6 +417,50 @@ h2 {
 }
 
 .preview-tooltip-restore-button:focus-visible {
+    outline: 3px solid rgba(14, 165, 233, 0.35);
+    outline-offset: 2px;
+}
+
+.preview-selection-popover {
+    max-width: min(236px, calc(100vw - 48px));
+}
+
+.preview-selection-content {
+    padding: 9px 10px;
+}
+
+.preview-selection-title {
+    margin-bottom: 8px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.preview-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 30px);
+    gap: 6px;
+}
+
+.preview-selection-category-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    border: 1px solid var(--category-primary, #334155);
+    border-radius: 6px;
+    padding: 0;
+    color: var(--category-primary, #334155);
+    background: var(--category-secondary, #f8fafc);
+    cursor: pointer;
+}
+
+.preview-selection-category-button:hover {
+    box-shadow: 0 0 0 2px var(--category-primary, #334155);
+}
+
+.preview-selection-category-button:focus-visible {
     outline: 3px solid rgba(14, 165, 233, 0.35);
     outline-offset: 2px;
 }

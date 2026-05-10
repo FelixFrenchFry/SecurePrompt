@@ -45,6 +45,8 @@ export type PrivatizedPromptSegment =
     | {
           type: 'text';
           text: string;
+          sourceStart: number;
+          sourceEnd: number;
       }
     | {
           type: 'mask';
@@ -52,6 +54,8 @@ export type PrivatizedPromptSegment =
           category: SensitiveItemCategory;
           original: string;
           mappingId: string;
+          sourceStart: number;
+          sourceEnd: number;
       };
 
 // rendered privatized prompt data

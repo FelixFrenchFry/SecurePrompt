@@ -37,6 +37,16 @@ export type PrivatizedPromptPreviewOptions = {
     ignoredMappingIds?: readonly string[];
 };
 
+export type ManualSensitiveItemInput = {
+    category: SensitiveItemCategory;
+    start: number;
+    end: number;
+};
+
+type PrivatizedPromptFromItemsOptions = {
+    preferredMaskingMappings?: readonly MaskingMapping[];
+};
+
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
 
 const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
@@ -93,16 +103,51 @@ export const createPrivatizedPromptPreview = (
     );
 };
 
+export const createPrivatizedPromptWithManualItem = (
+    inputText: string,
+    result: Pick<
+        PrivatizedPromptResult,
+        'items' | 'maskingMappings' | 'safeToInject'
+    >,
+    manualItemInput: ManualSensitiveItemInput,
+): PrivatizedPromptResult =>
+{
+    const manualItem = createManualSensitiveItem(
+        inputText,
+        result.items,
+        manualItemInput,
+    );
+    const resultWithManualItem = createPrivatizedPromptFromItems(
+        inputText,
+        [
+            ...result.items,
+            manualItem,
+        ],
+        {
+            preferredMaskingMappings: result.maskingMappings,
+        },
+    );
+
+    return {
+        ...resultWithManualItem,
+        safeToInject: result.safeToInject,
+    };
+};
+
 const createPrivatizedPromptFromItems = (
     inputText: string,
     detectedItems: SensitiveItem[],
+    options: PrivatizedPromptFromItemsOptions = {},
 ): PrivatizedPromptResult =>
 {
     // 1. resolve overlaps and conflicts between detected items
     const finalItems = resolveSensitiveItemOverlaps(inputText, detectedItems);
 
     // 2. create many-to-one masking mappings from items to masks
-    const maskingMappings = createMaskingMappings(finalItems);
+    const maskingMappings = createMaskingMappings(
+        finalItems,
+        options.preferredMaskingMappings ?? [],
+    );
 
     let privatizedPrompt = '';
     let segments: PrivatizedPromptSegment[] = [];
@@ -186,11 +231,63 @@ const resolveSensitiveItemOverlaps = (
         return [...items].sort(compareItemsByPosition);
     }
 
-    const protectedItems = protectAuthoritativeRuleItems(inputText, items);
+    const manualProtectedItems = protectManualItems(inputText, items);
+    const protectedItems = protectAuthoritativeRuleItems(
+        inputText,
+        manualProtectedItems,
+    );
 
     return groupOverlappingItems(protectedItems)
         .map((group, index) => resolveOverlapGroup(inputText, group, index + 1))
         .sort(compareItemsByPosition);
+};
+
+const protectManualItems = (
+    inputText: string,
+    items: SensitiveItem[],
+): SensitiveItem[] =>
+{
+    const manualItems = items.filter((item) =>
+    {
+        return item.source === 'manual';
+    });
+
+    if (manualItems.length === 0)
+    {
+        return items;
+    }
+
+    const protectedItems: SensitiveItem[] = [];
+
+    for (const item of items)
+    {
+        if (item.source === 'manual')
+        {
+            protectedItems.push(item);
+            continue;
+        }
+
+        const overlappingManualItems = manualItems.filter((manualItem) =>
+        {
+            return sensitiveItemsOverlap(item, manualItem);
+        });
+
+        if (overlappingManualItems.length === 0)
+        {
+            protectedItems.push(item);
+            continue;
+        }
+
+        protectedItems.push(
+            ...splitSensitiveItemAroundBlockingItems(
+                inputText,
+                item,
+                overlappingManualItems,
+            ),
+        );
+    }
+
+    return protectedItems;
 };
 
 const protectAuthoritativeRuleItems = (
@@ -221,32 +318,36 @@ const protectAuthoritativeRuleItems = (
         }
 
         protectedItems.push(
-            ...splitModelItemAroundRuleItems(inputText, item, overlappingRuleItems),
+            ...splitSensitiveItemAroundBlockingItems(
+                inputText,
+                item,
+                overlappingRuleItems,
+            ),
         );
     }
 
     return protectedItems;
 };
 
-const splitModelItemAroundRuleItems = (
+const splitSensitiveItemAroundBlockingItems = (
     inputText: string,
     item: SensitiveItem,
-    ruleItems: SensitiveItem[],
+    blockingItems: SensitiveItem[],
 ): SensitiveItem[] =>
 {
     const fragments: SensitiveItem[] = [];
     let cursor = item.start;
     let fragmentIndex = 1;
 
-    for (const ruleItem of [...ruleItems].sort(compareItemsByPosition))
+    for (const blockingItem of [...blockingItems].sort(compareItemsByPosition))
     {
-        if (ruleItem.start > cursor)
+        if (blockingItem.start > cursor)
         {
-            const fragment = createModelItemFragment(
+            const fragment = createSensitiveItemFragment(
                 inputText,
                 item,
                 cursor,
-                Math.min(ruleItem.start, item.end),
+                Math.min(blockingItem.start, item.end),
                 fragmentIndex,
             );
 
@@ -257,12 +358,12 @@ const splitModelItemAroundRuleItems = (
             }
         }
 
-        cursor = Math.max(cursor, ruleItem.end);
+        cursor = Math.max(cursor, blockingItem.end);
     }
 
     if (cursor < item.end)
     {
-        const fragment = createModelItemFragment(
+        const fragment = createSensitiveItemFragment(
             inputText,
             item,
             cursor,
@@ -279,7 +380,7 @@ const splitModelItemAroundRuleItems = (
     return fragments;
 };
 
-const createModelItemFragment = (
+const createSensitiveItemFragment = (
     inputText: string,
     item: SensitiveItem,
     start: number,
@@ -330,6 +431,57 @@ const trimFragmentRange = (
         start: trimmedStart,
         end: trimmedEnd,
     };
+};
+
+const createManualSensitiveItem = (
+    inputText: string,
+    items: SensitiveItem[],
+    manualItemInput: ManualSensitiveItemInput,
+): SensitiveItem =>
+{
+    if (
+        !Number.isInteger(manualItemInput.start) ||
+        !Number.isInteger(manualItemInput.end) ||
+        manualItemInput.start < 0 ||
+        manualItemInput.end > inputText.length ||
+        manualItemInput.end <= manualItemInput.start
+    )
+    {
+        throw new Error('Manual sensitive item range is invalid.');
+    }
+
+    const range = trimFragmentRange(
+        inputText,
+        manualItemInput.start,
+        manualItemInput.end,
+    );
+    const value = inputText.slice(range.start, range.end);
+
+    if (value.trim().length === 0)
+    {
+        throw new Error('Manual sensitive item range is empty.');
+    }
+
+    return {
+        id: createNumberedId(
+            'manual-sensitive-item',
+            getNextManualSensitiveItemIndex(items),
+        ),
+        category: manualItemInput.category,
+        start: range.start,
+        end: range.end,
+        value,
+        confidence: 1,
+        source: 'manual',
+    };
+};
+
+const getNextManualSensitiveItemIndex = (items: SensitiveItem[]) =>
+{
+    return items.filter((item) =>
+    {
+        return item.source === 'manual';
+    }).length + 1;
 };
 
 const isAuthoritativeRuleItem = (item: SensitiveItem) =>
@@ -440,6 +592,13 @@ const chooseOverlapRepresentative = (items: SensitiveItem[]): SensitiveItem =>
 
 const compareOverlapRepresentatives = (left: SensitiveItem, right: SensitiveItem) =>
 {
+    const manualDifference = getManualSourcePriority(left) - getManualSourcePriority(right);
+
+    if (manualDifference !== 0)
+    {
+        return manualDifference;
+    }
+
     const categoryDifference =
         getSensitiveItemCategoryPriority(left.category) -
         getSensitiveItemCategoryPriority(right.category);
@@ -457,6 +616,11 @@ const compareOverlapRepresentatives = (left: SensitiveItem, right: SensitiveItem
     }
 
     return compareItemsByPosition(left, right);
+};
+
+const getManualSourcePriority = (item: SensitiveItem) =>
+{
+    return item.source === 'manual' ? 0 : 1;
 };
 
 const getSensitiveItemCategoryPriority = (category: SensitiveItemCategory) =>
@@ -482,10 +646,13 @@ const createMask = (category: SensitiveItemCategory, categoryIndex: number) =>
 };
 
 // TODO: add normalization so that "timo" and "Timo" get the same mask?
-const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
+const createMaskingMappings = (
+    items: SensitiveItem[],
+    preferredMaskingMappings: readonly MaskingMapping[] = [],
+): MaskingMapping[] =>
 {
     const maskingMappings: MaskingMapping[] = [];
-    const categoryCounts = new Map<SensitiveItemCategory, number>();
+    const categoryCounts = getInitialCategoryCounts(preferredMaskingMappings);
     const mappingsByCategory = new Map<SensitiveItemCategory, Map<string, MaskingMapping>>();
 
     for (const item of items)
@@ -508,6 +675,29 @@ const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
             continue;
         }
 
+        const preferredMapping = findPreferredMaskingMapping(
+            preferredMaskingMappings,
+            item,
+        );
+
+        if (
+            preferredMapping != null &&
+            !isMaskAlreadyUsed(maskingMappings, preferredMapping)
+        )
+        {
+            const maskingMapping = {
+                id: createNumberedId('masking-mapping', maskingMappings.length + 1),
+                category: item.category,
+                original: item.value,
+                mask: preferredMapping.mask,
+                itemIds: [item.id],
+            };
+
+            mappingsByOriginal.set(item.value, maskingMapping);
+            maskingMappings.push(maskingMapping);
+            continue;
+        }
+
         // first-seen values get the next mask number for their category
         const categoryIndex = (categoryCounts.get(item.category) ?? 0) + 1;
         categoryCounts.set(item.category, categoryIndex);
@@ -525,6 +715,77 @@ const createMaskingMappings = (items: SensitiveItem[]): MaskingMapping[] =>
     }
 
     return maskingMappings;
+};
+
+const getInitialCategoryCounts = (
+    preferredMaskingMappings: readonly MaskingMapping[],
+) =>
+{
+    const categoryCounts = new Map<SensitiveItemCategory, number>();
+
+    for (const maskingMapping of preferredMaskingMappings)
+    {
+        const maskIndex = getMaskCategoryIndex(
+            maskingMapping.category,
+            maskingMapping.mask,
+        );
+
+        if (maskIndex == null)
+        {
+            continue;
+        }
+
+        categoryCounts.set(
+            maskingMapping.category,
+            Math.max(categoryCounts.get(maskingMapping.category) ?? 0, maskIndex),
+        );
+    }
+
+    return categoryCounts;
+};
+
+const findPreferredMaskingMapping = (
+    preferredMaskingMappings: readonly MaskingMapping[],
+    item: SensitiveItem,
+) =>
+{
+    return preferredMaskingMappings.find((maskingMapping) =>
+    {
+        return (
+            maskingMapping.category === item.category &&
+            maskingMapping.original === item.value
+        );
+    });
+};
+
+const isMaskAlreadyUsed = (
+    maskingMappings: MaskingMapping[],
+    preferredMapping: MaskingMapping,
+) =>
+{
+    return maskingMappings.some((maskingMapping) =>
+    {
+        return (
+            maskingMapping.category === preferredMapping.category &&
+            maskingMapping.mask === preferredMapping.mask &&
+            maskingMapping.original !== preferredMapping.original
+        );
+    });
+};
+
+const getMaskCategoryIndex = (
+    category: SensitiveItemCategory,
+    mask: string,
+) =>
+{
+    const match = new RegExp(`^${category}_(\\d+)$`).exec(mask);
+
+    if (match == null)
+    {
+        return null;
+    }
+
+    return Number(match[1]);
 };
 
 const compareItemsByPosition = (left: SensitiveItem, right: SensitiveItem) =>
@@ -618,17 +879,27 @@ const applyMasksToItems = (
 
         if (ignoredMappingIds.has(maskingMapping.id))
         {
-            appendTextSegment(segments, inputText.slice(cursor, item.end));
+            appendTextSegment(segments, inputText.slice(cursor, item.end), cursor, item.end);
             cursor = item.end;
             continue;
         }
 
-        appendTextSegment(segments, inputText.slice(cursor, item.start));
-        appendMaskSegment(segments, getMaskForMethod(maskingMapping, method), maskingMapping);
+        appendTextSegment(
+            segments,
+            inputText.slice(cursor, item.start),
+            cursor,
+            item.start,
+        );
+        appendMaskSegment(
+            segments,
+            getMaskForMethod(maskingMapping, method),
+            maskingMapping,
+            item,
+        );
         cursor = item.end;
     }
 
-    appendTextSegment(segments, inputText.slice(cursor));
+    appendTextSegment(segments, inputText.slice(cursor), cursor, inputText.length);
 
     return {
         privatizedPrompt: segments.map((segment) => segment.text).join(''),
@@ -639,6 +910,8 @@ const applyMasksToItems = (
 const appendTextSegment = (
     segments: PrivatizedPromptSegment[],
     text: string,
+    sourceStart: number,
+    sourceEnd: number,
 ) =>
 {
     if (text.length === 0)
@@ -648,15 +921,18 @@ const appendTextSegment = (
 
     const previousSegment = segments.at(-1);
 
-    if (previousSegment?.type === 'text')
+    if (previousSegment?.type === 'text' && previousSegment.sourceEnd === sourceStart)
     {
         previousSegment.text += text;
+        previousSegment.sourceEnd = sourceEnd;
         return;
     }
 
     segments.push({
         type: 'text',
         text,
+        sourceStart,
+        sourceEnd,
     });
 };
 
@@ -664,6 +940,7 @@ const appendMaskSegment = (
     segments: PrivatizedPromptSegment[],
     text: string,
     maskingMapping: MaskingMapping,
+    item: SensitiveItem,
 ) =>
 {
     if (text.length === 0)
@@ -677,5 +954,7 @@ const appendMaskSegment = (
         category: maskingMapping.category,
         original: maskingMapping.original,
         mappingId: maskingMapping.id,
+        sourceStart: item.start,
+        sourceEnd: item.end,
     });
 };
