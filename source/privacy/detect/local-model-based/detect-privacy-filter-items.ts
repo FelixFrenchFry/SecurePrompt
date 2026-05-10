@@ -4,6 +4,7 @@ import {
     getPrivacyFilterPipeline,
     type PrivacyFilterOutput,
 } from './privacy-filter-loader';
+import { postProcessPrivacyFilterItems } from './post-process-privacy-filter-items';
 
 const PRIVACY_FILTER_CATEGORY_MAP: Record<string, SensitiveItemCategory> = {
     account_number: 'ACCOUNT',
@@ -50,7 +51,7 @@ export const detectPrivacyFilterItems = async (
         fallbackSearchStart = Math.max(fallbackSearchStart, item.end);
     }
 
-    return detectedItems;
+    return postProcessPrivacyFilterItems(inputText, detectedItems);
 };
 
 const createPrivacyFilterItem = (
