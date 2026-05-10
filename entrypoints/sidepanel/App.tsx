@@ -1,7 +1,8 @@
 import {
     type CSSProperties,
     type FocusEvent,
-    type MouseEvent,
+    type KeyboardEvent as ReactKeyboardEvent,
+    type PointerEvent as ReactPointerEvent,
     useEffect,
     useLayoutEffect,
     useRef,
@@ -24,11 +25,11 @@ import {
     Lock,
     Mail,
     Phone,
+    RotateCcw,
     ScanSearch,
     Send,
     ShieldCheck,
     StepForward,
-    Trash2,
     UserRound,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
@@ -48,8 +49,11 @@ const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
 const PREVIEW_TOOLTIP_MARGIN = 12;
 const PREVIEW_TOOLTIP_MAX_WIDTH = 260;
-const PREVIEW_TOOLTIP_GAP = 8;
+const PREVIEW_TOOLTIP_GAP = 3;
 const PREVIEW_TOOLTIP_MIN_ABOVE_SPACE = 80;
+const PREVIEW_TOOLTIP_HIDE_DELAY_MS = 220;
+const PREVIEW_TOOLTIP_BRIDGE_PADDING = 10;
+const PREVIEW_TOOLTIP_BRIDGE_OVERLAP = 2;
 const MODEL_HOST_PERMISSIONS = [
     'https://huggingface.co/*',
     'https://*.huggingface.co/*',
@@ -57,18 +61,46 @@ const MODEL_HOST_PERMISSIONS = [
     'https://*.xethub.hf.co/*',
 ];
 
+type PreviewTooltipRect = {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+};
+
+type PreviewTooltipBridge = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
+
 type PreviewTooltip = {
     text: string;
+    mappingId: string;
+    mask: string;
     left: number;
     top: number;
     anchorLeft: number;
     arrowLeft: number;
     placement: 'above' | 'below';
+    anchorRect: PreviewTooltipRect;
+    bridge: PreviewTooltipBridge | null;
 };
 
-type PreviewTooltipEvent = MouseEvent<HTMLElement> | FocusEvent<HTMLElement>;
+type PreviewTooltipEvent =
+    | ReactPointerEvent<HTMLElement>
+    | FocusEvent<HTMLElement>
+    | ReactKeyboardEvent<HTMLElement>;
 
-type ShowPreviewTooltip = (event: PreviewTooltipEvent, text: string) => void;
+type ShowPreviewTooltip = (
+    event: PreviewTooltipEvent,
+    text: string,
+    mappingId: string,
+    mask: string,
+) => void;
 
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
@@ -371,7 +403,9 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 const renderPreviewSegment = (
     segment: PrivatizedPromptSegment,
     index: number,
+    activeScanCategory: SensitiveItemCategory | null,
     showPreviewTooltip: ShowPreviewTooltip,
+    queueHidePreviewTooltip: () => void,
     hidePreviewTooltip: () => void,
 ) =>
 {
@@ -386,14 +420,42 @@ const renderPreviewSegment = (
     return (
         <span
             key={`${segment.mappingId}-${index}`}
-            className="preview-mask"
+            className={`preview-mask${
+                activeScanCategory != null && activeScanCategory !== segment.category
+                    ? ' is-dimmed'
+                    : ''
+            }`}
             style={getCategoryColorStyle(segment.category)}
             tabIndex={0}
             aria-label={`${segment.text} masks ${segment.category.toLowerCase()}`}
-            onMouseEnter={(event) => showPreviewTooltip(event, segment.original)}
-            onMouseLeave={hidePreviewTooltip}
-            onFocus={(event) => showPreviewTooltip(event, segment.original)}
-            onBlur={hidePreviewTooltip}
+            onPointerEnter={(event) =>
+                showPreviewTooltip(event, segment.original, segment.mappingId, segment.text)
+            }
+            onPointerLeave={queueHidePreviewTooltip}
+            onFocus={(event) =>
+                showPreviewTooltip(event, segment.original, segment.mappingId, segment.text)
+            }
+            onBlur={queueHidePreviewTooltip}
+            onKeyDown={(event) =>
+            {
+                if (event.key === 'Escape')
+                {
+                    event.preventDefault();
+                    hidePreviewTooltip();
+                    return;
+                }
+
+                if (event.key === 'Enter' || event.key === ' ')
+                {
+                    event.preventDefault();
+                    showPreviewTooltip(
+                        event,
+                        segment.original,
+                        segment.mappingId,
+                        segment.text,
+                    );
+                }
+            }}
         >
             {segment.text}
         </span>
@@ -403,7 +465,9 @@ const renderPreviewSegment = (
 const getPreviewContent = (
     privatizedPrompt: string,
     previewSegments: PrivatizedPromptSegment[],
+    activeScanCategory: SensitiveItemCategory | null,
     showPreviewTooltip: ShowPreviewTooltip,
+    queueHidePreviewTooltip: () => void,
     hidePreviewTooltip: () => void,
 ) =>
 {
@@ -420,7 +484,9 @@ const getPreviewContent = (
         return renderPreviewSegment(
             segment,
             index,
+            activeScanCategory,
             showPreviewTooltip,
+            queueHidePreviewTooltip,
             hidePreviewTooltip,
         );
     });
@@ -428,33 +494,105 @@ const getPreviewContent = (
 
 const getPreviewTooltipPosition = (target: HTMLElement) =>
 {
-    const rect = target.getBoundingClientRect();
+    const anchorRect = getPreviewTooltipRect(target.getBoundingClientRect());
     const maxWidth = Math.min(
         PREVIEW_TOOLTIP_MAX_WIDTH,
         window.innerWidth - PREVIEW_TOOLTIP_MARGIN * 2,
     );
-    const anchorLeft = rect.left + rect.width / 2;
+    const anchorLeft = anchorRect.left + anchorRect.width / 2;
     const left = getClampedPreviewTooltipLeft(anchorLeft, maxWidth);
     const arrowLeft = getClampedPreviewTooltipArrowLeft(anchorLeft, left, maxWidth);
 
-    if (rect.top >= PREVIEW_TOOLTIP_MIN_ABOVE_SPACE)
+    if (anchorRect.top >= PREVIEW_TOOLTIP_MIN_ABOVE_SPACE)
     {
         return {
             left,
-            top: rect.top - PREVIEW_TOOLTIP_GAP,
+            top: anchorRect.top - PREVIEW_TOOLTIP_GAP,
             anchorLeft,
             arrowLeft,
             placement: 'above' as const,
+            anchorRect,
+            bridge: null,
         };
     }
 
     return {
         left,
-        top: rect.bottom + PREVIEW_TOOLTIP_GAP,
+        top: anchorRect.bottom + PREVIEW_TOOLTIP_GAP,
         anchorLeft,
         arrowLeft,
         placement: 'below' as const,
+        anchorRect,
+        bridge: null,
     };
+};
+
+const getPreviewTooltipRect = (rect: DOMRect): PreviewTooltipRect =>
+{
+    return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+    };
+};
+
+const getPreviewTooltipBridge = (
+    anchorRect: PreviewTooltipRect,
+    tooltipRect: PreviewTooltipRect,
+    placement: PreviewTooltip['placement'],
+): PreviewTooltipBridge | null =>
+{
+    const top =
+        placement === 'above'
+            ? tooltipRect.bottom - PREVIEW_TOOLTIP_BRIDGE_OVERLAP
+            : anchorRect.bottom - PREVIEW_TOOLTIP_BRIDGE_OVERLAP;
+    const bottom =
+        placement === 'above'
+            ? anchorRect.top + PREVIEW_TOOLTIP_BRIDGE_OVERLAP
+            : tooltipRect.top + PREVIEW_TOOLTIP_BRIDGE_OVERLAP;
+    const height = bottom - top;
+
+    if (height <= 0)
+    {
+        return null;
+    }
+
+    const left = Math.max(
+        0,
+        Math.min(anchorRect.left, tooltipRect.left) - PREVIEW_TOOLTIP_BRIDGE_PADDING,
+    );
+    const right = Math.min(
+        window.innerWidth,
+        Math.max(anchorRect.right, tooltipRect.right) + PREVIEW_TOOLTIP_BRIDGE_PADDING,
+    );
+
+    return {
+        left,
+        top,
+        width: right - left,
+        height,
+    };
+};
+
+const isSamePreviewTooltipBridge = (
+    left: PreviewTooltipBridge | null,
+    right: PreviewTooltipBridge | null,
+) =>
+{
+    if (left == null || right == null)
+    {
+        return left == null && right == null;
+    }
+
+    return (
+        Math.abs(left.left - right.left) < 0.5 &&
+        Math.abs(left.top - right.top) < 0.5 &&
+        Math.abs(left.width - right.width) < 0.5 &&
+        Math.abs(left.height - right.height) < 0.5
+    );
 };
 
 const getClampedPreviewTooltipLeft = (anchorLeft: number, width: number) =>
@@ -500,23 +638,53 @@ export function App()
     const [previewTooltip, setPreviewTooltip] = useState<PreviewTooltip | null>(null);
     const copyResetTimerRef = useRef<number | undefined>(undefined);
     const clearResetTimerRef = useRef<number | undefined>(undefined);
+    const previewTooltipHideTimerRef = useRef<number | undefined>(undefined);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
 
-    const showPreviewTooltip = (event: PreviewTooltipEvent, text: string) =>
+    const clearPreviewTooltipHideTimer = () =>
     {
-        setPreviewTooltip({
-            text,
-            ...getPreviewTooltipPosition(event.currentTarget),
-        });
+        if (previewTooltipHideTimerRef.current !== undefined)
+        {
+            window.clearTimeout(previewTooltipHideTimerRef.current);
+            previewTooltipHideTimerRef.current = undefined;
+        }
     };
     const hidePreviewTooltip = () =>
     {
+        clearPreviewTooltipHideTimer();
         setPreviewTooltip(null);
+    };
+    const queueHidePreviewTooltip = () =>
+    {
+        clearPreviewTooltipHideTimer();
+
+        previewTooltipHideTimerRef.current = window.setTimeout(() =>
+        {
+            setPreviewTooltip(null);
+            previewTooltipHideTimerRef.current = undefined;
+        }, PREVIEW_TOOLTIP_HIDE_DELAY_MS);
+    };
+    const showPreviewTooltip = (
+        event: PreviewTooltipEvent,
+        text: string,
+        mappingId: string,
+        mask: string,
+    ) =>
+    {
+        clearPreviewTooltipHideTimer();
+        setPreviewTooltip({
+            text,
+            mappingId,
+            mask,
+            ...getPreviewTooltipPosition(event.currentTarget),
+        });
     };
     const previewContent = getPreviewContent(
         privatizedPrompt,
         previewSegments,
+        activeScanCategory,
         showPreviewTooltip,
+        queueHidePreviewTooltip,
         hidePreviewTooltip,
     );
     const activeMaskingMappings = getActiveMaskingMappings(
@@ -526,7 +694,7 @@ export function App()
     const activeItemCount = getMaskingMappingItemCount(activeMaskingMappings);
     const itemCountLabel = `${formatCount(activeItemCount)} ${
         activeItemCount === 1 ? 'item' : 'items'
-    }`;
+    } detected`;
     const countItemsByCategory = (category: SensitiveItemCategory) =>
     {
         return getMaskingMappingItemCount(
@@ -626,13 +794,28 @@ export function App()
             return;
         }
 
-        setPreviewTooltip(null);
+        hidePreviewTooltip();
         setIgnoredMappingIds(nextIgnoredMappingIds);
         setPrivatizedPrompt(preview.privatizedPrompt);
         setPreviewSegments(preview.segments);
         setCanUsePrivatizedPrompt(false);
         setSendStatus('');
         setClipboardStatus(`${maskingMapping.mask} restored in preview.`);
+    };
+    const restoreMaskingMappingById = (mappingId: string) =>
+    {
+        const maskingMapping = privatizedResult?.maskingMappings.find((mapping) =>
+        {
+            return mapping.id === mappingId;
+        });
+
+        if (maskingMapping == null)
+        {
+            setClipboardStatus('Could not restore masked item.');
+            return;
+        }
+
+        restoreMaskingMapping(maskingMapping);
     };
     const renderScanDetailRow = (maskingMapping: MaskingMapping) =>
     {
@@ -654,7 +837,7 @@ export function App()
                     aria-label={`Restore ${maskingMapping.mask} original text`}
                     onClick={() => restoreMaskingMapping(maskingMapping)}
                 >
-                    <Trash2 size={15} aria-hidden="true" />
+                    <RotateCcw size={15} aria-hidden="true" />
                 </button>
             </li>
         );
@@ -670,6 +853,10 @@ export function App()
 
             if (clearResetTimerRef.current !== undefined) {
                 window.clearTimeout(clearResetTimerRef.current);
+            }
+
+            if (previewTooltipHideTimerRef.current !== undefined) {
+                window.clearTimeout(previewTooltipHideTimerRef.current);
             }
         };
     }, []);
@@ -726,7 +913,9 @@ export function App()
             return;
         }
 
-        const tooltipRect = previewTooltipRef.current.getBoundingClientRect();
+        const tooltipRect = getPreviewTooltipRect(
+            previewTooltipRef.current.getBoundingClientRect(),
+        );
         const left = getClampedPreviewTooltipLeft(
             previewTooltip.anchorLeft,
             tooltipRect.width,
@@ -736,10 +925,16 @@ export function App()
             left,
             tooltipRect.width,
         );
+        const bridge = getPreviewTooltipBridge(
+            previewTooltip.anchorRect,
+            tooltipRect,
+            previewTooltip.placement,
+        );
 
         if (
             Math.abs(left - previewTooltip.left) < 0.5 &&
-            Math.abs(arrowLeft - previewTooltip.arrowLeft) < 0.5
+            Math.abs(arrowLeft - previewTooltip.arrowLeft) < 0.5 &&
+            isSamePreviewTooltipBridge(bridge, previewTooltip.bridge)
         )
         {
             return;
@@ -749,6 +944,7 @@ export function App()
             ...previewTooltip,
             left,
             arrowLeft,
+            bridge,
         });
     }, [previewTooltip]);
 
@@ -1032,20 +1228,64 @@ export function App()
                     {previewContent}
                 </div>
                 {previewTooltip != null ? (
-                    <div
-                        ref={previewTooltipRef}
-                        className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
-                        style={{
-                            left: previewTooltip.left,
-                            top: previewTooltip.top,
-                            '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
-                        } as CSSProperties}
-                        role="tooltip"
-                    >
-                        <div className="preview-tooltip-content">
-                            {previewTooltip.text}
+                    <>
+                        {previewTooltip.bridge != null ? (
+                            <div
+                                className="preview-tooltip-bridge"
+                                style={{
+                                    left: previewTooltip.bridge.left,
+                                    top: previewTooltip.bridge.top,
+                                    width: previewTooltip.bridge.width,
+                                    height: previewTooltip.bridge.height,
+                                }}
+                                aria-hidden="true"
+                                onPointerEnter={clearPreviewTooltipHideTimer}
+                                onPointerLeave={queueHidePreviewTooltip}
+                            />
+                        ) : null}
+                        <div
+                            ref={previewTooltipRef}
+                            className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
+                            style={{
+                                left: previewTooltip.left,
+                                top: previewTooltip.top,
+                                '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
+                            } as CSSProperties}
+                            role="dialog"
+                            aria-label={`${previewTooltip.mask} original text`}
+                            onPointerEnter={clearPreviewTooltipHideTimer}
+                            onPointerLeave={queueHidePreviewTooltip}
+                            onFocus={clearPreviewTooltipHideTimer}
+                            onBlur={queueHidePreviewTooltip}
+                            onKeyDown={(event) =>
+                            {
+                                if (event.key === 'Escape')
+                                {
+                                    event.preventDefault();
+                                    hidePreviewTooltip();
+                                }
+                            }}
+                        >
+                            <div className="preview-tooltip-content">
+                                <div className="preview-tooltip-row">
+                                    <div className="preview-tooltip-text">
+                                        {previewTooltip.text}
+                                    </div>
+                                    <button
+                                        className="preview-tooltip-restore-button"
+                                        type="button"
+                                        title="Restore original text"
+                                        aria-label={`Restore ${previewTooltip.mask} original text`}
+                                        onClick={() =>
+                                            restoreMaskingMappingById(previewTooltip.mappingId)
+                                        }
+                                    >
+                                        <RotateCcw size={15} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </>
                 ) : null}
                 <button
                     className="primary-button panel-action"
