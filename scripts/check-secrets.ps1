@@ -16,7 +16,7 @@ $patterns = @(
     @{ Name = 'Slack token'; Regex = '\bxox[baprs]-[A-Za-z0-9-]{20,}\b' },
     @{ Name = 'Stripe live secret key'; Regex = '\bsk_live_[A-Za-z0-9]{20,}\b' },
     @{ Name = 'JWT'; Regex = '\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b' },
-    @{ Name = 'Sensitive assignment'; Regex = '(?i)\b[A-Z0-9_]*(API[_-]?KEY|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY)[A-Z0-9_]*\s*[:=]\s*["'']?[^"''\s]{8,}' }
+    @{ Name = 'Sensitive assignment'; Regex = '\b(?:[A-Z0-9_]*(?:API[_-]?KEY|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN|SECRET|PASSWORD|PRIVATE[_-]?KEY)[A-Z0-9_]*|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|secret|password|passwd|pwd|private[_-]?key)\b\s*[:=]\s*["'']?[^"''\s,;]{8,}' }
 )
 
 $textExtensions = @(
@@ -92,7 +92,7 @@ foreach ($file in $files) {
         $line = $lines[$index]
 
         foreach ($pattern in $patterns) {
-            if ($line -match $pattern.Regex) {
+            if ($line -cmatch $pattern.Regex) {
                 $lineNumber = $index + 1
                 $findings.Add("${file}:${lineNumber} matched $($pattern.Name)") | Out-Null
             }

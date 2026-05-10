@@ -131,10 +131,12 @@ export function App()
 
             setClipboardStatus('Local model result updated.');
         } catch (error) {
-            const message =
-                error instanceof Error ? error.message : 'Could not run local model.';
+            const fallbackResult = createPrivatizedPrompt(prompt);
 
-            setClipboardStatus(message);
+            setPrivatizedPrompt(fallbackResult.privatizedPrompt);
+            setCanUsePrivatizedPrompt(fallbackResult.safeToInject);
+            setDetectedItems(fallbackResult.items);
+            setClipboardStatus(getLocalModelFailureStatus(error));
         } finally {
             setIsTestingLocalModel(false);
         }
@@ -370,4 +372,43 @@ const requestModelDownloadPermission = async () =>
     return browser.permissions.request({
         origins: MODEL_HOST_PERMISSIONS,
     });
+};
+
+const getLocalModelFailureStatus = (error: unknown) =>
+{
+    const message = getLocalModelFailureMessage(error);
+
+    if (isLocalModelRuntimeError(message)) {
+        return 'Local model runtime failed. Showing rules-only preview.';
+    }
+
+    if (/QuotaExceeded|quota|storage/i.test(message)) {
+        return 'Local model storage failed. Showing rules-only preview.';
+    }
+
+    if (/Failed to fetch|NetworkError|Load failed|ERR_|401|403|404/i.test(message)) {
+        return 'Local model download failed. Showing rules-only preview.';
+    }
+
+    if (/Unsupported device|backend|execution provider/i.test(message)) {
+        return 'Local model backend is unsupported. Showing rules-only preview.';
+    }
+
+    if (/memory|allocation|Array buffer/i.test(message)) {
+        return 'Local model ran out of browser memory. Showing rules-only preview.';
+    }
+
+    return 'Could not run local model. Showing rules-only preview.';
+};
+
+const getLocalModelFailureMessage = (error: unknown) =>
+{
+    return error instanceof Error ? error.message : String(error);
+};
+
+const isLocalModelRuntimeError = (message: string) =>
+{
+    return /OrtRun|onnxruntime|Non-zero status code|Failed to wait for the operation|ExecuteKernel/i.test(
+        message,
+    );
 };

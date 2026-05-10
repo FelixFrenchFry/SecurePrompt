@@ -6,6 +6,7 @@ import {
     PRIVACY_FILTER_AGGREGATION_STRATEGY,
     PRIVACY_FILTER_MODEL_ID,
     PRIVACY_FILTER_TASK,
+    PRIVACY_FILTER_WEBGPU_FORCE_CPU_NODE_NAMES,
 } from './privacy-filter-config';
 
 export type PrivacyFilterOutput = {
@@ -37,8 +38,13 @@ type TransformersEnvironment = {
                           wasm?: string | URL;
                       };
             };
+            webgpu?: {
+                adapter?: unknown;
+                powerPreference?: 'low-power' | 'high-performance';
+            };
         };
     };
+    useWasmCache: boolean;
 };
 
 type ExtensionRuntimeGlobal = typeof globalThis & {
@@ -46,6 +52,25 @@ type ExtensionRuntimeGlobal = typeof globalThis & {
         runtime?: {
             getURL?: (path: string) => string;
         };
+    };
+};
+
+type WebGpuRuntimeGlobal = typeof globalThis & {
+    navigator?: {
+        gpu?: {
+            requestAdapter?: () => Promise<unknown | null>;
+        };
+    };
+};
+
+type PrivacyFilterPipelineLoadOptions = {
+    device: typeof PRIVACY_FILTER_DEVICE;
+    dtype: typeof PRIVACY_FILTER_DTYPE;
+    session_options: {
+        executionProviders: Array<{
+            name: typeof PRIVACY_FILTER_DEVICE;
+            forceCpuNodeNames: readonly string[];
+        }>;
     };
 };
 
@@ -70,22 +95,21 @@ const loadPrivacyFilterPipeline = async (): Promise<PrivacyFilterPipeline> =>
     // dynamically import Transformers.js so the rules-only path does not load model code
     const { env, pipeline } = await import('@huggingface/transformers');
 
-    configurePrivacyFilterRuntime(env);
+    const pipelineOptions = await configurePrivacyFilterRuntime(env);
 
     // model files may be downloaded, but prompt text must only be processed locally
     const classifier = await pipeline(
         PRIVACY_FILTER_TASK,
         PRIVACY_FILTER_MODEL_ID,
-        {
-            device: PRIVACY_FILTER_DEVICE,
-            dtype: PRIVACY_FILTER_DTYPE,
-        },
+        pipelineOptions,
     );
 
     return classifier as PrivacyFilterPipeline;
 };
 
-const configurePrivacyFilterRuntime = (env: TransformersEnvironment) =>
+const configurePrivacyFilterRuntime = async (
+    env: TransformersEnvironment,
+): Promise<PrivacyFilterPipelineLoadOptions> =>
 {
     const wasmBackend = env.backends.onnx.wasm;
 
@@ -94,11 +118,60 @@ const configurePrivacyFilterRuntime = (env: TransformersEnvironment) =>
         throw new Error('ONNX Runtime WASM backend is not available.');
     }
 
-    // use extension-packaged ONNX Runtime files instead of the default CDN paths
+    // extension-packaged files should be loaded directly, not cached
+    env.useWasmCache = false;
+
+    clearIgnoredWebGpuPowerPreference(env);
+    await configureWebGpuAdapter(env);
+
+    // use extension-packaged ONNX runtime files instead of the default CDN paths
     wasmBackend.wasmPaths = {
         mjs: createExtensionAssetUrl(ortWasmMjsUrl),
         wasm: createExtensionAssetUrl(ortWasmUrl),
     };
+
+    return {
+        device: PRIVACY_FILTER_DEVICE,
+        dtype: PRIVACY_FILTER_DTYPE,
+        session_options: {
+            executionProviders: [
+                {
+                    name: PRIVACY_FILTER_DEVICE,
+                    forceCpuNodeNames: PRIVACY_FILTER_WEBGPU_FORCE_CPU_NODE_NAMES,
+                },
+            ],
+        },
+    };
+};
+
+const clearIgnoredWebGpuPowerPreference = (env: TransformersEnvironment) =>
+{
+    delete env.backends.onnx.webgpu?.powerPreference;
+};
+
+const configureWebGpuAdapter = async (env: TransformersEnvironment) =>
+{
+    const webgpuBackend = env.backends.onnx.webgpu;
+
+    if (webgpuBackend == null || webgpuBackend.adapter != null)
+    {
+        return;
+    }
+
+    const gpu = (globalThis as WebGpuRuntimeGlobal).navigator?.gpu;
+
+    if (gpu?.requestAdapter == null)
+    {
+        return;
+    }
+
+    // avoid Chrome's ignored Windows power preference hint
+    const adapter = await gpu.requestAdapter();
+
+    if (adapter != null)
+    {
+        webgpuBackend.adapter = adapter;
+    }
 };
 
 const createExtensionAssetUrl = (assetUrl: string): string =>

@@ -43,6 +43,14 @@ const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
     'OTHER',
 ];
 
+const AUTHORITATIVE_RULE_CATEGORIES = new Set<SensitiveItemCategory>([
+    'EMAIL',
+    'PHONE',
+    'ACCOUNT',
+    'NETWORK',
+    'SECRET',
+]);
+
 // sync (rules-only) pipeline
 export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
 {
@@ -149,9 +157,160 @@ const resolveSensitiveItemOverlaps = (
         return [...items].sort(compareItemsByPosition);
     }
 
-    return groupOverlappingItems(items)
+    const protectedItems = protectAuthoritativeRuleItems(inputText, items);
+
+    return groupOverlappingItems(protectedItems)
         .map((group, index) => resolveOverlapGroup(inputText, group, index + 1))
         .sort(compareItemsByPosition);
+};
+
+const protectAuthoritativeRuleItems = (
+    inputText: string,
+    items: SensitiveItem[],
+): SensitiveItem[] =>
+{
+    const authoritativeRuleItems = items.filter(isAuthoritativeRuleItem);
+    const protectedItems: SensitiveItem[] = [];
+
+    for (const item of items)
+    {
+        if (item.source !== 'model')
+        {
+            protectedItems.push(item);
+            continue;
+        }
+
+        const overlappingRuleItems = authoritativeRuleItems.filter((ruleItem) =>
+        {
+            return sensitiveItemsOverlap(item, ruleItem);
+        });
+
+        if (overlappingRuleItems.length === 0)
+        {
+            protectedItems.push(item);
+            continue;
+        }
+
+        protectedItems.push(
+            ...splitModelItemAroundRuleItems(inputText, item, overlappingRuleItems),
+        );
+    }
+
+    return protectedItems;
+};
+
+const splitModelItemAroundRuleItems = (
+    inputText: string,
+    item: SensitiveItem,
+    ruleItems: SensitiveItem[],
+): SensitiveItem[] =>
+{
+    const fragments: SensitiveItem[] = [];
+    let cursor = item.start;
+    let fragmentIndex = 1;
+
+    for (const ruleItem of [...ruleItems].sort(compareItemsByPosition))
+    {
+        if (ruleItem.start > cursor)
+        {
+            const fragment = createModelItemFragment(
+                inputText,
+                item,
+                cursor,
+                Math.min(ruleItem.start, item.end),
+                fragmentIndex,
+            );
+
+            if (fragment != null)
+            {
+                fragments.push(fragment);
+                fragmentIndex += 1;
+            }
+        }
+
+        cursor = Math.max(cursor, ruleItem.end);
+    }
+
+    if (cursor < item.end)
+    {
+        const fragment = createModelItemFragment(
+            inputText,
+            item,
+            cursor,
+            item.end,
+            fragmentIndex,
+        );
+
+        if (fragment != null)
+        {
+            fragments.push(fragment);
+        }
+    }
+
+    return fragments;
+};
+
+const createModelItemFragment = (
+    inputText: string,
+    item: SensitiveItem,
+    start: number,
+    end: number,
+    fragmentIndex: number,
+): SensitiveItem | null =>
+{
+    const range = trimFragmentRange(inputText, start, end);
+    const value = inputText.slice(range.start, range.end);
+
+    if (value.length === 0 || !/[\p{L}\p{N}]/u.test(value))
+    {
+        return null;
+    }
+
+    return {
+        ...item,
+        id: `${item.id}-fragment-${String(fragmentIndex).padStart(3, '0')}`,
+        start: range.start,
+        end: range.end,
+        value,
+    };
+};
+
+const trimFragmentRange = (
+    inputText: string,
+    start: number,
+    end: number,
+) =>
+{
+    let trimmedStart = start;
+    let trimmedEnd = end;
+
+    while (trimmedStart < trimmedEnd && /[\s"'`<([{]/.test(inputText[trimmedStart]))
+    {
+        trimmedStart += 1;
+    }
+
+    while (
+        trimmedEnd > trimmedStart &&
+        /[\s"'`>.,;:!?)}\]]/.test(inputText[trimmedEnd - 1])
+    )
+    {
+        trimmedEnd -= 1;
+    }
+
+    return {
+        start: trimmedStart,
+        end: trimmedEnd,
+    };
+};
+
+const isAuthoritativeRuleItem = (item: SensitiveItem) =>
+{
+    return item.source === 'rules' && AUTHORITATIVE_RULE_CATEGORIES.has(item.category);
+};
+
+const sensitiveItemsOverlap = (left: SensitiveItem, right: SensitiveItem) =>
+{
+    return left.start < right.end && right.start < left.end;
 };
 
 const groupOverlappingItems = (items: SensitiveItem[]): SensitiveItem[][] =>

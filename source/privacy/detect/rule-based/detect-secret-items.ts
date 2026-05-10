@@ -22,6 +22,7 @@ const PROVIDER_TOKEN_PATTERNS = [
     /\bAIza[0-9A-Za-z_-]{30,60}\b/g,
     /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{30,}\b/g,
     /\bgithub_pat_[A-Za-z0-9_]{22,}_[A-Za-z0-9_]{59,}\b/g,
+    /\bgithub_pat_[A-Za-z0-9_]{40,}\b/g,
     /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
     /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
     /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,

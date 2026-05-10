@@ -87,13 +87,13 @@ const cleanPrivacyFilterItem = (
         value,
     };
 
-    // never run model detections over masks we created in an earlier privatization step
+    // ignore masks from an earlier privatization step
     if (isPrivatizedMask(value) || overlapsAnyRange(span, privatizedMaskRanges))
     {
         return null;
     }
 
-    // partial token spans create broken output such as "GooPERSON_001e"
+    // reject partial spans such as "GooPERSON_001e"
     if (!hasCleanModelBoundaries(inputText, cleanedItem.category, span))
     {
         return null;
@@ -126,7 +126,7 @@ const normalizeModelSpan = (
         return null;
     }
 
-    // model aggregation often includes wrapping punctuation around the actual entity
+    // model aggregation can include wrapping punctuation
     while (start < end && isLeadingTrimCharacter(inputText[start]))
     {
         start += 1;
