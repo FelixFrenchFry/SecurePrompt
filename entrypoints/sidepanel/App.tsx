@@ -1,4 +1,5 @@
 import {
+    type ChangeEvent as ReactChangeEvent,
     type CSSProperties,
     type FocusEvent,
     type KeyboardEvent as ReactKeyboardEvent,
@@ -27,10 +28,12 @@ import {
     Phone,
     RotateCcw,
     ScanSearch,
+    Search,
     Send,
     ShieldCheck,
     StepForward,
     UserRound,
+    X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messaging';
@@ -116,6 +119,14 @@ type ShowPreviewTooltip = (
 ) => void;
 
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
+
+type ScanDetailSearchTarget = {
+    normalized: string;
+    compact: string;
+    digits: string;
+    terms: string[];
+    acronym: string;
+};
 
 type CategoryColors = {
     primary: string;
@@ -332,6 +343,211 @@ const getSortedMaskingMappings = (
 
         return sortedCountDifference || compareMaskingMappingsByMask(left, right);
     });
+};
+
+const getSearchFilteredMaskingMappings = (
+    maskingMappings: MaskingMapping[],
+    searchText: string,
+) =>
+{
+    const searchQuery = createScanDetailSearchTarget(searchText);
+
+    if (searchQuery.normalized.length === 0)
+    {
+        return maskingMappings;
+    }
+
+    return maskingMappings
+        .map((maskingMapping, index) =>
+        {
+            return {
+                maskingMapping,
+                index,
+                rank: getScanDetailSearchRank(maskingMapping.original, searchQuery),
+            };
+        })
+        .filter((searchResult): searchResult is {
+            maskingMapping: MaskingMapping;
+            index: number;
+            rank: number;
+        } =>
+        {
+            return searchResult.rank != null;
+        })
+        .sort((left, right) =>
+        {
+            return left.rank - right.rank || left.index - right.index;
+        })
+        .map((searchResult) =>
+        {
+            return searchResult.maskingMapping;
+        });
+};
+
+const getScanDetailSearchRank = (
+    original: string,
+    searchQuery: ScanDetailSearchTarget,
+) =>
+{
+    const originalSearchTarget = createScanDetailSearchTarget(original);
+
+    if (originalSearchTarget.normalized.length === 0)
+    {
+        return null;
+    }
+
+    if (originalSearchTarget.normalized === searchQuery.normalized)
+    {
+        return 0;
+    }
+
+    if (originalSearchTarget.normalized.includes(searchQuery.normalized))
+    {
+        return 1;
+    }
+
+    if (
+        searchQuery.compact.length >= 2 &&
+        originalSearchTarget.compact.includes(searchQuery.compact)
+    )
+    {
+        return 2;
+    }
+
+    if (
+        searchQuery.digits.length >= 2 &&
+        originalSearchTarget.digits.includes(searchQuery.digits)
+    )
+    {
+        return 3;
+    }
+
+    if (
+        searchQuery.terms.length > 0 &&
+        searchQuery.terms.every((term) =>
+        {
+            return isScanDetailSearchTermMatch(term, originalSearchTarget);
+        })
+    )
+    {
+        return 4;
+    }
+
+    return null;
+};
+
+const createScanDetailSearchTarget = (text: string): ScanDetailSearchTarget =>
+{
+    const normalized = normalizeScanDetailSearchText(text);
+    const terms = normalized.split(' ').filter((term) =>
+    {
+        return term.length > 0;
+    });
+
+    return {
+        normalized,
+        compact: normalized.replace(/\s/g, ''),
+        digits: normalized.replace(/\D/g, ''),
+        terms,
+        acronym: terms.map((term) => term[0]).join(''),
+    };
+};
+
+const normalizeScanDetailSearchText = (text: string) =>
+{
+    return text
+        .normalize('NFKD')
+        .toLowerCase()
+        .replace(/\u00df/g, 'ss')
+        .replace(/\p{M}/gu, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+};
+
+const isScanDetailSearchTermMatch = (
+    term: string,
+    originalSearchTarget: ScanDetailSearchTarget,
+) =>
+{
+    if (originalSearchTarget.terms.some((originalTerm) => originalTerm.includes(term)))
+    {
+        return true;
+    }
+
+    if (term.length >= 2 && originalSearchTarget.acronym.includes(term))
+    {
+        return true;
+    }
+
+    if (term.length < 4)
+    {
+        return false;
+    }
+
+    return originalSearchTarget.terms.some((originalTerm) =>
+    {
+        const allowedDistance = getAllowedScanDetailSearchDistance(term);
+
+        return (
+            Math.abs(originalTerm.length - term.length) <= allowedDistance &&
+            getBoundedLevenshteinDistance(term, originalTerm, allowedDistance) <=
+                allowedDistance
+        );
+    });
+};
+
+const getAllowedScanDetailSearchDistance = (term: string) =>
+{
+    if (term.length <= 5)
+    {
+        return 1;
+    }
+
+    if (term.length <= 10)
+    {
+        return 2;
+    }
+
+    return 3;
+};
+
+const getBoundedLevenshteinDistance = (
+    left: string,
+    right: string,
+    maximumDistance: number,
+) =>
+{
+    let previousRow = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1)
+    {
+        const currentRow = [leftIndex];
+        let rowMinimum = currentRow[0];
+
+        for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1)
+        {
+            const substitutionCost =
+                left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+            const distance = Math.min(
+                previousRow[rightIndex] + 1,
+                currentRow[rightIndex - 1] + 1,
+                previousRow[rightIndex - 1] + substitutionCost,
+            );
+
+            currentRow[rightIndex] = distance;
+            rowMinimum = Math.min(rowMinimum, distance);
+        }
+
+        if (rowMinimum > maximumDistance)
+        {
+            return maximumDistance + 1;
+        }
+
+        previousRow = currentRow;
+    }
+
+    return previousRow[right.length];
 };
 
 const getMaskNumber = (mask: string) =>
@@ -901,6 +1117,7 @@ export function App()
         useState<SensitiveItemCategory | null>(null);
     const [scanDetailSortDirection, setScanDetailSortDirection] =
         useState<ScanDetailSortDirection>('neutral');
+    const [scanDetailSearchText, setScanDetailSearchText] = useState('');
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
@@ -1014,6 +1231,7 @@ export function App()
     };
     const toggleScanCategory = (category: SensitiveItemCategory) =>
     {
+        setScanDetailSearchText('');
         setActiveScanCategory((currentCategory) =>
         {
             return currentCategory === category ? null : category;
@@ -1051,13 +1269,42 @@ export function App()
                   getMaskingMappingsByCategory(activeMaskingMappings, activeScanCategory),
                   scanDetailSortDirection,
               );
+    const filteredActiveScanMappings = getSearchFilteredMaskingMappings(
+        activeScanMappings,
+        scanDetailSearchText,
+    );
     const activeScanCount = getMaskingMappingItemCount(activeScanMappings);
+    const hasScanDetailSearch = scanDetailSearchText.trim().length > 0;
     const ScanDetailSortIcon = getScanDetailSortIcon(scanDetailSortDirection);
     const scanDetailSortLabel = getScanDetailSortLabel(scanDetailSortDirection);
     const scanDetailSortButtonLabel =
         getScanDetailSortButtonLabel(scanDetailSortDirection);
     const scanDetailSortTitle =
         `${scanDetailSortLabel}. ${scanDetailSortButtonLabel}.`;
+    const clearScanDetailSearch = () =>
+    {
+        setScanDetailSearchText('');
+    };
+    const updateScanDetailSearchText = (
+        event: ReactChangeEvent<HTMLInputElement>,
+    ) =>
+    {
+        setScanDetailSearchText(event.target.value);
+    };
+    const handleScanDetailSearchKeyDown = (
+        event: ReactKeyboardEvent<HTMLInputElement>,
+    ) =>
+    {
+        if (event.key !== 'Escape' || scanDetailSearchText.length === 0)
+        {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.nativeEvent.stopImmediatePropagation();
+        clearScanDetailSearch();
+    };
     const cycleScanDetailSortDirection = () =>
     {
         setScanDetailSortDirection((currentSortDirection) =>
@@ -1074,6 +1321,7 @@ export function App()
         hidePreviewSelectionPopover();
         setIgnoredMappingIds([]);
         setScanDetailSortDirection('neutral');
+        setScanDetailSearchText('');
         setPrivatizedInputText(inputText);
         setPrivatizedResult(result);
         setPrivatizedPrompt(result.privatizedPrompt);
@@ -1610,6 +1858,7 @@ export function App()
         setIgnoredMappingIds([]);
         setActiveScanCategory(null);
         setScanDetailSortDirection('neutral');
+        setScanDetailSearchText('');
         setCanUsePrivatizedPrompt(false);
         setClipboardStatus('');
         setSendStatus('');
@@ -1762,10 +2011,32 @@ export function App()
                         style={getCategoryColorStyle(activeScanCategoryConfig.category)}
                     >
                         <div className="scan-detail-header">
-                            <span>
+                            <span className="scan-detail-title">
                                 {activeScanCategoryConfig.label} -{' '}
                                 {formatCount(activeScanCount)} masked
                             </span>
+                            <label className="scan-detail-search">
+                                <Search size={14} aria-hidden="true" />
+                                <input
+                                    type="search"
+                                    value={scanDetailSearchText}
+                                    placeholder="Search originals"
+                                    aria-label={`Search ${activeScanCategoryConfig.label.toLowerCase()} originals`}
+                                    onChange={updateScanDetailSearchText}
+                                    onKeyDown={handleScanDetailSearchKeyDown}
+                                />
+                                {scanDetailSearchText.length > 0 ? (
+                                    <button
+                                        className="scan-detail-search-clear-button"
+                                        type="button"
+                                        title="Clear search"
+                                        aria-label="Clear search"
+                                        onClick={clearScanDetailSearch}
+                                    >
+                                        <X size={13} aria-hidden="true" />
+                                    </button>
+                                ) : null}
+                            </label>
                         </div>
                         {activeScanMappings.length > 0 ? (
                             <>
@@ -1783,9 +2054,17 @@ export function App()
                                     </button>
                                     <span aria-hidden="true" />
                                 </div>
-                                <ul className="scan-detail-list">
-                                    {activeScanMappings.map(renderScanDetailRow)}
-                                </ul>
+                                {filteredActiveScanMappings.length > 0 ? (
+                                    <ul className="scan-detail-list">
+                                        {filteredActiveScanMappings.map(renderScanDetailRow)}
+                                    </ul>
+                                ) : (
+                                    <p className="scan-detail-empty">
+                                        {hasScanDetailSearch
+                                            ? 'No matching originals.'
+                                            : `No ${activeScanCategoryConfig.label.toLowerCase()} items masked.`}
+                                    </p>
+                                )}
                             </>
                         ) : (
                             <p className="scan-detail-empty">
