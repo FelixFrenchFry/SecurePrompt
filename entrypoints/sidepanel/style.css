@@ -159,15 +159,15 @@ h2 {
 
 .chip {
     min-height: 36px;
-    border: 1px solid #dbe4ec;
+    border: 1px solid var(--category-border, #dbe4ec);
     border-radius: 8px;
     display: flex;
     align-items: center;
     gap: 6px;
     justify-content: center;
     min-width: 0;
-    color: #334155;
-    background: #f8fafc;
+    color: var(--category-primary, #334155);
+    background: var(--category-secondary, #f8fafc);
     font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
@@ -182,6 +182,75 @@ h2 {
     background: #fbfdff;
     line-height: 1.5;
     white-space: pre-wrap;
+}
+
+.preview-mask {
+    display: inline-block;
+    margin: 0 1px;
+    border: 1px solid var(--category-border, #dbe4ec);
+    border-radius: 5px;
+    padding: 0 4px;
+    color: var(--category-primary, #334155);
+    background: var(--category-secondary, #f8fafc);
+    cursor: help;
+    font-weight: 750;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+
+.preview-mask:focus-visible {
+    outline: 3px solid rgba(14, 165, 233, 0.3);
+    outline-offset: 2px;
+}
+
+.preview-tooltip {
+    position: fixed;
+    z-index: 10;
+    width: max-content;
+    max-width: min(260px, calc(100vw - 48px));
+    pointer-events: none;
+}
+
+.preview-tooltip-content {
+    max-height: 160px;
+    overflow: hidden;
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: #ffffff;
+    background: #17202a;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.preview-tooltip-above {
+    transform: translateY(-100%);
+}
+
+.preview-tooltip-below {
+    transform: translateY(0);
+}
+
+.preview-tooltip::before {
+    content: '';
+    position: absolute;
+    left: var(--preview-tooltip-arrow-left);
+    border: 5px solid transparent;
+    transform: translateX(-50%);
+}
+
+.preview-tooltip-above::before {
+    top: 100%;
+    border-top-color: #17202a;
+}
+
+.preview-tooltip-below::before {
+    bottom: 100%;
+    border-bottom-color: #17202a;
 }
 
 .panel-action {

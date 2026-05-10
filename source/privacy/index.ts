@@ -9,6 +9,7 @@ import type {
     MaskingMapping,
     PrivatizationMethod,
     PrivatizedPromptResult,
+    PrivatizedPromptSegment,
     SensitiveItem,
     SensitiveItemCategory,
 } from './types';
@@ -18,6 +19,7 @@ export type {
     MaskingMapping,
     PrivatizationMethod,
     PrivatizedPromptResult,
+    PrivatizedPromptSegment,
     SensitiveItem,
     SensitiveItemCategory,
 } from './types';
@@ -27,6 +29,11 @@ export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
     useRulesDetection?: boolean;
+};
+
+type MaskedPrompt = {
+    privatizedPrompt: string;
+    segments: PrivatizedPromptSegment[];
 };
 
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
@@ -82,16 +89,20 @@ const createPrivatizedPromptFromItems = (
     const maskingMappings = createMaskingMappings(finalItems);
 
     let privatizedPrompt = '';
+    let segments: PrivatizedPromptSegment[] = [];
 
     try
     {
         // 3. apply masks to create the privatized prompt, depending on the chosen privatization method
-        privatizedPrompt = applyMasksToItems(
+        const maskedPrompt = applyMasksToItems(
             inputText,
             finalItems,
             maskingMappings,
             DEFAULT_PRIVATIZATION_METHOD,
         );
+
+        privatizedPrompt = maskedPrompt.privatizedPrompt;
+        segments = maskedPrompt.segments;
     }
     catch
     {
@@ -100,6 +111,7 @@ const createPrivatizedPromptFromItems = (
             method: DEFAULT_PRIVATIZATION_METHOD,
             items: finalItems,
             maskingMappings,
+            segments: [],
             safeToInject: false,
         };
     }
@@ -109,6 +121,7 @@ const createPrivatizedPromptFromItems = (
         method: DEFAULT_PRIVATIZATION_METHOD,
         items: finalItems,
         maskingMappings,
+        segments,
         safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
     };
 };
@@ -515,29 +528,26 @@ const isValidItemRange = (inputText: string, item: SensitiveItem) =>
     );
 };
 
-const createMaskByItemId = (
+const createMaskingMappingByItemId = (
     maskingMappings: MaskingMapping[],
-    method: PrivatizationMethod,
 ) =>
 {
-    const maskByItemId = new Map<string, string>();
+    const mappingByItemId = new Map<string, MaskingMapping>();
 
     for (const maskingMapping of maskingMappings)
     {
-        const mask = getMaskForMethod(maskingMapping, method);
-
         for (const itemId of maskingMapping.itemIds)
         {
-            if (maskByItemId.has(itemId))
+            if (mappingByItemId.has(itemId))
             {
-                throw new Error('Sensitive item has multiple masks.');
+                throw new Error('Sensitive item has multiple masking mappings.');
             }
 
-            maskByItemId.set(itemId, mask);
+            mappingByItemId.set(itemId, maskingMapping);
         }
     }
 
-    return maskByItemId;
+    return mappingByItemId;
 };
 
 const getMaskForMethod = (
@@ -563,11 +573,11 @@ const applyMasksToItems = (
     items: SensitiveItem[],
     maskingMappings: MaskingMapping[],
     method: PrivatizationMethod,
-) =>
+): MaskedPrompt =>
 {
-    const maskByItemId = createMaskByItemId(maskingMappings, method);
+    const mappingByItemId = createMaskingMappingByItemId(maskingMappings);
     const sortedItems = [...items].sort(compareItemsByPosition);
-    const outputParts: string[] = [];
+    const segments: PrivatizedPromptSegment[] = [];
     let cursor = 0;
 
     for (const item of sortedItems)
@@ -582,18 +592,66 @@ const applyMasksToItems = (
             throw new Error('Sensitive item ranges overlap.');
         }
 
-        const mask = maskByItemId.get(item.id);
+        const maskingMapping = mappingByItemId.get(item.id);
 
-        if (mask == null)
+        if (maskingMapping == null)
         {
             throw new Error('Sensitive item has no mask.');
         }
 
-        outputParts.push(inputText.slice(cursor, item.start), mask);
+        appendTextSegment(segments, inputText.slice(cursor, item.start));
+        appendMaskSegment(segments, getMaskForMethod(maskingMapping, method), maskingMapping);
         cursor = item.end;
     }
 
-    outputParts.push(inputText.slice(cursor));
+    appendTextSegment(segments, inputText.slice(cursor));
 
-    return outputParts.join('');
+    return {
+        privatizedPrompt: segments.map((segment) => segment.text).join(''),
+        segments,
+    };
+};
+
+const appendTextSegment = (
+    segments: PrivatizedPromptSegment[],
+    text: string,
+) =>
+{
+    if (text.length === 0)
+    {
+        return;
+    }
+
+    const previousSegment = segments.at(-1);
+
+    if (previousSegment?.type === 'text')
+    {
+        previousSegment.text += text;
+        return;
+    }
+
+    segments.push({
+        type: 'text',
+        text,
+    });
+};
+
+const appendMaskSegment = (
+    segments: PrivatizedPromptSegment[],
+    text: string,
+    maskingMapping: MaskingMapping,
+) =>
+{
+    if (text.length === 0)
+    {
+        return;
+    }
+
+    segments.push({
+        type: 'mask',
+        text,
+        category: maskingMapping.category,
+        original: maskingMapping.original,
+        mappingId: maskingMapping.id,
+    });
 };

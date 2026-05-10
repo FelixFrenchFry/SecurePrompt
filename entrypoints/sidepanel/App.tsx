@@ -1,10 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
 import {
+    type CSSProperties,
+    type FocusEvent,
+    type MouseEvent,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
+import {
+    Calendar,
     Check,
+    CircleHelp,
     Copy,
     Cpu,
     Eraser,
     FileText,
+    Globe,
     Home,
     Landmark,
     Lock,
@@ -21,6 +32,7 @@ import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messag
 import {
     createPrivatizedPrompt,
     createPrivatizedPromptAsync,
+    type PrivatizedPromptSegment,
     type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
@@ -28,6 +40,10 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
+const PREVIEW_TOOLTIP_MARGIN = 12;
+const PREVIEW_TOOLTIP_MAX_WIDTH = 260;
+const PREVIEW_TOOLTIP_GAP = 8;
+const PREVIEW_TOOLTIP_MIN_ABOVE_SPACE = 80;
 const MODEL_HOST_PERMISSIONS = [
     'https://huggingface.co/*',
     'https://*.huggingface.co/*',
@@ -35,15 +51,269 @@ const MODEL_HOST_PERMISSIONS = [
     'https://*.xethub.hf.co/*',
 ];
 
+type PreviewTooltip = {
+    text: string;
+    left: number;
+    top: number;
+    anchorLeft: number;
+    arrowLeft: number;
+    placement: 'above' | 'below';
+};
+
+type PreviewTooltipEvent = MouseEvent<HTMLElement> | FocusEvent<HTMLElement>;
+
+type ShowPreviewTooltip = (event: PreviewTooltipEvent, text: string) => void;
+
+type CategoryColors = {
+    primary: string;
+    secondary: string;
+    border: string;
+};
+
+type CategoryColorStyle = CSSProperties & {
+    '--category-primary': string;
+    '--category-secondary': string;
+    '--category-border': string;
+};
+
+type PrivacyScanCategory = {
+    category: SensitiveItemCategory;
+    label: string;
+    Icon: typeof Mail;
+};
+
+const CATEGORY_COLORS: Record<SensitiveItemCategory, CategoryColors> = {
+    EMAIL: {
+        primary: '#243172',
+        secondary: '#f1f3fb',
+        border: '#c8cfe8',
+    },
+    PHONE: {
+        primary: '#166534',
+        secondary: '#ecfdf5',
+        border: '#bbf7d0',
+    },
+    PERSON: {
+        primary: '#2563eb',
+        secondary: '#eff6ff',
+        border: '#bfdbfe',
+    },
+    ADDRESS: {
+        primary: '#7c2d12',
+        secondary: '#fff7ed',
+        border: '#fdba74',
+    },
+    ACCOUNT: {
+        primary: '#6d28d9',
+        secondary: '#f5f3ff',
+        border: '#ddd6fe',
+    },
+    DATE: {
+        primary: '#a16207',
+        secondary: '#fefce8',
+        border: '#fde047',
+    },
+    NETWORK: {
+        primary: '#0f766e',
+        secondary: '#f0fdfa',
+        border: '#5eead4',
+    },
+    SECRET: {
+        primary: '#be123c',
+        secondary: '#fff1f2',
+        border: '#fecdd3',
+    },
+    OTHER: {
+        primary: '#334155',
+        secondary: '#f8fafc',
+        border: '#dbe4ec',
+    },
+};
+
+const PRIVACY_SCAN_CATEGORIES: PrivacyScanCategory[] = [
+    {
+        category: 'EMAIL',
+        label: 'Email',
+        Icon: Mail,
+    },
+    {
+        category: 'PHONE',
+        label: 'Phone',
+        Icon: Phone,
+    },
+    {
+        category: 'PERSON',
+        label: 'Person',
+        Icon: UserRound,
+    },
+    {
+        category: 'ADDRESS',
+        label: 'Address',
+        Icon: Home,
+    },
+    {
+        category: 'ACCOUNT',
+        label: 'Account',
+        Icon: Landmark,
+    },
+    {
+        category: 'DATE',
+        label: 'Date',
+        Icon: Calendar,
+    },
+    {
+        category: 'NETWORK',
+        label: 'Network',
+        Icon: Globe,
+    },
+    {
+        category: 'SECRET',
+        label: 'Secret',
+        Icon: Lock,
+    },
+    {
+        category: 'OTHER',
+        label: 'Other',
+        Icon: CircleHelp,
+    },
+];
+
 const formatCount = (count: number) =>
 {
     return count > MAX_VISIBLE_COUNT ? `${MAX_VISIBLE_COUNT}+` : String(count);
+};
+
+const getCategoryColorStyle = (category: SensitiveItemCategory): CategoryColorStyle =>
+{
+    const colors = CATEGORY_COLORS[category];
+
+    return {
+        '--category-primary': colors.primary,
+        '--category-secondary': colors.secondary,
+        '--category-border': colors.border,
+    };
+};
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+{
+    return Math.min(maximum, Math.max(minimum, value));
+};
+
+const renderPreviewSegment = (
+    segment: PrivatizedPromptSegment,
+    index: number,
+    showPreviewTooltip: ShowPreviewTooltip,
+    hidePreviewTooltip: () => void,
+) =>
+{
+    if (segment.type === 'text') {
+        return (
+            <span key={`preview-text-${index}`}>
+                {segment.text}
+            </span>
+        );
+    }
+
+    return (
+        <span
+            key={`${segment.mappingId}-${index}`}
+            className="preview-mask"
+            style={getCategoryColorStyle(segment.category)}
+            tabIndex={0}
+            aria-label={`${segment.text} masks ${segment.category.toLowerCase()}`}
+            onMouseEnter={(event) => showPreviewTooltip(event, segment.original)}
+            onMouseLeave={hidePreviewTooltip}
+            onFocus={(event) => showPreviewTooltip(event, segment.original)}
+            onBlur={hidePreviewTooltip}
+        >
+            {segment.text}
+        </span>
+    );
+};
+
+const getPreviewContent = (
+    privatizedPrompt: string,
+    previewSegments: PrivatizedPromptSegment[],
+    showPreviewTooltip: ShowPreviewTooltip,
+    hidePreviewTooltip: () => void,
+) =>
+{
+    if (!privatizedPrompt) {
+        return EMPTY_PREVIEW_TEXT;
+    }
+
+    if (previewSegments.length === 0) {
+        return privatizedPrompt;
+    }
+
+    return previewSegments.map((segment, index) =>
+    {
+        return renderPreviewSegment(
+            segment,
+            index,
+            showPreviewTooltip,
+            hidePreviewTooltip,
+        );
+    });
+};
+
+const getPreviewTooltipPosition = (target: HTMLElement) =>
+{
+    const rect = target.getBoundingClientRect();
+    const maxWidth = Math.min(
+        PREVIEW_TOOLTIP_MAX_WIDTH,
+        window.innerWidth - PREVIEW_TOOLTIP_MARGIN * 2,
+    );
+    const anchorLeft = rect.left + rect.width / 2;
+    const left = getClampedPreviewTooltipLeft(anchorLeft, maxWidth);
+    const arrowLeft = getClampedPreviewTooltipArrowLeft(anchorLeft, left, maxWidth);
+
+    if (rect.top >= PREVIEW_TOOLTIP_MIN_ABOVE_SPACE)
+    {
+        return {
+            left,
+            top: rect.top - PREVIEW_TOOLTIP_GAP,
+            anchorLeft,
+            arrowLeft,
+            placement: 'above' as const,
+        };
+    }
+
+    return {
+        left,
+        top: rect.bottom + PREVIEW_TOOLTIP_GAP,
+        anchorLeft,
+        arrowLeft,
+        placement: 'below' as const,
+    };
+};
+
+const getClampedPreviewTooltipLeft = (anchorLeft: number, width: number) =>
+{
+    const maxLeft = window.innerWidth - PREVIEW_TOOLTIP_MARGIN - width;
+
+    if (maxLeft < PREVIEW_TOOLTIP_MARGIN)
+    {
+        return PREVIEW_TOOLTIP_MARGIN;
+    }
+
+    return clamp(anchorLeft - width / 2, PREVIEW_TOOLTIP_MARGIN, maxLeft);
+};
+
+const getClampedPreviewTooltipArrowLeft = (
+    anchorLeft: number,
+    tooltipLeft: number,
+    tooltipWidth: number,
+) =>
+{
+    return clamp(anchorLeft - tooltipLeft, 8, tooltipWidth - 8);
 };
 
 export function App()
 {
     const [prompt, setPrompt] = useState('');
     const [privatizedPrompt, setPrivatizedPrompt] = useState('');
+    const [previewSegments, setPreviewSegments] = useState<PrivatizedPromptSegment[]>([]);
     const [canUsePrivatizedPrompt, setCanUsePrivatizedPrompt] = useState(false);
     const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
     const [clipboardStatus, setClipboardStatus] = useState('');
@@ -51,16 +321,51 @@ export function App()
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
+    const [previewTooltip, setPreviewTooltip] = useState<PreviewTooltip | null>(null);
     const copyResetTimerRef = useRef<number | undefined>(undefined);
     const clearResetTimerRef = useRef<number | undefined>(undefined);
+    const previewTooltipRef = useRef<HTMLDivElement | null>(null);
 
-    const previewText = privatizedPrompt || EMPTY_PREVIEW_TEXT;
+    const showPreviewTooltip = (event: PreviewTooltipEvent, text: string) =>
+    {
+        setPreviewTooltip({
+            text,
+            ...getPreviewTooltipPosition(event.currentTarget),
+        });
+    };
+    const hidePreviewTooltip = () =>
+    {
+        setPreviewTooltip(null);
+    };
+    const previewContent = getPreviewContent(
+        privatizedPrompt,
+        previewSegments,
+        showPreviewTooltip,
+        hidePreviewTooltip,
+    );
     const itemCountLabel = `${formatCount(detectedItems.length)} ${
         detectedItems.length === 1 ? 'item' : 'items'
     }`;
     const countItemsByCategory = (category: SensitiveItemCategory) =>
     {
         return detectedItems.filter((item) => item.category === category).length;
+    };
+    const renderPrivacyScanCategory = (
+        scanCategory: PrivacyScanCategory,
+    ) =>
+    {
+        const { category, label, Icon } = scanCategory;
+
+        return (
+            <span
+                key={category}
+                className="chip"
+                style={getCategoryColorStyle(category)}
+            >
+                <Icon size={17} aria-hidden="true" />
+                {label} {formatCount(countItemsByCategory(category))}
+            </span>
+        );
     };
 
     useEffect(() =>
@@ -77,6 +382,61 @@ export function App()
         };
     }, []);
 
+    useEffect(() =>
+    {
+        if (previewTooltip == null)
+        {
+            return;
+        }
+
+        const hideTooltip = () =>
+        {
+            setPreviewTooltip(null);
+        };
+
+        window.addEventListener('resize', hideTooltip);
+        window.addEventListener('scroll', hideTooltip, true);
+
+        return () =>
+        {
+            window.removeEventListener('resize', hideTooltip);
+            window.removeEventListener('scroll', hideTooltip, true);
+        };
+    }, [previewTooltip]);
+
+    useLayoutEffect(() =>
+    {
+        if (previewTooltip == null || previewTooltipRef.current == null)
+        {
+            return;
+        }
+
+        const tooltipRect = previewTooltipRef.current.getBoundingClientRect();
+        const left = getClampedPreviewTooltipLeft(
+            previewTooltip.anchorLeft,
+            tooltipRect.width,
+        );
+        const arrowLeft = getClampedPreviewTooltipArrowLeft(
+            previewTooltip.anchorLeft,
+            left,
+            tooltipRect.width,
+        );
+
+        if (
+            Math.abs(left - previewTooltip.left) < 0.5 &&
+            Math.abs(arrowLeft - previewTooltip.arrowLeft) < 0.5
+        )
+        {
+            return;
+        }
+
+        setPreviewTooltip({
+            ...previewTooltip,
+            left,
+            arrowLeft,
+        });
+    }, [previewTooltip]);
+
     const privatizePrompt = () =>
     {
         if (!prompt) {
@@ -85,7 +445,9 @@ export function App()
 
         const result = createPrivatizedPrompt(prompt);
 
+        setPreviewTooltip(null);
         setPrivatizedPrompt(result.privatizedPrompt);
+        setPreviewSegments(result.segments);
         setCanUsePrivatizedPrompt(result.safeToInject);
         setDetectedItems(result.items);
         setSendStatus('');
@@ -120,7 +482,9 @@ export function App()
                 useLocalModelDetection: true,
             });
 
+            setPreviewTooltip(null);
             setPrivatizedPrompt(result.privatizedPrompt);
+            setPreviewSegments(result.segments);
             setCanUsePrivatizedPrompt(result.safeToInject);
             setDetectedItems(result.items);
 
@@ -133,7 +497,9 @@ export function App()
         } catch (error) {
             const fallbackResult = createPrivatizedPrompt(prompt);
 
+            setPreviewTooltip(null);
             setPrivatizedPrompt(fallbackResult.privatizedPrompt);
+            setPreviewSegments(fallbackResult.segments);
             setCanUsePrivatizedPrompt(fallbackResult.safeToInject);
             setDetectedItems(fallbackResult.items);
             setClipboardStatus(getLocalModelFailureStatus(error));
@@ -146,6 +512,8 @@ export function App()
     {
         setPrompt('');
         setPrivatizedPrompt('');
+        setPreviewSegments([]);
+        setPreviewTooltip(null);
         setCanUsePrivatizedPrompt(false);
         setDetectedItems([]);
         setClipboardStatus('');
@@ -171,7 +539,7 @@ export function App()
 
     const copyPrivatizedPrompt = async () =>
     {
-        if (!privatizedPrompt || !canUsePrivatizedPrompt) {
+        if (!privatizedPrompt) {
             return;
         }
 
@@ -291,30 +659,7 @@ export function App()
                     <span>{itemCountLabel}</span>
                 </div>
                 <div className="chip-row" aria-label="Detected item categories">
-                    <span className="chip">
-                        <Mail size={17} aria-hidden="true" />
-                        Email {formatCount(countItemsByCategory('EMAIL'))}
-                    </span>
-                    <span className="chip">
-                        <Phone size={17} aria-hidden="true" />
-                        Phone {formatCount(countItemsByCategory('PHONE'))}
-                    </span>
-                    <span className="chip">
-                        <UserRound size={17} aria-hidden="true" />
-                        Person {formatCount(countItemsByCategory('PERSON'))}
-                    </span>
-                    <span className="chip">
-                        <Home size={17} aria-hidden="true" />
-                        Address {formatCount(countItemsByCategory('ADDRESS'))}
-                    </span>
-                    <span className="chip">
-                        <Landmark size={17} aria-hidden="true" />
-                        Account {formatCount(countItemsByCategory('ACCOUNT'))}
-                    </span>
-                    <span className="chip">
-                        <Lock size={17} aria-hidden="true" />
-                        Secrets {formatCount(countItemsByCategory('SECRET'))}
-                    </span>
+                    {PRIVACY_SCAN_CATEGORIES.map(renderPrivacyScanCategory)}
                 </div>
             </section>
 
@@ -328,7 +673,7 @@ export function App()
                         className={`ghost-button copy-button${copied ? ' is-copied' : ''}`}
                         type="button"
                         onClick={copyPrivatizedPrompt}
-                        disabled={!privatizedPrompt || !canUsePrivatizedPrompt}
+                        disabled={!privatizedPrompt}
                     >
                         {copied ? (
                             <Check size={16} aria-hidden="true" />
@@ -339,8 +684,24 @@ export function App()
                     </button>
                 </div>
                 <div className="preview" aria-live="polite">
-                    {previewText}
+                    {previewContent}
                 </div>
+                {previewTooltip != null ? (
+                    <div
+                        ref={previewTooltipRef}
+                        className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
+                        style={{
+                            left: previewTooltip.left,
+                            top: previewTooltip.top,
+                            '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
+                        } as CSSProperties}
+                        role="tooltip"
+                    >
+                        <div className="preview-tooltip-content">
+                            {previewTooltip.text}
+                        </div>
+                    </div>
+                ) : null}
                 <button
                     className="primary-button panel-action"
                     type="button"

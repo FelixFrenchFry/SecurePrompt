@@ -40,11 +40,26 @@ export type MaskingMapping = {
     itemIds: string[];
 };
 
+// renderable part of the privatized prompt preview
+export type PrivatizedPromptSegment =
+    | {
+          type: 'text';
+          text: string;
+      }
+    | {
+          type: 'mask';
+          text: string;
+          category: SensitiveItemCategory;
+          original: string;
+          mappingId: string;
+      };
+
 // complete result for one prompt
 export type PrivatizedPromptResult = {
     privatizedPrompt: string;
     method: PrivatizationMethod;
     items: SensitiveItem[];
     maskingMappings: MaskingMapping[];
+    segments: PrivatizedPromptSegment[];
     safeToInject: boolean;
 };
