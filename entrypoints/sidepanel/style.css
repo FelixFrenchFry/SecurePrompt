@@ -189,6 +189,17 @@ h2 {
     margin-top: 12px;
 }
 
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.action-grid .secondary-button {
+    width: 100%;
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button {

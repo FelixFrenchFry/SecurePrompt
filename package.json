@@ -23,6 +23,7 @@
     },
     "type": "module",
     "dependencies": {
+        "@huggingface/transformers": "4.2.0",
         "awesome-phonenumber": "^7.8.0",
         "card-validator": "^10.0.4",
         "german-tax-id-validator": "^1.0.7",
@@ -33,6 +34,7 @@
         "libphonenumber-js": "^1.12.43",
         "linkifyjs": "^4.3.2",
         "lucide-react": "^1.14.0",
+        "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "tldts": "^7.0.30"

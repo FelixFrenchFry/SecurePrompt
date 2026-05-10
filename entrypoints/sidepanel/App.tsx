@@ -20,6 +20,7 @@ import { browser } from 'wxt/browser';
 import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messaging';
 import {
     createPrivatizedPrompt,
+    createPrivatizedPromptAsync,
     type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
@@ -27,6 +28,12 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
+const MODEL_HOST_PERMISSIONS = [
+    'https://huggingface.co/*',
+    'https://*.huggingface.co/*',
+    'https://*.hf.co/*',
+    'https://*.xethub.hf.co/*',
+];
 
 const formatCount = (count: number) =>
 {
@@ -41,6 +48,7 @@ export function App()
     const [detectedItems, setDetectedItems] = useState<SensitiveItem[]>([]);
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
+    const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
     const copyResetTimerRef = useRef<number | undefined>(undefined);
@@ -88,6 +96,48 @@ export function App()
         }
 
         setClipboardStatus('Privatized prompt updated.');
+    };
+
+    const testLocalModelPrivatization = async () =>
+    {
+        if (!prompt || isTestingLocalModel) {
+            return;
+        }
+
+        setIsTestingLocalModel(true);
+        setClipboardStatus('Loading local model. First run may download about 900 MB.');
+        setSendStatus('');
+
+        try {
+            const hasPermission = await requestModelDownloadPermission();
+
+            if (!hasPermission) {
+                setClipboardStatus('Model download permission was not granted.');
+                return;
+            }
+
+            const result = await createPrivatizedPromptAsync(prompt, {
+                useLocalModelDetection: true,
+            });
+
+            setPrivatizedPrompt(result.privatizedPrompt);
+            setCanUsePrivatizedPrompt(result.safeToInject);
+            setDetectedItems(result.items);
+
+            if (!result.safeToInject) {
+                setClipboardStatus('Local model preview only. Sending is disabled.');
+                return;
+            }
+
+            setClipboardStatus('Local model result updated.');
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : 'Could not run local model.';
+
+            setClipboardStatus(message);
+        } finally {
+            setIsTestingLocalModel(false);
+        }
     };
 
     const clearPrompts = () =>
@@ -208,15 +258,26 @@ export function App()
                     placeholder="Type or paste your prompt here..."
                     spellCheck="true"
                 />
-                <button
-                    className="secondary-button panel-action"
-                    type="button"
-                    onClick={privatizePrompt}
-                    disabled={prompt.trim().length === 0}
-                >
-                    <StepForward size={19} aria-hidden="true" />
-                    Privatize
-                </button>
+                <div className="action-grid">
+                    <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={privatizePrompt}
+                        disabled={prompt.trim().length === 0 || isTestingLocalModel}
+                    >
+                        <StepForward size={19} aria-hidden="true" />
+                        Privatize
+                    </button>
+                    <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={testLocalModelPrivatization}
+                        disabled={prompt.trim().length === 0 || isTestingLocalModel}
+                    >
+                        <Cpu size={17} aria-hidden="true" />
+                        {isTestingLocalModel ? 'Testing...' : 'Test model'}
+                    </button>
+                </div>
             </section>
 
             <section className="panel">
@@ -299,3 +360,14 @@ export function App()
         </main>
     );
 }
+
+const requestModelDownloadPermission = async () =>
+{
+    if (browser.permissions?.request == null) {
+        return true;
+    }
+
+    return browser.permissions.request({
+        origins: MODEL_HOST_PERMISSIONS,
+    });
+};

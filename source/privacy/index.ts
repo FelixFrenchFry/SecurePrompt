@@ -24,6 +24,11 @@ export type {
 
 export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 
+export type PrivatizationPipelineOptions = {
+    useLocalModelDetection?: boolean;
+    useRulesDetection?: boolean;
+};
+
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
 
 const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
@@ -38,23 +43,41 @@ const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
     'OTHER',
 ];
 
-// main privatization pipeline
+// sync (rules-only) pipeline
 export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
 {
-    // 1. detect sensitive items in the input text
-    const detectedItems = detectSensitiveItems(inputText);
+    const detectedItems = detectSensitiveItemsSync(inputText, {});
 
-    // 2. resolve overlaps and conflicts between detected items
+    return createPrivatizedPromptFromItems(inputText, detectedItems);
+};
+
+// async pipeline for detection with local model
+export const createPrivatizedPromptAsync = async (
+    inputText: string,
+    options: PrivatizationPipelineOptions = {},
+): Promise<PrivatizedPromptResult> =>
+{
+    const detectedItems = await detectSensitiveItemsAsync(inputText, options);
+
+    return createPrivatizedPromptFromItems(inputText, detectedItems);
+};
+
+const createPrivatizedPromptFromItems = (
+    inputText: string,
+    detectedItems: SensitiveItem[],
+): PrivatizedPromptResult =>
+{
+    // 1. resolve overlaps and conflicts between detected items
     const finalItems = resolveSensitiveItemOverlaps(inputText, detectedItems);
 
-    // 3. create many-to-one masking mappings from items to masks
+    // 2. create many-to-one masking mappings from items to masks
     const maskingMappings = createMaskingMappings(finalItems);
 
     let privatizedPrompt = '';
 
     try
     {
-        // 4. apply masks to create the privatized prompt, depending on the chosen privatization method
+        // 3. apply masks to create the privatized prompt, depending on the chosen privatization method
         privatizedPrompt = applyMasksToItems(
             inputText,
             finalItems,
@@ -82,18 +105,34 @@ export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResul
     };
 };
 
-const detectSensitiveItems = (inputText: string): SensitiveItem[] =>
+const detectSensitiveItemsSync = (
+    inputText: string,
+    options: PrivatizationPipelineOptions,
+): SensitiveItem[] =>
 {
     const detectedItems: SensitiveItem[] = [];
+    const useRulesDetection = options.useRulesDetection ?? USE_RULES_DETECTION;
 
-    if (USE_RULES_DETECTION)
+    if (useRulesDetection)
     {
         detectedItems.push(...detectSensitiveItemsWithRules(inputText));
     }
 
-    if (USE_LOCAL_MODEL_DETECTION)
+    return detectedItems;
+};
+
+const detectSensitiveItemsAsync = async (
+    inputText: string,
+    options: PrivatizationPipelineOptions,
+): Promise<SensitiveItem[]> =>
+{
+    const detectedItems = detectSensitiveItemsSync(inputText, options);
+    const useLocalModelDetection =
+        options.useLocalModelDetection ?? USE_LOCAL_MODEL_DETECTION;
+
+    if (useLocalModelDetection)
     {
-        detectedItems.push(...detectSensitiveItemsWithLocalModel(inputText));
+        detectedItems.push(...(await detectSensitiveItemsWithLocalModel(inputText)));
     }
 
     return detectedItems;

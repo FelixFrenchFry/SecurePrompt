@@ -1,8 +1,20 @@
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'wxt';
+
+const onnxRuntimeDistDirectory = dirname(fileURLToPath(import.meta.resolve('onnxruntime-web/wasm')));
+const onnxRuntimeAliasDirectory = `${onnxRuntimeDistDirectory.replace(/\\/g, '/')}/`;
 
 export default defineConfig({
     manifestVersion: 3,
     modules: ['@wxt-dev/module-react'],
+    vite: () => ({
+        resolve: {
+            alias: {
+                'secureprompt-onnx-runtime/': onnxRuntimeAliasDirectory,
+            },
+        },
+    }),
     manifest: {
         name: 'SecurePrompt',
         description:
@@ -25,6 +37,16 @@ export default defineConfig({
         },
         permissions: ['sidePanel', 'clipboardWrite'],
         host_permissions: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+        content_security_policy: {
+            extension_pages:
+                "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';",
+        },
+        optional_host_permissions: [
+            'https://huggingface.co/*',
+            'https://*.huggingface.co/*',
+            'https://*.hf.co/*',
+            'https://*.xethub.hf.co/*',
+        ],
         web_accessible_resources: [
             {
                 resources: ['icons/logo-32x32.png'],
