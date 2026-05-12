@@ -30,6 +30,7 @@ import {
     ScanSearch,
     Search,
     Send,
+    Settings as SettingsIcon,
     ShieldCheck,
     StepForward,
     UserRound,
@@ -38,7 +39,6 @@ import {
 import { browser } from 'wxt/browser';
 import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messaging';
 import {
-    createPrivatizedPrompt,
     createPrivatizedPromptAsync,
     createPrivatizedPromptPreview,
     createPrivatizedPromptWithManualItem,
@@ -48,6 +48,15 @@ import {
     type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
+import {
+    loadExtensionSettings,
+    saveExtensionSettings,
+} from '../../source/settings/storage';
+import {
+    DEFAULT_EXTENSION_SETTINGS,
+    type ExtensionSettings,
+} from '../../source/settings/types';
+import { SettingsPage } from './SettingsPage';
 
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
@@ -124,6 +133,8 @@ type ShowPreviewTooltip = (
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
 type ScanDetailScoreLevel = 1 | 2 | 3;
+
+type AppView = 'main' | 'settings';
 
 type ScanDetailSearchTarget = {
     normalized: string;
@@ -1196,6 +1207,12 @@ const getClampedPreviewTooltipArrowLeft = (
 
 export function App()
 {
+    const [appView, setAppView] = useState<AppView>('main');
+    const [settings, setSettings] = useState<ExtensionSettings>(
+        DEFAULT_EXTENSION_SETTINGS,
+    );
+    const [settingsStatus, setSettingsStatus] = useState('');
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [prompt, setPrompt] = useState('');
     const [privatizedPrompt, setPrivatizedPrompt] = useState('');
     const [privatizedInputText, setPrivatizedInputText] = useState('');
@@ -1224,6 +1241,8 @@ export function App()
     const previewRef = useRef<HTMLDivElement | null>(null);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
     const previewSelectionPopoverRef = useRef<HTMLDivElement | null>(null);
+    const settingsRef = useRef(settings);
+    const settingsSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
 
     const clearPreviewTooltipHideTimer = () =>
     {
@@ -1647,6 +1666,92 @@ export function App()
             </li>
         );
     };
+    const updateSetting = async (
+        key: keyof ExtensionSettings,
+        value: boolean,
+    ) =>
+    {
+        const nextSettings = {
+            ...settingsRef.current,
+            [key]: value,
+        };
+
+        settingsRef.current = nextSettings;
+        setSettings(nextSettings);
+        setIsSavingSettings(true);
+        setSettingsStatus('');
+
+        const savePromise = settingsSavePromiseRef.current
+            .catch(() =>
+            {
+                return undefined;
+            })
+            .then(() =>
+            {
+                return saveExtensionSettings(nextSettings);
+            });
+        settingsSavePromiseRef.current = savePromise;
+
+        try
+        {
+            await savePromise;
+
+            if (settingsSavePromiseRef.current === savePromise)
+            {
+                setSettingsStatus('Settings updated.');
+            }
+        }
+        catch
+        {
+            if (settingsSavePromiseRef.current === savePromise)
+            {
+                setSettingsStatus('Could not save settings.');
+            }
+        }
+        finally
+        {
+            if (settingsSavePromiseRef.current === savePromise)
+            {
+                setIsSavingSettings(false);
+            }
+        }
+    };
+
+    useEffect(() =>
+    {
+        settingsRef.current = settings;
+    }, [settings]);
+
+    useEffect(() =>
+    {
+        let isMounted = true;
+
+        loadExtensionSettings()
+            .then((loadedSettings) =>
+            {
+                if (!isMounted)
+                {
+                    return;
+                }
+
+                settingsRef.current = loadedSettings;
+                setSettings(loadedSettings);
+            })
+            .catch(() =>
+            {
+                if (!isMounted)
+                {
+                    return;
+                }
+
+                setSettingsStatus('Could not load settings.');
+            });
+
+        return () =>
+        {
+            isMounted = false;
+        };
+    }, []);
 
     useEffect(() =>
     {
@@ -1895,28 +2000,38 @@ export function App()
         });
     }, [previewSelectionPopover]);
 
-    const privatizePrompt = () =>
+    const privatizePrompt = async () =>
     {
-        if (!prompt) {
+        if (!prompt || isTestingLocalModel) {
             return;
         }
 
-        const result = createPrivatizedPrompt(prompt);
+        try
+        {
+            const result = await createPrivatizedPromptAsync(prompt, {
+                useLocalModelDetection: false,
+                useRulesDetection: settings.rulesDetectionEnabled,
+            });
 
-        applyPrivatizedResult(prompt, result);
-        setSendStatus('');
+            applyPrivatizedResult(prompt, result);
+            setSendStatus('');
 
-        if (!result.safeToInject) {
-            setClipboardStatus('Preview only. Sending is disabled.');
-            return;
+            if (!result.safeToInject) {
+                setClipboardStatus('Preview only. Sending is disabled.');
+                return;
+            }
+
+            setClipboardStatus('Privatized prompt updated.');
         }
-
-        setClipboardStatus('Privatized prompt updated.');
+        catch
+        {
+            setClipboardStatus('Could not privatize prompt.');
+        }
     };
 
     const testLocalModelPrivatization = async () =>
     {
-        if (!prompt || isTestingLocalModel) {
+        if (!prompt || isTestingLocalModel || !settings.localModelDetectionEnabled) {
             return;
         }
 
@@ -1934,6 +2049,7 @@ export function App()
 
             const result = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: true,
+                useRulesDetection: settings.rulesDetectionEnabled,
             });
 
             applyPrivatizedResult(prompt, result);
@@ -1945,7 +2061,10 @@ export function App()
 
             setClipboardStatus('Local model result updated.');
         } catch (error) {
-            const fallbackResult = createPrivatizedPrompt(prompt);
+            const fallbackResult = await createPrivatizedPromptAsync(prompt, {
+                useLocalModelDetection: false,
+                useRulesDetection: settings.rulesDetectionEnabled,
+            });
 
             applyPrivatizedResult(prompt, fallbackResult);
             setClipboardStatus(getLocalModelFailureStatus(error));
@@ -2040,16 +2159,40 @@ export function App()
         }
     };
 
+    if (appView === 'settings')
+    {
+        return (
+            <SettingsPage
+                settings={settings}
+                isSaving={isSavingSettings}
+                status={settingsStatus}
+                onBack={() => setAppView('main')}
+                onChange={updateSetting}
+            />
+        );
+    }
+
     return (
-        <main className="app-shell">
+        <main className={`app-shell${settings.darkModeEnabled ? ' is-dark' : ''}`}>
             <header className="app-header">
                 <div className="brand-lockup">
                     <h1>Privatize Your Prompts</h1>
                 </div>
-                <span className="status-pill">
-                    <Cpu size={12} aria-hidden="true" />
-                    Fully on-device
-                </span>
+                <div className="app-header-actions">
+                    <span className="status-pill">
+                        <Cpu size={12} aria-hidden="true" />
+                        Fully on-device
+                    </span>
+                    <button
+                        className="icon-button"
+                        type="button"
+                        title="Settings"
+                        aria-label="Settings"
+                        onClick={() => setAppView('settings')}
+                    >
+                        <SettingsIcon size={17} aria-hidden="true" />
+                    </button>
+                </div>
             </header>
 
             <section className="panel">
@@ -2085,7 +2228,16 @@ export function App()
                         className="secondary-button"
                         type="button"
                         onClick={privatizePrompt}
-                        disabled={prompt.trim().length === 0 || isTestingLocalModel}
+                        disabled={
+                            prompt.trim().length === 0 ||
+                            isTestingLocalModel ||
+                            !settings.rulesDetectionEnabled
+                        }
+                        title={
+                            settings.rulesDetectionEnabled
+                                ? undefined
+                                : 'Rules detection is disabled in settings.'
+                        }
                     >
                         <StepForward size={19} aria-hidden="true" />
                         Privatize
@@ -2094,7 +2246,16 @@ export function App()
                         className="secondary-button"
                         type="button"
                         onClick={testLocalModelPrivatization}
-                        disabled={prompt.trim().length === 0 || isTestingLocalModel}
+                        disabled={
+                            prompt.trim().length === 0 ||
+                            isTestingLocalModel ||
+                            !settings.localModelDetectionEnabled
+                        }
+                        title={
+                            settings.localModelDetectionEnabled
+                                ? undefined
+                                : 'Local model test is disabled in settings.'
+                        }
                     >
                         <Cpu size={17} aria-hidden="true" />
                         {isTestingLocalModel ? 'Testing...' : 'Test model'}

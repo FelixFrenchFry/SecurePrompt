@@ -25,6 +25,7 @@ body {
 }
 
 button,
+input,
 textarea {
     font: inherit;
 }
@@ -43,6 +44,13 @@ textarea {
     justify-content: space-between;
     gap: 12px;
     min-height: 28px;
+}
+
+.app-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
 }
 
 .brand-lockup {
@@ -636,7 +644,8 @@ h2 {
 
 .primary-button,
 .secondary-button,
-.ghost-button {
+.ghost-button,
+.icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -693,7 +702,9 @@ h2 {
 
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
-.ghost-button:focus-visible {
+.ghost-button:focus-visible,
+.icon-button:focus-visible,
+.settings-toggle:focus-visible {
     outline: 3px solid rgba(14, 165, 233, 0.3);
     outline-offset: 2px;
 }
@@ -714,7 +725,28 @@ h2 {
         color 150ms ease;
 }
 
+.icon-button {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    border: 1px solid #dbe4ec;
+    border-radius: 8px;
+    padding: 0;
+    color: #334155;
+    background: #ffffff;
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease;
+}
+
 .ghost-button:not(:disabled):hover {
+    border-color: #bfdbfe;
+    background: #f8fbff;
+}
+
+.icon-button:hover {
     border-color: #bfdbfe;
     background: #f8fbff;
 }
@@ -738,6 +770,83 @@ h2 {
     opacity: 0.48;
 }
 
+.settings-shell {
+    gap: 12px;
+}
+
+.settings-panel {
+    padding: 12px 14px;
+}
+
+.settings-list {
+    display: grid;
+    gap: 0;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.settings-row:first-child {
+    border-top: none;
+}
+
+.settings-row-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.settings-row-label svg {
+    flex: 0 0 auto;
+    color: #475569;
+}
+
+.settings-toggle {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    flex: 0 0 auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 0;
+    background: #f1f5f9;
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        border-color 150ms ease;
+}
+
+.settings-toggle.is-enabled {
+    border-color: var(--brand-blue);
+    background: var(--brand-blue);
+}
+
+.settings-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+    transition: transform 150ms ease;
+}
+
+.settings-toggle.is-enabled .settings-toggle-thumb {
+    transform: translateX(18px);
+}
+
 .status-message {
     margin: -2px 0 0;
     color: #475569;
@@ -749,4 +858,153 @@ h2 {
     color: #64748b;
     font-size: 12px;
     text-align: center;
+}
+
+.app-shell.is-dark {
+    --brand-blue: #2563eb;
+    --brand-blue-hover: #1d4ed8;
+    --brand-blue-soft: #172554;
+    --brand-blue-border: #1d4ed8;
+    color: #e2e8f0;
+    background: #0f172a;
+}
+
+.app-shell.is-dark h1,
+.app-shell.is-dark h2,
+.app-shell.is-dark .label,
+.app-shell.is-dark .section-header,
+.app-shell.is-dark .settings-row-label {
+    color: #e2e8f0;
+}
+
+.app-shell.is-dark .panel {
+    border-color: #334155;
+    background: #111827;
+}
+
+.app-shell.is-dark .status-pill {
+    border-color: #166534;
+    background: #052e16;
+    color: #86efac;
+}
+
+.app-shell.is-dark .prompt-input,
+.app-shell.is-dark .preview {
+    border-color: #334155;
+    color: #cbd5e1;
+    background: #020617;
+}
+
+.app-shell.is-dark .prompt-input::placeholder {
+    color: #64748b;
+}
+
+.app-shell.is-dark .prompt-input:focus {
+    border-color: #2dd4bf;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
+}
+
+.app-shell.is-dark .scan-detail-search {
+    border-color: #334155;
+    color: #94a3b8;
+    background: #020617;
+}
+
+.app-shell.is-dark .scan-detail-search input {
+    color: #e2e8f0;
+}
+
+.app-shell.is-dark .scan-detail-search input::placeholder {
+    color: #64748b;
+}
+
+.app-shell.is-dark .scan-detail-search-clear-button,
+.app-shell.is-dark .scan-detail-sort-button,
+.app-shell.is-dark .scan-detail-restore-button,
+.app-shell.is-dark .settings-row-label svg {
+    color: #94a3b8;
+}
+
+.app-shell.is-dark .scan-detail-search-clear-button:hover,
+.app-shell.is-dark .scan-detail-sort-button:hover {
+    border-color: #475569;
+    background: #1e293b;
+}
+
+.app-shell.is-dark .scan-detail-restore-button:hover {
+    border-color: #7f1d1d;
+    color: #fecaca;
+    background: #450a0a;
+}
+
+.app-shell.is-dark .scan-detail-columns,
+.app-shell.is-dark .scan-detail-count,
+.app-shell.is-dark .scan-detail-empty,
+.app-shell.is-dark .status-message,
+.app-shell.is-dark .footer {
+    color: #94a3b8;
+}
+
+.app-shell.is-dark .scan-detail-row,
+.app-shell.is-dark .settings-row {
+    border-top-color: #334155;
+    color: #cbd5e1;
+}
+
+.app-shell.is-dark .ghost-button,
+.app-shell.is-dark .icon-button {
+    border-color: #334155;
+    color: #cbd5e1;
+    background: #111827;
+}
+
+.app-shell.is-dark .ghost-button:not(:disabled):hover,
+.app-shell.is-dark .icon-button:hover {
+    border-color: #475569;
+    background: #1e293b;
+}
+
+.app-shell.is-dark .secondary-button {
+    border-color: #1d4ed8;
+    background: #172554;
+    color: #bfdbfe;
+}
+
+.app-shell.is-dark .secondary-button:not(:disabled):hover {
+    border-color: #2563eb;
+    background: #1e3a8a;
+}
+
+.app-shell.is-dark .primary-button {
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
+}
+
+.app-shell.is-dark .primary-button:not(:disabled):hover {
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.3);
+}
+
+.app-shell.is-dark .copy-button.is-copied {
+    border-color: #166534;
+    background: #052e16;
+    color: #86efac;
+}
+
+.app-shell.is-dark .clear-button.is-cleared {
+    border-color: #7f1d1d;
+    background: #450a0a;
+    color: #fecaca;
+}
+
+.app-shell.is-dark .settings-toggle {
+    border-color: #475569;
+    background: #334155;
+}
+
+.app-shell.is-dark .settings-toggle.is-enabled {
+    border-color: #2563eb;
+    background: #2563eb;
+}
+
+.app-shell.is-dark .settings-toggle-thumb {
+    background: #f8fafc;
 }

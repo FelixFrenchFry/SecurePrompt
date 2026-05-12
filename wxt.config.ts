@@ -35,7 +35,7 @@ export default defineConfig({
                 128: '/icons/logo-128x128.png',
             },
         },
-        permissions: ['sidePanel', 'clipboardWrite'],
+        permissions: ['sidePanel', 'clipboardWrite', 'storage'],
         host_permissions: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
         content_security_policy: {
             extension_pages:
