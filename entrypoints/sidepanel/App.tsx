@@ -45,12 +45,15 @@ import {
     type MaskingMapping,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
+    type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
 
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
+const SCAN_DETAIL_SCORE_MEDIUM_THRESHOLD = 0.6;
+const SCAN_DETAIL_SCORE_HIGH_THRESHOLD = 0.85;
 const PREVIEW_TOOLTIP_MARGIN = 12;
 const PREVIEW_TOOLTIP_MAX_WIDTH = 260;
 const PREVIEW_TOOLTIP_GAP = 3;
@@ -119,6 +122,8 @@ type ShowPreviewTooltip = (
 ) => void;
 
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
+
+type ScanDetailScoreLevel = 1 | 2 | 3;
 
 type ScanDetailSearchTarget = {
     normalized: string;
@@ -382,6 +387,92 @@ const getSearchFilteredMaskingMappings = (
         {
             return searchResult.maskingMapping;
         });
+};
+
+const getMaskingMappingScoreLevel = (
+    maskingMapping: MaskingMapping,
+    items: SensitiveItem[],
+): ScanDetailScoreLevel =>
+{
+    const itemIds = new Set(maskingMapping.itemIds);
+    const confidences = items
+        .filter((item) =>
+        {
+            return itemIds.has(item.id);
+        })
+        .map((item) =>
+        {
+            return clamp(item.confidence, 0, 1);
+        });
+
+    if (confidences.length === 0)
+    {
+        return 1;
+    }
+
+    const confidence = Math.min(...confidences);
+
+    if (confidence >= SCAN_DETAIL_SCORE_HIGH_THRESHOLD)
+    {
+        return 3;
+    }
+
+    if (confidence >= SCAN_DETAIL_SCORE_MEDIUM_THRESHOLD)
+    {
+        return 2;
+    }
+
+    return 1;
+};
+
+const getScanDetailScoreLabel = (scoreLevel: ScanDetailScoreLevel) =>
+{
+    if (scoreLevel === 3)
+    {
+        return 'Confidence score: high';
+    }
+
+    if (scoreLevel === 2)
+    {
+        return 'Confidence score: medium';
+    }
+
+    return 'Confidence score: low';
+};
+
+const renderScanDetailScore = (scoreLevel: ScanDetailScoreLevel) =>
+{
+    const scoreLabel = getScanDetailScoreLabel(scoreLevel);
+
+    return (
+        <span
+            className="scan-detail-score"
+            title={scoreLabel}
+            aria-label={scoreLabel}
+            role="img"
+        >
+            {[0, 1, 2].map((index) => (
+                <span
+                    key={index}
+                    className={`scan-detail-score-bar${
+                        index < scoreLevel ? ' is-filled' : ''
+                    }`}
+                    aria-hidden="true"
+                />
+            ))}
+        </span>
+    );
+};
+
+const getMaskingMappingById = (
+    maskingMappings: MaskingMapping[],
+    mappingId: string,
+) =>
+{
+    return maskingMappings.find((maskingMapping) =>
+    {
+        return maskingMapping.id === mappingId;
+    });
 };
 
 const getScanDetailSearchRank = (
@@ -1215,6 +1306,17 @@ export function App()
         queueHidePreviewTooltip,
         hidePreviewTooltip,
     );
+    const previewTooltipMapping =
+        previewTooltip == null || privatizedResult == null
+            ? null
+            : getMaskingMappingById(
+                  privatizedResult.maskingMappings,
+                  previewTooltip.mappingId,
+              );
+    const previewTooltipScoreLevel =
+        previewTooltipMapping == null
+            ? null
+            : getMaskingMappingScoreLevel(previewTooltipMapping, privatizedResult?.items ?? []);
     const activeMaskingMappings = getActiveMaskingMappings(
         privatizedResult?.maskingMappings ?? [],
         ignoredMappingIds,
@@ -1516,6 +1618,11 @@ export function App()
     };
     const renderScanDetailRow = (maskingMapping: MaskingMapping) =>
     {
+        const scoreLevel = getMaskingMappingScoreLevel(
+            maskingMapping,
+            privatizedResult?.items ?? [],
+        );
+
         return (
             <li key={maskingMapping.id} className="scan-detail-row">
                 <span className="scan-detail-mask">
@@ -1524,6 +1631,7 @@ export function App()
                 <span className="scan-detail-original" title={maskingMapping.original}>
                     {maskingMapping.original}
                 </span>
+                {renderScanDetailScore(scoreLevel)}
                 <span className="scan-detail-count">
                     {formatCount(maskingMapping.itemIds.length)}x
                 </span>
@@ -2043,6 +2151,7 @@ export function App()
                                 <div className="scan-detail-columns">
                                     <span>Mask</span>
                                     <span>Original</span>
+                                    <span>Score</span>
                                     <button
                                         className="scan-detail-sort-button"
                                         type="button"
@@ -2148,6 +2257,18 @@ export function App()
                                     <div className="preview-tooltip-text">
                                         {previewTooltip.text}
                                     </div>
+                                    {previewTooltipMapping != null &&
+                                    previewTooltipScoreLevel != null ? (
+                                        <div className="preview-tooltip-meta">
+                                            {renderScanDetailScore(previewTooltipScoreLevel)}
+                                            <span className="preview-tooltip-count">
+                                                {formatCount(
+                                                    previewTooltipMapping.itemIds.length,
+                                                )}
+                                                x
+                                            </span>
+                                        </div>
+                                    ) : null}
                                     <button
                                         className="preview-tooltip-restore-button"
                                         type="button"
