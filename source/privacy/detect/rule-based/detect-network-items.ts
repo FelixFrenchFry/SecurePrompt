@@ -10,7 +10,7 @@ const NETWORK_SCHEME_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>()[\]{}]+/gi;
 const MAILTO_PATTERN = /\bmailto:[^\s"'<>()[\]{}]+/gi;
 const LOCALHOST_PATTERN = /\blocalhost(?::\d{1,5})?\b/gi;
 const PRIVATE_HOST_PATTERN =
-    /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:corp|home|internal|intranet|lan|local)(?::\d{1,5})?\b/gi;
+    /\b(?=[a-z0-9.-]*(?:^|\.)(?:corp|home|internal|intranet|lan|local)(?:\.|$))(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?::\d{1,5})?\b/gi;
 
 const NON_NETWORK_CONTEXT_LABELS = [
     'asset tag',
@@ -391,11 +391,10 @@ const isValidPublicHostname = (
 const isValidPrivateHostname = (hostname: string) =>
 {
     const labels = hostname.toLowerCase().split('.');
-    const suffix = labels.at(-1) ?? '';
 
     return (
         labels.length >= 2 &&
-        PRIVATE_NETWORK_SUFFIXES.includes(suffix) &&
+        labels.some((label) => PRIVATE_NETWORK_SUFFIXES.includes(label)) &&
         labels.every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
     );
 };

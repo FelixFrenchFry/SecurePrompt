@@ -4,6 +4,11 @@ import {
     USE_RULES_DETECTION,
 } from './config';
 import { detectSensitiveItemsWithLocalModel } from './detect/local-model-based/detection-local-model-based';
+import { detectAccountItems } from './detect/rule-based/detect-account-items';
+import { detectEmailItems } from './detect/rule-based/detect-email-items';
+import { detectNetworkItems } from './detect/rule-based/detect-network-items';
+import { detectPhoneItems } from './detect/rule-based/detect-phone-items';
+import { detectSecretItems } from './detect/rule-based/detect-secret-items';
 import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rule-based';
 import type {
     MaskingMapping,
@@ -45,9 +50,29 @@ export type ManualSensitiveItemInput = {
 
 type PrivatizedPromptFromItemsOptions = {
     preferredMaskingMappings?: readonly MaskingMapping[];
+    useResidualRulesDetection?: boolean;
+};
+
+type TextRange = {
+    start: number;
+    end: number;
+};
+
+type ResidualDetectionPart = TextRange & {
+    sourceStart: number;
+};
+
+type ResidualDetectionInput = {
+    text: string;
+    parts: ResidualDetectionPart[];
+    protectedRanges: TextRange[];
 };
 
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
+const RESIDUAL_PLACEHOLDER_PATTERN =
+    /(?:EMAIL|PHONE|PERSON|ADDRESS|ACCOUNT|DATE|NETWORK|SECRET|OTHER)_\d{3,}/g;
+const RESIDUAL_PLACEHOLDER_VALUE_PATTERN =
+    /^(?:EMAIL|PHONE|PERSON|ADDRESS|ACCOUNT|DATE|NETWORK|SECRET|OTHER)_\d{3,}$/;
 
 const SENSITIVE_ITEM_CATEGORY_PRIORITY: SensitiveItemCategory[] = [
     'SECRET',
@@ -69,12 +94,34 @@ const AUTHORITATIVE_RULE_CATEGORIES = new Set<SensitiveItemCategory>([
     'SECRET',
 ]);
 
+const RESIDUAL_RULE_CATEGORIES = new Set<SensitiveItemCategory>([
+    'EMAIL',
+    'PHONE',
+    'ACCOUNT',
+    'NETWORK',
+    'SECRET',
+]);
+
+const RESIDUAL_MODEL_CATEGORIES = new Set<SensitiveItemCategory>([
+    'EMAIL',
+    'PHONE',
+    'ADDRESS',
+    'ACCOUNT',
+    'NETWORK',
+    'SECRET',
+]);
+
 // sync (rules-only) pipeline
 export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
 {
-    const detectedItems = detectSensitiveItemsSync(inputText, {});
+    const useRulesDetection = USE_RULES_DETECTION;
+    const detectedItems = detectSensitiveItemsSync(inputText, {
+        useRulesDetection,
+    });
 
-    return createPrivatizedPromptFromItems(inputText, detectedItems);
+    return createPrivatizedPromptFromItems(inputText, detectedItems, {
+        useResidualRulesDetection: useRulesDetection,
+    });
 };
 
 // async pipeline for detection with local model
@@ -84,8 +131,31 @@ export const createPrivatizedPromptAsync = async (
 ): Promise<PrivatizedPromptResult> =>
 {
     const detectedItems = await detectSensitiveItemsAsync(inputText, options);
+    const useRulesDetection = options.useRulesDetection ?? USE_RULES_DETECTION;
+    const result = createPrivatizedPromptFromItems(inputText, detectedItems, {
+        useResidualRulesDetection: useRulesDetection,
+    });
+    const useLocalModelDetection =
+        options.useLocalModelDetection ?? USE_LOCAL_MODEL_DETECTION;
 
-    return createPrivatizedPromptFromItems(inputText, detectedItems);
+    if (!useLocalModelDetection)
+    {
+        return result;
+    }
+
+    try
+    {
+        const residualItems = await detectResidualSensitiveItemsWithLocalModel(
+            inputText,
+            result,
+        );
+
+        return hardenPrivatizedPromptResult(inputText, result, residualItems);
+    }
+    catch
+    {
+        return result;
+    }
 };
 
 export const createPrivatizedPromptPreview = (
@@ -177,7 +247,7 @@ const createPrivatizedPromptFromItems = (
         };
     }
 
-    return {
+    const result = {
         privatizedPrompt,
         method: DEFAULT_PRIVATIZATION_METHOD,
         items: finalItems,
@@ -185,6 +255,266 @@ const createPrivatizedPromptFromItems = (
         segments,
         safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
     };
+
+    const useResidualRulesDetection =
+        options.useResidualRulesDetection ?? USE_RULES_DETECTION;
+    const residualItems = useResidualRulesDetection
+        ? detectResidualSensitiveItemsWithRules(inputText, result)
+        : [];
+
+    return hardenPrivatizedPromptResult(inputText, result, residualItems);
+};
+
+const hardenPrivatizedPromptResult = (
+    inputText: string,
+    result: PrivatizedPromptResult,
+    residualItems: SensitiveItem[],
+): PrivatizedPromptResult =>
+{
+    if (residualItems.length === 0)
+    {
+        return result;
+    }
+
+    const finalItems = resolveSensitiveItemOverlaps(inputText, [
+        ...result.items,
+        ...residualItems,
+    ]);
+    const maskingMappings = createMaskingMappings(
+        finalItems,
+        result.maskingMappings,
+    );
+
+    try
+    {
+        const maskedPrompt = applyMasksToItems(
+            inputText,
+            finalItems,
+            maskingMappings,
+            result.method,
+        );
+
+        return {
+            ...result,
+            items: finalItems,
+            maskingMappings,
+            privatizedPrompt: maskedPrompt.privatizedPrompt,
+            segments: maskedPrompt.segments,
+        };
+    }
+    catch
+    {
+        return {
+            ...result,
+            safeToInject: false,
+        };
+    }
+};
+
+const detectResidualSensitiveItemsWithRules = (
+    inputText: string,
+    result: PrivatizedPromptResult,
+): SensitiveItem[] =>
+{
+    const residualInput = createResidualDetectionInput(result.segments);
+
+    if (residualInput.text.trim().length === 0)
+    {
+        return [];
+    }
+
+    const detectedItems = [
+        ...detectEmailItems(residualInput.text),
+        ...detectPhoneItems(residualInput.text),
+        ...detectAccountItems(residualInput.text),
+        ...detectNetworkItems(residualInput.text),
+        ...detectSecretItems(residualInput.text),
+    ];
+
+    return mapResidualSensitiveItems(
+        inputText,
+        result.items,
+        residualInput,
+        detectedItems,
+        RESIDUAL_RULE_CATEGORIES,
+    );
+};
+
+const detectResidualSensitiveItemsWithLocalModel = async (
+    inputText: string,
+    result: PrivatizedPromptResult,
+): Promise<SensitiveItem[]> =>
+{
+    const residualInput = createResidualDetectionInput(result.segments);
+
+    if (residualInput.text.trim().length === 0)
+    {
+        return [];
+    }
+
+    const detectedItems = await detectSensitiveItemsWithLocalModel(residualInput.text);
+
+    return mapResidualSensitiveItems(
+        inputText,
+        result.items,
+        residualInput,
+        detectedItems,
+        RESIDUAL_MODEL_CATEGORIES,
+    );
+};
+
+const createResidualDetectionInput = (
+    segments: PrivatizedPromptSegment[],
+): ResidualDetectionInput =>
+{
+    const parts: ResidualDetectionPart[] = [];
+    let text = '';
+
+    for (const segment of segments)
+    {
+        if (segment.type !== 'text' || segment.text.length === 0)
+        {
+            continue;
+        }
+
+        if (text.length > 0)
+        {
+            text += '\n';
+        }
+
+        const start = text.length;
+        text += segment.text;
+        parts.push({
+            start,
+            end: text.length,
+            sourceStart: segment.sourceStart,
+        });
+    }
+
+    return {
+        text,
+        parts,
+        protectedRanges: findProtectedPlaceholderRanges(text),
+    };
+};
+
+const findProtectedPlaceholderRanges = (inputText: string): TextRange[] =>
+{
+    return [...inputText.matchAll(RESIDUAL_PLACEHOLDER_PATTERN)].map((match) =>
+    {
+        return {
+            start: match.index,
+            end: match.index + match[0].length,
+        };
+    });
+};
+
+const filterProtectedPlaceholderItems = (
+    inputText: string,
+    items: SensitiveItem[],
+) =>
+{
+    const protectedRanges = findProtectedPlaceholderRanges(inputText);
+
+    if (protectedRanges.length === 0)
+    {
+        return items;
+    }
+
+    return items.filter((item) =>
+    {
+        return !overlapsAnyRange(item, protectedRanges);
+    });
+};
+
+const mapResidualSensitiveItems = (
+    inputText: string,
+    existingItems: SensitiveItem[],
+    residualInput: ResidualDetectionInput,
+    detectedItems: SensitiveItem[],
+    categories: ReadonlySet<SensitiveItemCategory>,
+): SensitiveItem[] =>
+{
+    const residualItems: SensitiveItem[] = [];
+    let nextItemIndex = getNextResidualSensitiveItemIndex(existingItems);
+
+    for (const item of detectedItems)
+    {
+        if (
+            !categories.has(item.category) ||
+            overlapsAnyRange(item, residualInput.protectedRanges)
+        )
+        {
+            continue;
+        }
+
+        const mappedItem = mapResidualSensitiveItem(
+            inputText,
+            residualInput,
+            item,
+            nextItemIndex,
+        );
+
+        if (mappedItem == null)
+        {
+            continue;
+        }
+
+        residualItems.push(mappedItem);
+        nextItemIndex += 1;
+    }
+
+    return residualItems;
+};
+
+const mapResidualSensitiveItem = (
+    inputText: string,
+    residualInput: ResidualDetectionInput,
+    item: SensitiveItem,
+    itemIndex: number,
+): SensitiveItem | null =>
+{
+    const part = residualInput.parts.find((residualPart) =>
+    {
+        return item.start >= residualPart.start && item.end <= residualPart.end;
+    });
+
+    if (part == null)
+    {
+        return null;
+    }
+
+    const start = part.sourceStart + item.start - part.start;
+    const end = part.sourceStart + item.end - part.start;
+    const value = inputText.slice(start, end);
+
+    if (value !== item.value || RESIDUAL_PLACEHOLDER_VALUE_PATTERN.test(value))
+    {
+        return null;
+    }
+
+    return {
+        ...item,
+        id: createNumberedId('residual-sensitive-item', itemIndex),
+        start,
+        end,
+        value,
+    };
+};
+
+const getNextResidualSensitiveItemIndex = (items: SensitiveItem[]) =>
+{
+    return items.reduce((maximumIndex, item) =>
+    {
+        const match = /^residual-sensitive-item-(\d+)$/.exec(item.id);
+
+        if (match == null)
+        {
+            return maximumIndex;
+        }
+
+        return Math.max(maximumIndex, Number(match[1]));
+    }, 0) + 1;
 };
 
 const detectSensitiveItemsSync = (
@@ -200,7 +530,7 @@ const detectSensitiveItemsSync = (
         detectedItems.push(...detectSensitiveItemsWithRules(inputText));
     }
 
-    return detectedItems;
+    return filterProtectedPlaceholderItems(inputText, detectedItems);
 };
 
 const detectSensitiveItemsAsync = async (
@@ -217,7 +547,7 @@ const detectSensitiveItemsAsync = async (
         detectedItems.push(...(await detectSensitiveItemsWithLocalModel(inputText)));
     }
 
-    return detectedItems;
+    return filterProtectedPlaceholderItems(inputText, detectedItems);
 };
 
 const resolveSensitiveItemOverlaps = (
@@ -492,6 +822,17 @@ const isAuthoritativeRuleItem = (item: SensitiveItem) =>
 const sensitiveItemsOverlap = (left: SensitiveItem, right: SensitiveItem) =>
 {
     return left.start < right.end && right.start < left.end;
+};
+
+const overlapsAnyRange = (
+    range: Pick<TextRange, 'start' | 'end'>,
+    ranges: TextRange[],
+) =>
+{
+    return ranges.some((existingRange) =>
+    {
+        return range.start < existingRange.end && existingRange.start < range.end;
+    });
 };
 
 const groupOverlappingItems = (items: SensitiveItem[]): SensitiveItem[][] =>

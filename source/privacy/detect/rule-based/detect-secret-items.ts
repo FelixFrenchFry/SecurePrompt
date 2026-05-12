@@ -25,7 +25,7 @@ const PROVIDER_TOKEN_PATTERNS = [
     /\bgithub_pat_[A-Za-z0-9_]{40,}\b/g,
     /\bglpat-[A-Za-z0-9_-]{20,}\b/g,
     /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
-    /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
+    /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{16,}\b/g,
     /\bnpm_[A-Za-z0-9]{36}\b/g,
     /\blin_api_[A-Za-z0-9]{32,}\b/g,
     /\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b/g,
@@ -329,7 +329,7 @@ const isValidGenericSecretValue = (keyword: string, value: string) =>
 
     if (
         IGNORED_GENERIC_SECRET_VALUES.includes(normalizedValue) ||
-        /^[A-Z]+_\d{3}$/.test(value)
+        /^[A-Z]+_\d{3,}$/.test(value)
     )
     {
         return false;
