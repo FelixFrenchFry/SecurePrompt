@@ -4,6 +4,10 @@ import {
     type RuntimeMessage,
     type RuntimeResponse,
 } from '../source/messaging';
+import {
+    AI_CHAT_MATCHES,
+    getAiChatProviderByUrl,
+} from '../source/chat-targets';
 const BUTTON_ID = 'secureprompt-open-sidepanel';
 
 type ChromeRuntimeApi = {
@@ -39,36 +43,76 @@ const getExtensionRuntime = () =>
     return runtimeGlobal.chrome?.runtime;
 };
 
-const INPUT_SELECTORS = [
-    '#prompt-textarea',
-    '[data-testid="composer-text-input"]',
-    'div[contenteditable="true"][role="textbox"]',
-    'textarea',
-];
-
 declare global {
     interface Window {
         __securepromptMessageListenerRegistered?: boolean;
     }
 }
 
+const isVisibleElement = (element: HTMLElement) =>
+{
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+
+    return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden'
+    );
+};
+
+const isEditableElement = (element: HTMLElement) =>
+{
+    if (element.getAttribute('aria-disabled') === 'true') {
+        return false;
+    }
+
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+        return !element.disabled && !element.readOnly;
+    }
+
+    return !element.hasAttribute('disabled');
+};
+
 const findComposerInput = () =>
 {
-    for (const selector of INPUT_SELECTORS) {
-        const input = document.querySelector<HTMLElement>(selector);
+    const provider = getAiChatProviderByUrl(window.location.href);
+    const selectors = provider?.inputSelectors ?? [];
+    const seenInputs = new Set<HTMLElement>();
 
-        if (input != null && !input.hasAttribute('disabled')) {
-            return input;
+    for (const selector of selectors) {
+        const inputs = Array.from(document.querySelectorAll<HTMLElement>(selector));
+
+        for (const input of inputs) {
+            if (seenInputs.has(input)) {
+                continue;
+            }
+
+            seenInputs.add(input);
+
+            if (isEditableElement(input) && isVisibleElement(input)) {
+                return input;
+            }
         }
     }
 
     return null;
 };
 
-const setNativeValue = (element: HTMLTextAreaElement, value: string) =>
+const setNativeValue = (element: HTMLInputElement | HTMLTextAreaElement, value: string) =>
 {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    setter?.call(element, value);
+    const prototype = element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+
+    if (setter != null) {
+        setter.call(element, value);
+        return;
+    }
+
+    element.value = value;
 };
 
 const dispatchInputEvents = (element: HTMLElement) =>
@@ -91,35 +135,47 @@ const insertTextIntoContentEditable = (element: HTMLElement, text: string) =>
 
     if (!inserted) {
         element.textContent = text;
-        dispatchInputEvents(element);
     }
+
+    dispatchInputEvents(element);
 };
 
 const insertPromptIntoComposer = (text: string): RuntimeResponse =>
 {
+    const provider = getAiChatProviderByUrl(window.location.href);
     const input = findComposerInput();
 
     if (input == null) {
         return {
             ok: false,
-            error: 'Could not find the ChatGPT input field.',
+            provider: provider?.id,
+            providerLabel: provider?.label,
+            error: `Could not find the ${provider?.label ?? 'AI chat'} input field.`,
         };
     }
 
-    if (input instanceof HTMLTextAreaElement) {
+    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
         input.focus();
         setNativeValue(input, text);
         dispatchInputEvents(input);
-        return { ok: true };
+        return {
+            ok: true,
+            provider: provider?.id,
+            providerLabel: provider?.label,
+        };
     }
 
     insertTextIntoContentEditable(input, text);
 
-    return { ok: true };
+    return {
+        ok: true,
+        provider: provider?.id,
+        providerLabel: provider?.label,
+    };
 };
 
 export default defineContentScript({
-    matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+    matches: AI_CHAT_MATCHES,
     runAt: 'document_idle',
     main()
     {

@@ -37,7 +37,11 @@ import {
     X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
-import { INJECT_PROMPT_MESSAGE, type RuntimeResponse } from '../../source/messaging';
+import {
+    GET_CHAT_TARGET_MESSAGE,
+    INJECT_PROMPT_MESSAGE,
+    type RuntimeResponse,
+} from '../../source/messaging';
 import {
     createPrivatizedPromptAsync,
     createPrivatizedPromptPreview,
@@ -71,6 +75,7 @@ const PREVIEW_TOOLTIP_HIDE_DELAY_MS = 220;
 const PREVIEW_TOOLTIP_BRIDGE_PADDING = 10;
 const PREVIEW_TOOLTIP_BRIDGE_OVERLAP = 2;
 const PREVIEW_SELECTION_POPOVER_MAX_WIDTH = 236;
+const AI_CHAT_FALLBACK_LABEL = 'AI chat';
 const MODEL_HOST_PERMISSIONS = [
     'https://huggingface.co/*',
     'https://*.huggingface.co/*',
@@ -1205,6 +1210,13 @@ const getClampedPreviewTooltipArrowLeft = (
     return clamp(anchorLeft - tooltipLeft, 8, tooltipWidth - 8);
 };
 
+const requestCurrentChatTarget = async () =>
+{
+    return (await browser.runtime.sendMessage({
+        type: GET_CHAT_TARGET_MESSAGE,
+    })) as RuntimeResponse | undefined;
+};
+
 export function App()
 {
     const [appView, setAppView] = useState<AppView>('main');
@@ -1228,6 +1240,8 @@ export function App()
     const [scanDetailSearchText, setScanDetailSearchText] = useState('');
     const [clipboardStatus, setClipboardStatus] = useState('');
     const [sendStatus, setSendStatus] = useState('');
+    const [chatTargetLabel, setChatTargetLabel] = useState(AI_CHAT_FALLBACK_LABEL);
+    const [hasChatTarget, setHasChatTarget] = useState(false);
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
@@ -1260,6 +1274,21 @@ export function App()
     const hidePreviewSelectionPopover = () =>
     {
         setPreviewSelectionPopover(null);
+    };
+    const updateChatTargetState = (response: RuntimeResponse | undefined) =>
+    {
+        if (response?.providerLabel != null)
+        {
+            setChatTargetLabel(response.providerLabel);
+            setHasChatTarget(true);
+            return;
+        }
+
+        if (response?.ok === false)
+        {
+            setChatTargetLabel(AI_CHAT_FALLBACK_LABEL);
+            setHasChatTarget(false);
+        }
     };
     const queueHidePreviewTooltip = () =>
     {
@@ -1402,6 +1431,9 @@ export function App()
         getScanDetailSortButtonLabel(scanDetailSortDirection);
     const scanDetailSortTitle =
         `${scanDetailSortLabel}. ${scanDetailSortButtonLabel}.`;
+    const sendButtonLabel = hasChatTarget
+        ? `Send to ${chatTargetLabel}`
+        : 'Open supported AI chat';
     const clearScanDetailSearch = () =>
     {
         setScanDetailSearchText('');
@@ -1721,6 +1753,55 @@ export function App()
     {
         settingsRef.current = settings;
     }, [settings]);
+
+    useEffect(() =>
+    {
+        let isMounted = true;
+
+        const refreshChatTarget = async () =>
+        {
+            try
+            {
+                const response = await requestCurrentChatTarget();
+
+                if (isMounted)
+                {
+                    updateChatTargetState(response);
+                }
+            }
+            catch
+            {
+                if (isMounted)
+                {
+                    setChatTargetLabel(AI_CHAT_FALLBACK_LABEL);
+                    setHasChatTarget(false);
+                }
+            }
+        };
+        const refreshVisibleChatTarget = () =>
+        {
+            if (document.visibilityState === 'visible')
+            {
+                void refreshChatTarget();
+            }
+        };
+
+        void refreshChatTarget();
+        const refreshChatTargetInterval = window.setInterval(() =>
+        {
+            void refreshChatTarget();
+        }, 3000);
+        window.addEventListener('focus', refreshChatTarget);
+        document.addEventListener('visibilitychange', refreshVisibleChatTarget);
+
+        return () =>
+        {
+            isMounted = false;
+            window.clearInterval(refreshChatTargetInterval);
+            window.removeEventListener('focus', refreshChatTarget);
+            document.removeEventListener('visibilitychange', refreshVisibleChatTarget);
+        };
+    }, []);
 
     useEffect(() =>
     {
@@ -2134,9 +2215,9 @@ export function App()
         }
     };
 
-    const sendToChatGpt = async () =>
+    const sendToAiChat = async () =>
     {
-        if (!privatizedPrompt || !canUsePrivatizedPrompt) {
+        if (!privatizedPrompt || !canUsePrivatizedPrompt || !hasChatTarget) {
             return;
         }
 
@@ -2146,15 +2227,17 @@ export function App()
                 type: INJECT_PROMPT_MESSAGE,
                 text: privatizedPrompt,
             })) as RuntimeResponse | undefined;
+            updateChatTargetState(response);
 
             if (response?.ok) {
-                setSendStatus('Sent to ChatGPT.');
+                setSendStatus(`Sent to ${response.providerLabel ?? chatTargetLabel}.`);
                 return;
             }
 
-            setSendStatus(response?.error ?? 'Could not send to ChatGPT.');
+            setSendStatus(response?.error ?? 'Could not send to the AI chat page.');
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Could not send to ChatGPT.';
+            const message =
+                error instanceof Error ? error.message : 'Could not send to the AI chat page.';
             setSendStatus(message);
         }
     };
@@ -2484,11 +2567,16 @@ export function App()
                 <button
                     className="primary-button panel-action"
                     type="button"
-                    onClick={sendToChatGpt}
-                    disabled={!privatizedPrompt || !canUsePrivatizedPrompt}
+                    onClick={sendToAiChat}
+                    disabled={!privatizedPrompt || !canUsePrivatizedPrompt || !hasChatTarget}
+                    title={
+                        hasChatTarget
+                            ? undefined
+                            : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.'
+                    }
                 >
                     <Send size={18} aria-hidden="true" />
-                    Send to ChatGPT
+                    {sendButtonLabel}
                 </button>
             </section>
 

@@ -1,5 +1,10 @@
 import { browser } from 'wxt/browser';
 import {
+    getAiChatProviderByUrl,
+    type AiChatProvider,
+} from '../source/chat-targets';
+import {
+    GET_CHAT_TARGET_MESSAGE,
     INJECT_PROMPT_MESSAGE,
     OPEN_SIDEPANEL_MESSAGE,
     type RuntimeMessage,
@@ -32,20 +37,11 @@ const chromeRuntime = (globalThis as typeof globalThis & { chrome: ChromeRuntime
 
 export default defineBackground(() =>
 {
-    let lastChatGptTabId: number | undefined;
+    let lastAiChatTabId: number | undefined;
 
-    const isChatGptUrl = (url: string | undefined) =>
+    const getChatProvider = (url: string | undefined) =>
     {
-        if (url == null) {
-            return false;
-        }
-
-        try {
-            const origin = new URL(url).origin;
-            return origin === 'https://chatgpt.com' || origin === 'https://chat.openai.com';
-        } catch {
-            return false;
-        }
+        return getAiChatProviderByUrl(url);
     };
 
     const getTab = async (tabId: number | undefined) =>
@@ -61,31 +57,39 @@ export default defineBackground(() =>
         }
     };
 
-    const findTargetChatGptTab = async () =>
+    const findTargetAiChatTab = async () =>
     {
         const [activeTab] = await browser.tabs.query({
             active: true,
             lastFocusedWindow: true,
         });
+        const activeProvider = getChatProvider(activeTab?.url);
 
-        if (activeTab?.id != null && isChatGptUrl(activeTab.url)) {
-            lastChatGptTabId = activeTab.id;
-            return activeTab;
+        if (activeTab?.id != null && activeProvider != null) {
+            lastAiChatTabId = activeTab.id;
+            return {
+                tab: activeTab,
+                provider: activeProvider,
+            };
         }
 
-        const previousTab = await getTab(lastChatGptTabId);
+        const previousTab = await getTab(lastAiChatTabId);
+        const previousProvider = getChatProvider(previousTab?.url);
 
-        if (previousTab?.id != null && isChatGptUrl(previousTab.url)) {
-            return previousTab;
+        if (previousTab?.id != null && previousProvider != null) {
+            return {
+                tab: previousTab,
+                provider: previousProvider,
+            };
         }
 
         return undefined;
     };
 
-    const rememberChatGptTab = (tabId: number | undefined, url: string | undefined) =>
+    const rememberAiChatTab = (tabId: number | undefined, url: string | undefined) =>
     {
-        if (tabId != null && isChatGptUrl(url)) {
-            lastChatGptTabId = tabId;
+        if (tabId != null && getChatProvider(url) != null) {
+            lastAiChatTabId = tabId;
         }
     };
 
@@ -95,7 +99,7 @@ export default defineBackground(() =>
             return;
         }
 
-        rememberChatGptTab(tabId, url);
+        rememberAiChatTab(tabId, url);
         await browser.sidePanel.open({ tabId });
     };
 
@@ -117,11 +121,28 @@ export default defineBackground(() =>
 
         return {
             ok: false,
-            error: 'ChatGPT did not confirm the prompt insertion. Refresh ChatGPT and try again.',
+            error:
+                'The AI chat page did not confirm the prompt insertion. Refresh the page and try again.',
         };
     };
 
-    const sendPromptToTab = async (tabId: number, text: string): Promise<RuntimeResponse> =>
+    const withProvider = (
+        response: RuntimeResponse,
+        provider: AiChatProvider,
+    ): RuntimeResponse =>
+    {
+        return {
+            ...response,
+            provider: provider.id,
+            providerLabel: provider.label,
+        };
+    };
+
+    const sendPromptToTab = async (
+        tabId: number,
+        provider: AiChatProvider,
+        text: string,
+    ): Promise<RuntimeResponse> =>
     {
         const message = {
             type: INJECT_PROMPT_MESSAGE,
@@ -130,27 +151,47 @@ export default defineBackground(() =>
 
         try {
             const response = await browser.tabs.sendMessage(tabId, message);
-            return normalizeRuntimeResponse(response);
+            return withProvider(normalizeRuntimeResponse(response), provider);
         } catch {
             return {
                 ok: false,
-                error: 'Could not connect to the ChatGPT page. Refresh ChatGPT and try again.',
+                provider: provider.id,
+                providerLabel: provider.label,
+                error: `Could not connect to ${provider.label}. Refresh ${provider.label} and try again.`,
             };
         }
     };
 
     const injectPromptIntoActiveTab = async (text: string): Promise<RuntimeResponse> =>
     {
-        const targetTab = await findTargetChatGptTab();
+        const target = await findTargetAiChatTab();
 
-        if (targetTab?.id == null) {
+        if (target?.tab.id == null) {
             return {
                 ok: false,
-                error: 'Open ChatGPT in the active tab before sending.',
+                error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
             };
         }
 
-        return sendPromptToTab(targetTab.id, text);
+        return sendPromptToTab(target.tab.id, target.provider, text);
+    };
+
+    const getCurrentChatTarget = async (): Promise<RuntimeResponse> =>
+    {
+        const target = await findTargetAiChatTab();
+
+        if (target?.tab.id == null) {
+            return {
+                ok: false,
+                error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
+            };
+        }
+
+        return {
+            ok: true,
+            provider: target.provider.id,
+            providerLabel: target.provider.label,
+        };
     };
 
     void browser.sidePanel
@@ -173,7 +214,21 @@ export default defineBackground(() =>
                 {
                     sendResponse({
                         ok: false,
-                        error: 'Could not send to ChatGPT.',
+                        error: 'Could not send to the AI chat page.',
+                    } satisfies RuntimeResponse);
+                });
+
+            return true;
+        }
+
+        if (message.type === GET_CHAT_TARGET_MESSAGE) {
+            void getCurrentChatTarget()
+                .then(sendResponse)
+                .catch(() =>
+                {
+                    sendResponse({
+                        ok: false,
+                        error: 'Could not find a supported AI chat page.',
                     } satisfies RuntimeResponse);
                 });
 

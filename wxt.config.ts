@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'wxt';
+import { AI_CHAT_MATCHES } from './source/chat-targets';
 
 const onnxRuntimeDistDirectory = dirname(fileURLToPath(import.meta.resolve('onnxruntime-web/wasm')));
 const onnxRuntimeAliasDirectory = `${onnxRuntimeDistDirectory.replace(/\\/g, '/')}/`;
@@ -36,7 +37,7 @@ export default defineConfig({
             },
         },
         permissions: ['sidePanel', 'clipboardWrite', 'storage'],
-        host_permissions: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+        host_permissions: AI_CHAT_MATCHES,
         content_security_policy: {
             extension_pages:
                 "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';",
@@ -50,7 +51,7 @@ export default defineConfig({
         web_accessible_resources: [
             {
                 resources: ['icons/logo-32x32.png'],
-                matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
+                matches: AI_CHAT_MATCHES,
             },
         ],
     },
