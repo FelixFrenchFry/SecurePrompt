@@ -63,7 +63,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
             },
             {
                 key: 'localModelDetectionEnabled',
-                label: 'Local model test',
+                label: 'Local model detection',
                 Icon: Cpu,
             },
         ],

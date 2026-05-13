@@ -75,6 +75,55 @@ const isEditableElement = (element: HTMLElement) =>
     return !element.hasAttribute('disabled');
 };
 
+const getComposerInputScore = (element: HTMLElement) =>
+{
+    const rect = element.getBoundingClientRect();
+    const labelText = [
+        element.getAttribute('aria-label'),
+        element.getAttribute('placeholder'),
+        element.getAttribute('data-placeholder'),
+    ]
+        .filter((value): value is string => value != null)
+        .join(' ')
+        .toLowerCase();
+    let score = Math.min(window.innerHeight, Math.max(0, rect.bottom));
+
+    if (document.activeElement === element)
+    {
+        score += 1000;
+    }
+
+    if (/prompt|message|ask|chat/.test(labelText))
+    {
+        score += 400;
+    }
+
+    if (element.getAttribute('role') === 'textbox')
+    {
+        score += 120;
+    }
+
+    if (element instanceof HTMLTextAreaElement)
+    {
+        score += 80;
+    }
+
+    if (element.isContentEditable)
+    {
+        score += 60;
+    }
+
+    return score;
+};
+
+const chooseComposerInput = (inputs: HTMLElement[]) =>
+{
+    return [...inputs].sort((left, right) =>
+    {
+        return getComposerInputScore(right) - getComposerInputScore(left);
+    })[0];
+};
+
 const findComposerInput = () =>
 {
     const provider = getAiChatProviderByUrl(window.location.href);
@@ -82,6 +131,7 @@ const findComposerInput = () =>
     const seenInputs = new Set<HTMLElement>();
 
     for (const selector of selectors) {
+        const selectorInputs: HTMLElement[] = [];
         const inputs = Array.from(document.querySelectorAll<HTMLElement>(selector));
 
         for (const input of inputs) {
@@ -92,8 +142,13 @@ const findComposerInput = () =>
             seenInputs.add(input);
 
             if (isEditableElement(input) && isVisibleElement(input)) {
-                return input;
+                selectorInputs.push(input);
             }
+        }
+
+        if (selectorInputs.length > 0)
+        {
+            return chooseComposerInput(selectorInputs);
         }
     }
 
@@ -119,6 +174,43 @@ const dispatchInputEvents = (element: HTMLElement) =>
 {
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
+};
+
+const getComposerText = (element: HTMLElement) =>
+{
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)
+    {
+        return element.value;
+    }
+
+    return element.innerText || element.textContent || '';
+};
+
+const normalizeComposerText = (text: string) =>
+{
+    return text
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .trim();
+};
+
+const isPromptInserted = (element: HTMLElement, text: string) =>
+{
+    const expectedText = normalizeComposerText(text);
+    const actualText = normalizeComposerText(getComposerText(element));
+
+    return actualText === expectedText || actualText.includes(expectedText);
+};
+
+const createInsertionVerificationError = (
+    providerLabel: string | undefined,
+): RuntimeResponse =>
+{
+    return {
+        ok: false,
+        providerLabel,
+        error: `Could not verify prompt insertion in ${providerLabel ?? 'the AI chat page'}.`,
+    };
 };
 
 const insertTextIntoContentEditable = (element: HTMLElement, text: string) =>
@@ -158,6 +250,12 @@ const insertPromptIntoComposer = (text: string): RuntimeResponse =>
         input.focus();
         setNativeValue(input, text);
         dispatchInputEvents(input);
+
+        if (!isPromptInserted(input, text))
+        {
+            return createInsertionVerificationError(provider?.label);
+        }
+
         return {
             ok: true,
             provider: provider?.id,
@@ -166,6 +264,11 @@ const insertPromptIntoComposer = (text: string): RuntimeResponse =>
     }
 
     insertTextIntoContentEditable(input, text);
+
+    if (!isPromptInserted(input, text))
+    {
+        return createInsertionVerificationError(provider?.label);
+    }
 
     return {
         ok: true,

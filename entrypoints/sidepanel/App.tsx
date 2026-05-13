@@ -1170,7 +1170,7 @@ export function App()
         null,
     );
     const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
-    const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
+    const [isPrivatizing, setIsPrivatizing] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
     const [previewTooltip, setPreviewTooltip] = useState<PreviewTooltip | null>(null);
@@ -1183,6 +1183,7 @@ export function App()
     const previewRef = useRef<HTMLDivElement | null>(null);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
     const previewSelectionPopoverRef = useRef<HTMLDivElement | null>(null);
+    const privatizationRunIdRef = useRef(0);
     const settingsRef = useRef(settings);
     const settingsSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -1290,6 +1291,8 @@ export function App()
         },
     );
     const hasEnabledDetectionCategories = enabledPrivacyScanCategories.length > 0;
+    const hasEnabledDetectionSources =
+        settings.rulesDetectionEnabled || settings.localModelDetectionEnabled;
     const previewContent = getPreviewContent(
         privatizedPrompt,
         previewSegments,
@@ -1387,7 +1390,7 @@ export function App()
     const sendButtonLabel = hasChatTarget
         ? `Send to ${chatTargetLabel}`
         : 'Open supported AI chat';
-    const visibleLocalModelProgress = isTestingLocalModel ? localModelProgress : null;
+    const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
     const localModelProgressLabel =
         visibleLocalModelProgress == null
             ? ''
@@ -1403,6 +1406,15 @@ export function App()
     const localModelProgressIsIndeterminate =
         visibleLocalModelProgress != null &&
         isLocalModelProgressIndeterminate(visibleLocalModelProgress);
+    const updatePrompt = (event: ReactChangeEvent<HTMLTextAreaElement>) =>
+    {
+        privatizationRunIdRef.current += 1;
+        setPrompt(event.target.value);
+        setIsPrivatizing(false);
+        setLocalModelProgress(null);
+        setCanUsePrivatizedPrompt(false);
+        setSendStatus('');
+    };
     const clearScanDetailSearch = () =>
     {
         setScanDetailSearchText('');
@@ -1730,6 +1742,18 @@ export function App()
 
         hidePreviewSelectionPopover();
     }, [hasEnabledDetectionCategories]);
+
+    useEffect(() =>
+    {
+        privatizationRunIdRef.current += 1;
+        setIsPrivatizing(false);
+        setLocalModelProgress(null);
+        setCanUsePrivatizedPrompt(false);
+    }, [
+        settings.enabledCategories,
+        settings.localModelDetectionEnabled,
+        settings.rulesDetectionEnabled,
+    ]);
 
     useEffect(() =>
     {
@@ -2075,103 +2099,191 @@ export function App()
         });
     }, [previewSelectionPopover]);
 
-    const privatizePrompt = async () =>
+    const applyUnsafeRulesOnlyFallback = async (
+        inputText: string,
+        runId: number,
+        error: unknown,
+    ) =>
     {
-        if (!prompt || isTestingLocalModel) {
+        const failureStatus = getLocalModelFailureStatus(error);
+
+        if (privatizationRunIdRef.current !== runId)
+        {
+            return;
+        }
+
+        if (!settings.rulesDetectionEnabled)
+        {
+            setClipboardStatus(`${failureStatus} Rules fallback is disabled.`);
+            setCanUsePrivatizedPrompt(false);
             return;
         }
 
         try
         {
-            const result = await createPrivatizedPromptAsync(prompt, {
+            const fallbackResult = await createPrivatizedPromptAsync(inputText, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
                 enabledCategories: settings.enabledCategories,
-                onBenchmark: setLatestBenchmark,
+                onBenchmark: (benchmark) =>
+                {
+                    if (privatizationRunIdRef.current === runId)
+                    {
+                        setLatestBenchmark(benchmark);
+                    }
+                },
             });
 
-            applyPrivatizedResult(prompt, result);
-            setSendStatus('');
+            if (privatizationRunIdRef.current !== runId)
+            {
+                return;
+            }
 
-            if (!result.safeToInject) {
+            applyPrivatizedResult(inputText, {
+                ...fallbackResult,
+                safeToInject: false,
+            });
+            setClipboardStatus(failureStatus);
+        }
+        catch
+        {
+            if (privatizationRunIdRef.current !== runId)
+            {
+                return;
+            }
+
+            setClipboardStatus(
+                `${failureStatus} Could not create rules-only fallback.`,
+            );
+            setCanUsePrivatizedPrompt(false);
+        }
+    };
+
+    const privatizePrompt = async () =>
+    {
+        if (
+            !prompt ||
+            isPrivatizing ||
+            !hasEnabledDetectionSources ||
+            !hasEnabledDetectionCategories
+        )
+        {
+            return;
+        }
+
+        const inputText = prompt;
+        const runId = privatizationRunIdRef.current + 1;
+        const updateRunLocalModelProgress = (progress: LocalModelProgress) =>
+        {
+            if (privatizationRunIdRef.current === runId)
+            {
+                setLocalModelProgress(progress);
+            }
+        };
+        const updateRunBenchmark = (benchmark: PrivacyBenchmark) =>
+        {
+            if (privatizationRunIdRef.current === runId)
+            {
+                setLatestBenchmark(benchmark);
+            }
+        };
+
+        privatizationRunIdRef.current = runId;
+        setIsPrivatizing(true);
+        setCanUsePrivatizedPrompt(false);
+        setClipboardStatus('');
+        setSendStatus('');
+
+        if (settings.localModelDetectionEnabled)
+        {
+            setLocalModelProgress({
+                phase: 'permission',
+                label: 'Requesting model download permission.',
+            });
+        }
+        else
+        {
+            setLocalModelProgress(null);
+        }
+
+        try
+        {
+            if (settings.localModelDetectionEnabled)
+            {
+                const hasPermission = await requestModelDownloadPermission();
+
+                if (!hasPermission)
+                {
+                    throw new Error('Model download permission was not granted.');
+                }
+            }
+
+            const result = await createPrivatizedPromptAsync(inputText, {
+                useLocalModelDetection: settings.localModelDetectionEnabled,
+                useRulesDetection: settings.rulesDetectionEnabled,
+                enabledCategories: settings.enabledCategories,
+                onLocalModelProgress: settings.localModelDetectionEnabled
+                    ? updateRunLocalModelProgress
+                    : undefined,
+                onBenchmark: updateRunBenchmark,
+            });
+
+            if (privatizationRunIdRef.current !== runId)
+            {
+                return;
+            }
+
+            applyPrivatizedResult(inputText, result);
+
+            if (settings.localModelDetectionEnabled)
+            {
+                setLocalModelProgress({
+                    phase: 'done',
+                    label: 'Privatized prompt ready.',
+                    progress: 100,
+                });
+            }
+
+            if (!result.safeToInject)
+            {
                 setClipboardStatus('Preview only. Sending is disabled.');
                 return;
             }
 
-            setClipboardStatus('Privatized prompt updated.');
+            setClipboardStatus('Privatized prompt ready.');
         }
-        catch
+        catch (error)
         {
+            if (privatizationRunIdRef.current !== runId)
+            {
+                return;
+            }
+
+            if (settings.localModelDetectionEnabled)
+            {
+                setLocalModelProgress({
+                    phase: 'error',
+                    label: 'Local model failed.',
+                });
+
+                await applyUnsafeRulesOnlyFallback(inputText, runId, error);
+                return;
+            }
+
             setClipboardStatus('Could not privatize prompt.');
         }
-    };
-
-    const testLocalModelPrivatization = async () =>
-    {
-        if (!prompt || isTestingLocalModel || !settings.localModelDetectionEnabled) {
-            return;
-        }
-
-        setIsTestingLocalModel(true);
-        setLocalModelProgress({
-            phase: 'permission',
-            label: 'Requesting model download permission.',
-        });
-        setClipboardStatus('');
-        setSendStatus('');
-
-        try {
-            const hasPermission = await requestModelDownloadPermission();
-
-            if (!hasPermission) {
-                setLocalModelProgress(null);
-                setClipboardStatus('Model download permission was not granted.');
-                return;
+        finally
+        {
+            if (privatizationRunIdRef.current === runId)
+            {
+                setIsPrivatizing(false);
             }
-
-            const result = await createPrivatizedPromptAsync(prompt, {
-                useLocalModelDetection: true,
-                useRulesDetection: settings.rulesDetectionEnabled,
-                enabledCategories: settings.enabledCategories,
-                onLocalModelProgress: setLocalModelProgress,
-                onBenchmark: setLatestBenchmark,
-            });
-
-            applyPrivatizedResult(prompt, result);
-            setLocalModelProgress({
-                phase: 'done',
-                label: 'Local model result updated.',
-                progress: 100,
-            });
-
-            if (!result.safeToInject) {
-                setClipboardStatus('Local model preview only. Sending is disabled.');
-                return;
-            }
-
-            setClipboardStatus('Local model result updated.');
-        } catch (error) {
-            setLocalModelProgress({
-                phase: 'error',
-                label: 'Local model failed.',
-            });
-
-            const fallbackResult = await createPrivatizedPromptAsync(prompt, {
-                useLocalModelDetection: false,
-                useRulesDetection: settings.rulesDetectionEnabled,
-                enabledCategories: settings.enabledCategories,
-                onBenchmark: setLatestBenchmark,
-            });
-
-            applyPrivatizedResult(prompt, fallbackResult);
-            setClipboardStatus(getLocalModelFailureStatus(error));
-        } finally {
-            setIsTestingLocalModel(false);
         }
     };
 
     const clearPrompts = () =>
     {
+        privatizationRunIdRef.current += 1;
         setPrompt('');
         setPrivatizedPrompt('');
         setPrivatizedInputText('');
@@ -2184,6 +2296,7 @@ export function App()
         setScanDetailSortDirection('neutral');
         setScanDetailSearchText('');
         setCanUsePrivatizedPrompt(false);
+        setIsPrivatizing(false);
         setLocalModelProgress(null);
         setLatestBenchmark(null);
         setDiagnosticsExpanded(false);
@@ -2322,7 +2435,7 @@ export function App()
                     id="original-prompt"
                     className="prompt-input"
                     value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
+                    onChange={updatePrompt}
                     placeholder="Type or paste your prompt here..."
                     spellCheck="true"
                 />
@@ -2333,41 +2446,20 @@ export function App()
                         onClick={privatizePrompt}
                         disabled={
                             prompt.trim().length === 0 ||
-                            isTestingLocalModel ||
-                            !settings.rulesDetectionEnabled ||
+                            isPrivatizing ||
+                            !hasEnabledDetectionSources ||
                             !hasEnabledDetectionCategories
                         }
                         title={
                             !hasEnabledDetectionCategories
                                 ? 'Enable at least one detection category in settings.'
-                                : settings.rulesDetectionEnabled
+                                : hasEnabledDetectionSources
                                   ? undefined
-                                  : 'Rules detection is disabled in settings.'
+                                  : 'Enable rules or local model detection in settings.'
                         }
                     >
                         <StepForward size={19} aria-hidden="true" />
-                        Privatize
-                    </button>
-                    <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={testLocalModelPrivatization}
-                        disabled={
-                            prompt.trim().length === 0 ||
-                            isTestingLocalModel ||
-                            !settings.localModelDetectionEnabled ||
-                            !hasEnabledDetectionCategories
-                        }
-                        title={
-                            !hasEnabledDetectionCategories
-                                ? 'Enable at least one detection category in settings.'
-                                : settings.localModelDetectionEnabled
-                                  ? undefined
-                                  : 'Local model test is disabled in settings.'
-                        }
-                    >
-                        <Cpu size={17} aria-hidden="true" />
-                        {isTestingLocalModel ? 'Testing...' : 'Test model'}
+                        {isPrivatizing ? 'Privatizing...' : 'Privatize'}
                     </button>
                 </div>
                 {visibleLocalModelProgress != null ? (
@@ -2687,6 +2779,11 @@ const getLocalModelFailureStatus = (error: unknown) =>
 
     if (isLocalModelRuntimeError(message)) {
         return 'Local model runtime failed. Showing rules-only preview.';
+    }
+
+    if (/permission|not granted/i.test(message))
+    {
+        return 'Model download permission was not granted. Showing rules-only preview.';
     }
 
     if (/QuotaExceeded|quota|storage/i.test(message)) {

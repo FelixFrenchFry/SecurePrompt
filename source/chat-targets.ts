@@ -22,6 +22,7 @@ export const AI_CHAT_PROVIDERS: AiChatProvider[] = [
         matches: ['https://chatgpt.com/*', 'https://chat.openai.com/*'],
         inputSelectors: [
             '#prompt-textarea',
+            '#prompt-textarea[contenteditable="true"]',
             '[data-testid="composer-text-input"]',
             ...COMMON_INPUT_SELECTORS,
         ],
@@ -33,7 +34,9 @@ export const AI_CHAT_PROVIDERS: AiChatProvider[] = [
         matches: ['https://claude.ai/*'],
         inputSelectors: [
             '.ProseMirror[contenteditable="true"]',
+            '[data-testid="chat-input"] [contenteditable="true"]',
             '[contenteditable="true"][data-placeholder]',
+            '[contenteditable="true"][aria-label*="prompt" i]',
             ...COMMON_INPUT_SELECTORS,
         ],
     },
@@ -45,6 +48,7 @@ export const AI_CHAT_PROVIDERS: AiChatProvider[] = [
         inputSelectors: [
             'rich-textarea [contenteditable="true"]',
             '.ql-editor[contenteditable="true"]',
+            '[contenteditable="true"][aria-label*="enter a prompt" i]',
             '[contenteditable="true"][aria-label*="prompt" i]',
             ...COMMON_INPUT_SELECTORS,
         ],
@@ -56,7 +60,9 @@ export const AI_CHAT_PROVIDERS: AiChatProvider[] = [
         matches: ['https://perplexity.ai/*', 'https://www.perplexity.ai/*'],
         inputSelectors: [
             'textarea[placeholder]',
+            'textarea[aria-label*="ask" i]',
             '[contenteditable="true"][data-lexical-editor="true"]',
+            '[contenteditable="true"][aria-label*="ask" i]',
             ...COMMON_INPUT_SELECTORS,
         ],
     },

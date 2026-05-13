@@ -67,6 +67,7 @@ type PrivatizedPromptFromItemsOptions = {
     preferredMaskingMappings?: readonly MaskingMapping[];
     useResidualRulesDetection?: boolean;
     enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
+    safeToInject?: boolean;
     benchmark?: PrivacyBenchmarkRecorder;
 };
 
@@ -105,7 +106,6 @@ type PrivacyBenchmarkRecorder = {
     ) => void;
 };
 
-const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
 const RESIDUAL_PLACEHOLDER_PATTERN =
     /(?:EMAIL|PHONE|PERSON|ADDRESS|ACCOUNT|DATE|NETWORK|SECRET|OTHER)_\d{3,}/g;
 const RESIDUAL_PLACEHOLDER_VALUE_PATTERN =
@@ -179,6 +179,33 @@ const getEnabledCategorySet = (
         {
             return enabledCategories[category] !== false;
         }),
+    );
+};
+
+const hasEnabledSensitiveItemCategories = (
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
+) =>
+{
+    if (enabledCategories == null)
+    {
+        return true;
+    }
+
+    return SENSITIVE_ITEM_CATEGORY_PRIORITY.some((category) =>
+    {
+        return enabledCategories[category] !== false;
+    });
+};
+
+const canInjectPrivatizedPrompt = (
+    useRulesDetection: boolean,
+    useLocalModelDetection: boolean,
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
+) =>
+{
+    return (
+        (useRulesDetection || useLocalModelDetection) &&
+        hasEnabledSensitiveItemCategories(enabledCategories)
     );
 };
 
@@ -325,6 +352,7 @@ export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResul
 
     return createPrivatizedPromptFromItems(inputText, detectedItems, {
         useResidualRulesDetection: useRulesDetection,
+        safeToInject: canInjectPrivatizedPrompt(useRulesDetection, false, undefined),
     });
 };
 
@@ -338,6 +366,11 @@ export const createPrivatizedPromptAsync = async (
     const useLocalModelDetection =
         options.useLocalModelDetection ?? USE_LOCAL_MODEL_DETECTION;
     const benchmark = createPrivacyBenchmarkRecorder(inputText, options.onBenchmark);
+    const safeToInject = canInjectPrivatizedPrompt(
+        useRulesDetection,
+        useLocalModelDetection,
+        options.enabledCategories,
+    );
     const detectedItems: SensitiveItem[] = [];
     const rulesItems = benchmark
         ? benchmark.measure(
@@ -384,6 +417,7 @@ export const createPrivatizedPromptAsync = async (
         {
             useResidualRulesDetection: useRulesDetection,
             enabledCategories: options.enabledCategories,
+            safeToInject,
             benchmark,
         },
     );
@@ -430,8 +464,13 @@ export const createPrivatizedPromptAsync = async (
     }
     catch
     {
-        benchmark?.finish(result, useRulesDetection, useLocalModelDetection);
-        return result;
+        const unsafeResult = {
+            ...result,
+            safeToInject: false,
+        };
+
+        benchmark?.finish(unsafeResult, useRulesDetection, useLocalModelDetection);
+        return unsafeResult;
     }
 };
 
@@ -605,7 +644,7 @@ const createInitialPrivatizedPromptResult = (
         items: finalItems,
         maskingMappings,
         segments,
-        safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
+        safeToInject: options.safeToInject ?? false,
     };
 };
 

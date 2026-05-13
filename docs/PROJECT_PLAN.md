@@ -99,7 +99,7 @@ Settings are persisted locally in extension storage. They are limited to non-sen
 
 - Dark mode.
 - Rules detection enabled.
-- Local model test enabled.
+- Local model detection enabled.
 - Enabled detection categories.
 - Prompt header mode.
 - Custom prompt header text.
