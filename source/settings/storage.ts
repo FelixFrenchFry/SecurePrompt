@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import {
     DEFAULT_EXTENSION_SETTINGS,
     type ExtensionSettings,
+    type PromptHeaderMode,
 } from './types';
 
 const SETTINGS_STORAGE_KEY = 'secureprompt-extension-settings-v1';
@@ -42,6 +43,14 @@ const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
             storedSettings.localModelDetectionEnabled,
             DEFAULT_EXTENSION_SETTINGS.localModelDetectionEnabled,
         ),
+        promptHeaderMode: getStoredPromptHeaderMode(
+            storedSettings.promptHeaderMode,
+            DEFAULT_EXTENSION_SETTINGS.promptHeaderMode,
+        ),
+        customPromptHeader: getStoredStringSetting(
+            storedSettings.customPromptHeader,
+            DEFAULT_EXTENSION_SETTINGS.customPromptHeader,
+        ),
     };
 };
 
@@ -51,4 +60,30 @@ const getStoredBooleanSetting = (
 ) =>
 {
     return typeof value === 'boolean' ? value : fallbackValue;
+};
+
+const getStoredStringSetting = (
+    value: unknown,
+    fallbackValue: string,
+) =>
+{
+    return typeof value === 'string' ? value : fallbackValue;
+};
+
+const getStoredPromptHeaderMode = (
+    value: unknown,
+    fallbackValue: PromptHeaderMode,
+): PromptHeaderMode =>
+{
+    if (
+        value === 'none' ||
+        value === 'basic' ||
+        value === 'detailed' ||
+        value === 'custom'
+    )
+    {
+        return value;
+    }
+
+    return fallbackValue;
 };

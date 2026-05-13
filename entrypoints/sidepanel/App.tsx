@@ -60,6 +60,7 @@ import {
 } from '../../source/settings/storage';
 import {
     DEFAULT_EXTENSION_SETTINGS,
+    prependPromptHeader,
     type ExtensionSettings,
 } from '../../source/settings/types';
 import { SettingsPage } from './SettingsPage';
@@ -1764,9 +1765,9 @@ export function App()
             </li>
         );
     };
-    const updateSetting = async (
-        key: keyof ExtensionSettings,
-        value: boolean,
+    const updateSetting = async <K extends keyof ExtensionSettings>(
+        key: K,
+        value: ExtensionSettings[K],
     ) =>
     {
         const nextSettings = {
@@ -2310,9 +2311,10 @@ export function App()
 
         try {
             setClipboardStatus('');
+            const promptText = prependPromptHeader(privatizedPrompt, settingsRef.current);
             const response = (await browser.runtime.sendMessage({
                 type: INJECT_PROMPT_MESSAGE,
-                text: privatizedPrompt,
+                text: promptText,
             })) as RuntimeResponse | undefined;
             updateChatTargetState(response);
 

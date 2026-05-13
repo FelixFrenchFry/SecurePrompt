@@ -415,10 +415,15 @@ export const createPrivatizedPromptWithManualItem = (
         result.items,
         manualItemInput,
     );
+    const existingItems = protectExistingManualItems(
+        inputText,
+        result.items,
+        manualItem,
+    );
     const resultWithManualItem = createPrivatizedPromptFromItems(
         inputText,
         [
-            ...result.items,
+            ...existingItems,
             manualItem,
         ],
         {
@@ -430,6 +435,30 @@ export const createPrivatizedPromptWithManualItem = (
         ...resultWithManualItem,
         safeToInject: result.safeToInject,
     };
+};
+
+const protectExistingManualItems = (
+    inputText: string,
+    items: SensitiveItem[],
+    manualItem: SensitiveItem,
+): SensitiveItem[] =>
+{
+    const protectedItems: SensitiveItem[] = [];
+
+    for (const item of items)
+    {
+        if (item.source !== 'manual' || !sensitiveItemsOverlap(item, manualItem))
+        {
+            protectedItems.push(item);
+            continue;
+        }
+
+        protectedItems.push(
+            ...splitSensitiveItemAroundBlockingItems(inputText, item, [manualItem]),
+        );
+    }
+
+    return protectedItems;
 };
 
 const createPrivatizedPromptFromItems = (
@@ -1057,10 +1086,22 @@ const createManualSensitiveItem = (
 
 const getNextManualSensitiveItemIndex = (items: SensitiveItem[]) =>
 {
-    return items.filter((item) =>
+    return items.reduce((maximumIndex, item) =>
     {
-        return item.source === 'manual';
-    }).length + 1;
+        if (item.source !== 'manual')
+        {
+            return maximumIndex;
+        }
+
+        const match = /^manual-sensitive-item-(\d+)/.exec(item.id);
+
+        if (match == null)
+        {
+            return maximumIndex;
+        }
+
+        return Math.max(maximumIndex, Number(match[1]));
+    }, 0) + 1;
 };
 
 const isAuthoritativeRuleItem = (item: SensitiveItem) =>

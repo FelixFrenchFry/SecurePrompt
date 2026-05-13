@@ -10,7 +10,11 @@ import type {
     PrivacyBenchmark,
     PrivacyBenchmarkStageTiming,
 } from '../../source/privacy';
-import type { ExtensionSettings } from '../../source/settings/types';
+import {
+    getPromptHeaderText,
+    type ExtensionSettings,
+    type PromptHeaderMode,
+} from '../../source/settings/types';
 import { getBenchmarkStageColorStyle } from './theme';
 
 type SettingsPageProps = {
@@ -19,11 +23,19 @@ type SettingsPageProps = {
     status: string;
     latestBenchmark: PrivacyBenchmark | null;
     onBack: () => void;
-    onChange: (key: keyof ExtensionSettings, value: boolean) => void;
+    onChange: <K extends keyof ExtensionSettings>(
+        key: K,
+        value: ExtensionSettings[K],
+    ) => void;
 };
 
+type BooleanSettingKey =
+    | 'darkModeEnabled'
+    | 'rulesDetectionEnabled'
+    | 'localModelDetectionEnabled';
+
 type SettingsRow = {
-    key: keyof ExtensionSettings;
+    key: BooleanSettingKey;
     label: string;
     Icon: typeof ShieldCheck;
 };
@@ -58,6 +70,28 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
                 Icon: Cpu,
             },
         ],
+    },
+];
+
+const PROMPT_HEADER_OPTIONS: Array<{
+    mode: PromptHeaderMode;
+    label: string;
+}> = [
+    {
+        mode: 'none',
+        label: 'None',
+    },
+    {
+        mode: 'basic',
+        label: 'Basic',
+    },
+    {
+        mode: 'detailed',
+        label: 'Detailed',
+    },
+    {
+        mode: 'custom',
+        label: 'Custom',
     },
 ];
 
@@ -172,6 +206,11 @@ export const SettingsPage = ({
     onChange,
 }: SettingsPageProps) =>
 {
+    const promptHeaderText = getPromptHeaderText(settings);
+    const isCustomPromptHeader = settings.promptHeaderMode === 'custom';
+    const promptHeaderPreviewText = isCustomPromptHeader
+        ? settings.customPromptHeader
+        : promptHeaderText;
     const renderSettingsRow = ({ key, label, Icon }: SettingsRow) =>
     {
         const isEnabled = settings[key];
@@ -231,6 +270,52 @@ export const SettingsPage = ({
                     </div>
                 </section>
             ))}
+
+            <section className="panel settings-panel">
+                <div className="section-header">
+                    <h2>Prompt header</h2>
+                </div>
+                <div
+                    className="prompt-header-options"
+                    role="radiogroup"
+                    aria-label="Prompt header"
+                >
+                    {PROMPT_HEADER_OPTIONS.map(({ mode, label }) =>
+                    {
+                        const isActive = settings.promptHeaderMode === mode;
+
+                        return (
+                            <button
+                                key={mode}
+                                className={`prompt-header-option${
+                                    isActive ? ' is-active' : ''
+                                }`}
+                                type="button"
+                                role="radio"
+                                aria-checked={isActive}
+                                onClick={() => onChange('promptHeaderMode', mode)}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
+                <textarea
+                    className="prompt-header-preview"
+                    value={promptHeaderPreviewText}
+                    placeholder="No prompt header will be added."
+                    readOnly={!isCustomPromptHeader}
+                    aria-label={
+                        isCustomPromptHeader
+                            ? 'Custom prompt header'
+                            : 'Selected prompt header preview'
+                    }
+                    onChange={(event) =>
+                    {
+                        onChange('customPromptHeader', event.target.value);
+                    }}
+                />
+            </section>
 
             <section className="panel settings-panel">
                 <div className="section-header">
