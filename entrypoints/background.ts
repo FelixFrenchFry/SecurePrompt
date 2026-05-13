@@ -46,13 +46,17 @@ export default defineBackground(() =>
 
     const getTab = async (tabId: number | undefined) =>
     {
-        if (tabId == null) {
+        if (tabId == null)
+        {
             return undefined;
         }
 
-        try {
+        try
+        {
             return await browser.tabs.get(tabId);
-        } catch {
+        }
+        catch
+        {
             return undefined;
         }
     };
@@ -65,7 +69,8 @@ export default defineBackground(() =>
         });
         const activeProvider = getChatProvider(activeTab?.url);
 
-        if (activeTab?.id != null && activeProvider != null) {
+        if (activeTab?.id != null && activeProvider != null)
+        {
             lastAiChatTabId = activeTab.id;
             return {
                 tab: activeTab,
@@ -76,7 +81,8 @@ export default defineBackground(() =>
         const previousTab = await getTab(lastAiChatTabId);
         const previousProvider = getChatProvider(previousTab?.url);
 
-        if (previousTab?.id != null && previousProvider != null) {
+        if (previousTab?.id != null && previousProvider != null)
+        {
             return {
                 tab: previousTab,
                 provider: previousProvider,
@@ -88,14 +94,16 @@ export default defineBackground(() =>
 
     const rememberAiChatTab = (tabId: number | undefined, url: string | undefined) =>
     {
-        if (tabId != null && getChatProvider(url) != null) {
+        if (tabId != null && getChatProvider(url) != null)
+        {
             lastAiChatTabId = tabId;
         }
     };
 
     const openSidePanelForTab = async (tabId: number | undefined, url: string | undefined) =>
     {
-        if (tabId == null || browser.sidePanel?.open == null) {
+        if (tabId == null || browser.sidePanel?.open == null)
+        {
             return;
         }
 
@@ -115,7 +123,8 @@ export default defineBackground(() =>
 
     const normalizeRuntimeResponse = (response: unknown): RuntimeResponse =>
     {
-        if (isRuntimeResponse(response)) {
+        if (isRuntimeResponse(response))
+        {
             return response;
         }
 
@@ -149,10 +158,13 @@ export default defineBackground(() =>
             text,
         } satisfies RuntimeMessage;
 
-        try {
+        try
+        {
             const response = await browser.tabs.sendMessage(tabId, message);
             return withProvider(normalizeRuntimeResponse(response), provider);
-        } catch {
+        }
+        catch
+        {
             return {
                 ok: false,
                 provider: provider.id,
@@ -166,7 +178,8 @@ export default defineBackground(() =>
     {
         const target = await findTargetAiChatTab();
 
-        if (target?.tab.id == null) {
+        if (target?.tab.id == null)
+        {
             return {
                 ok: false,
                 error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
@@ -180,7 +193,8 @@ export default defineBackground(() =>
     {
         const target = await findTargetAiChatTab();
 
-        if (target?.tab.id == null) {
+        if (target?.tab.id == null)
+        {
             return {
                 ok: false,
                 error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
@@ -207,7 +221,8 @@ export default defineBackground(() =>
 
     chromeRuntime.onMessage.addListener((message, sender, sendResponse) =>
     {
-        if (message.type === INJECT_PROMPT_MESSAGE && typeof message.text === 'string') {
+        if (message.type === INJECT_PROMPT_MESSAGE && typeof message.text === 'string')
+        {
             void injectPromptIntoActiveTab(message.text)
                 .then(sendResponse)
                 .catch(() =>
@@ -221,7 +236,8 @@ export default defineBackground(() =>
             return true;
         }
 
-        if (message.type === GET_CHAT_TARGET_MESSAGE) {
+        if (message.type === GET_CHAT_TARGET_MESSAGE)
+        {
             void getCurrentChatTarget()
                 .then(sendResponse)
                 .catch(() =>
@@ -235,7 +251,8 @@ export default defineBackground(() =>
             return true;
         }
 
-        if (message.type === OPEN_SIDEPANEL_MESSAGE) {
+        if (message.type === OPEN_SIDEPANEL_MESSAGE)
+        {
             void openSidePanelForTab(sender.tab?.id, sender.tab?.url).catch(() => undefined);
         }
 
