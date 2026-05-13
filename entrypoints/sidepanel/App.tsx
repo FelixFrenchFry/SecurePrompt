@@ -11,6 +11,7 @@ import {
 } from 'react';
 import {
     ArrowDown,
+    ArrowLeft,
     ArrowUp,
     ArrowUpDown,
     Check,
@@ -20,6 +21,7 @@ import {
     Cpu,
     Eraser,
     FileText,
+    Maximize2,
     RotateCcw,
     ScanSearch,
     Search,
@@ -156,7 +158,7 @@ type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
 type ScanCategoryStaleState = 'added' | 'removed';
 
-type AppView = 'main' | 'settings';
+type AppView = 'main' | 'reader' | 'settings';
 
 type ScanDetailSearchTarget = {
     normalized: string;
@@ -2551,6 +2553,238 @@ export function App()
         }
     };
 
+    const openReaderView = () =>
+    {
+        hidePreviewTooltip();
+        setPreviewSelectionPopover(null);
+        setAppView('reader');
+    };
+
+    const closeReaderView = () =>
+    {
+        hidePreviewTooltip();
+        setPreviewSelectionPopover(null);
+        setAppView('main');
+    };
+
+    const renderPreviewSurface = (variant: 'compact' | 'reader') => (
+        <>
+            <div className="preview-shell">
+                <div
+                    ref={previewRef}
+                    className={`preview${
+                        variant === 'reader' ? ' preview-reader' : ''
+                    }${isPreviewStale ? ' is-stale' : ''}`}
+                    aria-live="polite"
+                    onPointerUp={schedulePreviewSelectionPopover}
+                    onKeyUp={schedulePreviewSelectionPopover}
+                >
+                    {previewContent}
+                </div>
+                {variant === 'compact' && privatizedPrompt ? (
+                    <button
+                        className="preview-expand-button"
+                        type="button"
+                        title="Open expanded preview"
+                        aria-label="Open expanded preview"
+                        onClick={openReaderView}
+                    >
+                        <Maximize2 size={15} aria-hidden="true" />
+                    </button>
+                ) : null}
+            </div>
+            {previewTooltip != null ? (
+                <>
+                    {previewTooltip.bridge != null ? (
+                        <div
+                            className="preview-tooltip-bridge"
+                            style={{
+                                left: previewTooltip.bridge.left,
+                                top: previewTooltip.bridge.top,
+                                width: previewTooltip.bridge.width,
+                                height: previewTooltip.bridge.height,
+                            }}
+                            aria-hidden="true"
+                            onPointerEnter={clearPreviewTooltipHideTimer}
+                            onPointerLeave={queueHidePreviewTooltip}
+                        />
+                    ) : null}
+                    <div
+                        ref={previewTooltipRef}
+                        className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
+                        style={{
+                            left: previewTooltip.left,
+                            top: previewTooltip.top,
+                            '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
+                        } as CSSProperties}
+                        role="dialog"
+                        aria-label={`${previewTooltip.mask} original text`}
+                        onPointerEnter={clearPreviewTooltipHideTimer}
+                        onPointerLeave={queueHidePreviewTooltip}
+                        onFocus={clearPreviewTooltipHideTimer}
+                        onBlur={queueHidePreviewTooltip}
+                        onKeyDown={(event) =>
+                        {
+                            if (event.key === 'Escape')
+                            {
+                                event.preventDefault();
+                                hidePreviewTooltip();
+                            }
+                        }}
+                    >
+                        <div className="preview-tooltip-content">
+                            <div className="preview-tooltip-row">
+                                <div className="preview-tooltip-text">
+                                    {previewTooltip.text}
+                                </div>
+                                {previewTooltipMapping != null ? (
+                                    <div className="preview-tooltip-meta">
+                                        <span className="preview-tooltip-count">
+                                            {formatCount(
+                                                previewTooltipMapping.itemIds.length,
+                                            )}
+                                            x
+                                        </span>
+                                    </div>
+                                ) : null}
+                                <button
+                                    className="preview-tooltip-restore-button"
+                                    type="button"
+                                    title="Restore original text"
+                                    aria-label={`Restore ${previewTooltip.mask} original text`}
+                                    onClick={() =>
+                                        restoreMaskingMappingById(previewTooltip.mappingId)
+                                    }
+                                >
+                                    <RotateCcw size={15} aria-hidden="true" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            ) : null}
+            {previewSelectionPopover != null ? (
+                <div
+                    ref={previewSelectionPopoverRef}
+                    className={`preview-tooltip preview-selection-popover preview-tooltip-${previewSelectionPopover.placement}`}
+                    style={{
+                        left: previewSelectionPopover.left,
+                        top: previewSelectionPopover.top,
+                        '--preview-tooltip-arrow-left': `${previewSelectionPopover.arrowLeft}px`,
+                    } as CSSProperties}
+                    role="dialog"
+                    aria-label="Privatize selected text"
+                >
+                    <div className="preview-tooltip-content preview-selection-content">
+                        <div className="preview-selection-title">
+                            Privatize as...
+                        </div>
+                        <div className="preview-selection-grid">
+                            {enabledPrivacyScanCategories.map(
+                                ({ category, label, Icon }) => (
+                                    <button
+                                        key={category}
+                                        className="preview-selection-category-button"
+                                        style={getCategoryColorStyle(category)}
+                                        type="button"
+                                        title={`Privatize as ${label.toLowerCase()}`}
+                                        aria-label={`Privatize selected text as ${label.toLowerCase()}`}
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() =>
+                                            manuallyPrivatizeSelection(category)
+                                        }
+                                    >
+                                        <Icon size={15} aria-hidden="true" />
+                                    </button>
+                                ),
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </>
+    );
+
+    if (appView === 'reader')
+    {
+        return (
+            <main
+                className={`app-shell reader-shell${
+                    settings.darkModeEnabled ? ' is-dark' : ''
+                }`}
+            >
+                <header className="app-header reader-header">
+                    <button
+                        className="icon-button"
+                        type="button"
+                        title="Back"
+                        aria-label="Back"
+                        onClick={closeReaderView}
+                    >
+                        <ArrowLeft size={18} aria-hidden="true" />
+                    </button>
+                    <div className="brand-lockup">
+                        <h1>Preview</h1>
+                    </div>
+                </header>
+
+                <section className="panel reader-panel">
+                    <div className="section-header">
+                        <h2 className="label-with-icon">
+                            <ShieldCheck size={18} aria-hidden="true" />
+                            <span>Privatized prompt</span>
+                        </h2>
+                        <button
+                            className={`ghost-button copy-button${
+                                copied ? ' is-copied' : ''
+                            }`}
+                            type="button"
+                            title="Copy privatized prompt"
+                            onClick={copyPrivatizedPrompt}
+                            disabled={!privatizedPrompt}
+                        >
+                            {copied ? (
+                                <Check size={16} aria-hidden="true" />
+                            ) : (
+                                <Copy size={16} aria-hidden="true" />
+                            )}
+                            Copy
+                        </button>
+                    </div>
+                    {isPreviewStale ? (
+                        <p className="stale-preview-notice">
+                            Does not match the updated settings. Run{' '}
+                            <strong>Privatize</strong> again before copying or sending
+                            the output.
+                        </p>
+                    ) : null}
+                    {renderPreviewSurface('reader')}
+                    <button
+                        className="primary-button panel-action"
+                        type="button"
+                        onClick={sendToAiChat}
+                        disabled={
+                            !privatizedPrompt ||
+                            !canUsePrivatizedPrompt ||
+                            isPreviewStale ||
+                            !hasChatTarget
+                        }
+                        title={sendButtonTitle}
+                    >
+                        <Send size={18} aria-hidden="true" />
+                        {sendButtonLabel}
+                    </button>
+                </section>
+
+                {clipboardStatus || sendStatus ? (
+                    <p className="status-message" role="status">
+                        {sendStatus || clipboardStatus}
+                    </p>
+                ) : null}
+            </main>
+        );
+    }
+
     if (appView === 'settings')
     {
         return (
@@ -2815,124 +3049,7 @@ export function App()
                         output.
                     </p>
                 ) : null}
-                <div
-                    ref={previewRef}
-                    className={`preview${isPreviewStale ? ' is-stale' : ''}`}
-                    aria-live="polite"
-                    onPointerUp={schedulePreviewSelectionPopover}
-                    onKeyUp={schedulePreviewSelectionPopover}
-                >
-                    {previewContent}
-                </div>
-                {previewTooltip != null ? (
-                    <>
-                        {previewTooltip.bridge != null ? (
-                            <div
-                                className="preview-tooltip-bridge"
-                                style={{
-                                    left: previewTooltip.bridge.left,
-                                    top: previewTooltip.bridge.top,
-                                    width: previewTooltip.bridge.width,
-                                    height: previewTooltip.bridge.height,
-                                }}
-                                aria-hidden="true"
-                                onPointerEnter={clearPreviewTooltipHideTimer}
-                                onPointerLeave={queueHidePreviewTooltip}
-                            />
-                        ) : null}
-                        <div
-                            ref={previewTooltipRef}
-                            className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
-                            style={{
-                                left: previewTooltip.left,
-                                top: previewTooltip.top,
-                                '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
-                            } as CSSProperties}
-                            role="dialog"
-                            aria-label={`${previewTooltip.mask} original text`}
-                            onPointerEnter={clearPreviewTooltipHideTimer}
-                            onPointerLeave={queueHidePreviewTooltip}
-                            onFocus={clearPreviewTooltipHideTimer}
-                            onBlur={queueHidePreviewTooltip}
-                            onKeyDown={(event) =>
-                            {
-                                if (event.key === 'Escape')
-                                {
-                                    event.preventDefault();
-                                    hidePreviewTooltip();
-                                }
-                            }}
-                        >
-                            <div className="preview-tooltip-content">
-                                <div className="preview-tooltip-row">
-                                    <div className="preview-tooltip-text">
-                                        {previewTooltip.text}
-                                    </div>
-                                    {previewTooltipMapping != null ? (
-                                        <div className="preview-tooltip-meta">
-                                            <span className="preview-tooltip-count">
-                                                {formatCount(
-                                                    previewTooltipMapping.itemIds.length,
-                                                )}
-                                                x
-                                            </span>
-                                        </div>
-                                    ) : null}
-                                    <button
-                                        className="preview-tooltip-restore-button"
-                                        type="button"
-                                        title="Restore original text"
-                                        aria-label={`Restore ${previewTooltip.mask} original text`}
-                                        onClick={() =>
-                                            restoreMaskingMappingById(previewTooltip.mappingId)
-                                        }
-                                    >
-                                        <RotateCcw size={15} aria-hidden="true" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </>
-                ) : null}
-                {previewSelectionPopover != null ? (
-                    <div
-                        ref={previewSelectionPopoverRef}
-                        className={`preview-tooltip preview-selection-popover preview-tooltip-${previewSelectionPopover.placement}`}
-                        style={{
-                            left: previewSelectionPopover.left,
-                            top: previewSelectionPopover.top,
-                            '--preview-tooltip-arrow-left': `${previewSelectionPopover.arrowLeft}px`,
-                        } as CSSProperties}
-                        role="dialog"
-                        aria-label="Privatize selected text"
-                    >
-                        <div className="preview-tooltip-content preview-selection-content">
-                            <div className="preview-selection-title">
-                                Privatize as...
-                            </div>
-                            <div className="preview-selection-grid">
-                                {enabledPrivacyScanCategories.map(
-                                    ({ category, label, Icon }) => (
-                                        <button
-                                            key={category}
-                                            className="preview-selection-category-button"
-                                            style={getCategoryColorStyle(category)}
-                                            type="button"
-                                            title={`Privatize as ${label.toLowerCase()}`}
-                                            aria-label={`Privatize selected text as ${label.toLowerCase()}`}
-                                            onMouseDown={(event) => event.preventDefault()}
-                                            onClick={() =>
-                                                manuallyPrivatizeSelection(category)
-                                            }
-                                        >
-                                            <Icon size={15} aria-hidden="true" />
-                                        </button>
-                                    ),
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                ) : null}
+                {renderPreviewSurface('compact')}
                 <button
                     className="primary-button panel-action"
                     type="button"
