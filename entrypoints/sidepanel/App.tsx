@@ -62,6 +62,7 @@ import {
     prependPromptHeader,
     type ExtensionSettings,
 } from '../../source/settings/types';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { SettingsPage } from './SettingsPage';
 import {
     getCategoryColorStyle,
@@ -1226,6 +1227,7 @@ export function App()
     const [latestBenchmark, setLatestBenchmark] = useState<PrivacyBenchmark | null>(
         null,
     );
+    const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
@@ -2177,6 +2179,7 @@ export function App()
         setCanUsePrivatizedPrompt(false);
         setLocalModelProgress(null);
         setLatestBenchmark(null);
+        setDiagnosticsExpanded(false);
         setClipboardStatus('');
         setSendStatus('');
         setCopied(false);
@@ -2259,7 +2262,6 @@ export function App()
                 settings={settings}
                 isSaving={isSavingSettings}
                 status={settingsStatus}
-                latestBenchmark={latestBenchmark}
                 onBack={() => setAppView('main')}
                 onChange={updateSetting}
             />
@@ -2475,6 +2477,13 @@ export function App()
                         )}
                     </div>
                 ) : null}
+                <DiagnosticsPanel
+                    benchmark={latestBenchmark}
+                    isExpanded={diagnosticsExpanded}
+                    onToggle={() =>
+                        setDiagnosticsExpanded((isExpanded) => !isExpanded)
+                    }
+                />
             </section>
 
             <section className="panel">

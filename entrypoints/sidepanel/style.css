@@ -213,6 +213,7 @@ h2 {
 }
 
 .chip:focus-visible,
+.diagnostics-toggle:focus-visible,
 .scan-detail-sort-button:focus-visible,
 .scan-detail-restore-button:focus-visible,
 .scan-detail-search-clear-button:focus-visible {
@@ -402,6 +403,70 @@ h2 {
     margin: 0;
     color: #64748b;
     font-size: 12px;
+}
+
+.diagnostics-panel {
+    margin-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+}
+
+.diagnostics-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 34px;
+    border: 1px solid #dbe4ec;
+    border-radius: 8px;
+    padding: 0 8px;
+    color: #334155;
+    background: #f8fbff;
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease;
+}
+
+.diagnostics-toggle:hover {
+    border-color: var(--subtle-button-hover-border);
+    background: var(--subtle-button-hover-background);
+    color: var(--subtle-button-hover-color);
+}
+
+.diagnostics-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.diagnostics-summary {
+    overflow: hidden;
+    margin-left: auto;
+    padding-left: 8px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.diagnostics-chevron {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    color: #64748b;
+    transition: transform 150ms ease;
+}
+
+.diagnostics-toggle[aria-expanded='true'] .diagnostics-chevron {
+    transform: rotate(180deg);
+}
+
+.diagnostics-content {
+    margin-top: 10px;
 }
 
 .preview {
@@ -1124,6 +1189,27 @@ h2 {
     border-color: #7f1d1d;
     color: #fecaca;
     background: #450a0a;
+}
+
+.app-shell.is-dark .diagnostics-panel {
+    border-top-color: #334155;
+}
+
+.app-shell.is-dark .diagnostics-toggle {
+    border-color: #334155;
+    color: #e2e8f0;
+    background: #020617;
+}
+
+.app-shell.is-dark .diagnostics-toggle:hover {
+    border-color: var(--subtle-button-hover-border);
+    background: var(--subtle-button-hover-background);
+    color: var(--subtle-button-hover-color);
+}
+
+.app-shell.is-dark .diagnostics-summary,
+.app-shell.is-dark .diagnostics-chevron {
+    color: #94a3b8;
 }
 
 .app-shell.is-dark .scan-detail-columns,
