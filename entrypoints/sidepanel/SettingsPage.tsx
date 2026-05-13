@@ -5,11 +5,15 @@ import {
     Moon,
     ShieldCheck,
 } from 'lucide-react';
+import type { SensitiveItemCategory } from '../../source/privacy';
 import {
     getPromptHeaderText,
+    isSensitiveItemCategoryEnabled,
     type ExtensionSettings,
     type PromptHeaderMode,
 } from '../../source/settings/types';
+import { PRIVACY_SCAN_CATEGORIES } from './privacy-categories';
+import { getCategoryColorStyle } from './theme';
 
 type SettingsPageProps = {
     settings: ExtensionSettings;
@@ -101,6 +105,20 @@ export const SettingsPage = ({
     const promptHeaderPreviewText = isCustomPromptHeader
         ? settings.customPromptHeader
         : promptHeaderText;
+    const enabledCategoryCount = PRIVACY_SCAN_CATEGORIES.filter(({ category }) =>
+    {
+        return isSensitiveItemCategoryEnabled(settings.enabledCategories, category);
+    }).length;
+    const toggleDetectionCategory = (category: SensitiveItemCategory) =>
+    {
+        onChange('enabledCategories', {
+            ...settings.enabledCategories,
+            [category]: !isSensitiveItemCategoryEnabled(
+                settings.enabledCategories,
+                category,
+            ),
+        });
+    };
     const renderSettingsRow = ({ key, label, Icon }: SettingsRow) =>
     {
         const isEnabled = settings[key];
@@ -118,6 +136,44 @@ export const SettingsPage = ({
                     aria-checked={isEnabled}
                     aria-label={`${label} ${isEnabled ? 'enabled' : 'disabled'}`}
                     onClick={() => onChange(key, !isEnabled)}
+                >
+                    <span className="settings-toggle-thumb" />
+                </button>
+            </div>
+        );
+    };
+    const renderDetectionCategory = ({
+        category,
+        label,
+        description,
+        Icon,
+    }: (typeof PRIVACY_SCAN_CATEGORIES)[number]) =>
+    {
+        const isEnabled = isSensitiveItemCategoryEnabled(
+            settings.enabledCategories,
+            category,
+        );
+
+        return (
+            <div
+                key={category}
+                className={`category-setting-row${isEnabled ? ' is-enabled' : ''}`}
+                style={getCategoryColorStyle(category)}
+            >
+                <div className="category-setting-main">
+                    <span className="category-setting-label">
+                        <Icon size={17} aria-hidden="true" />
+                        {label}
+                    </span>
+                    <p>{description}</p>
+                </div>
+                <button
+                    className={`settings-toggle${isEnabled ? ' is-enabled' : ''}`}
+                    type="button"
+                    role="switch"
+                    aria-checked={isEnabled}
+                    aria-label={`${label} detection ${isEnabled ? 'enabled' : 'disabled'}`}
+                    onClick={() => toggleDetectionCategory(category)}
                 >
                     <span className="settings-toggle-thumb" />
                 </button>
@@ -160,6 +216,22 @@ export const SettingsPage = ({
                     </div>
                 </section>
             ))}
+
+            <section className="panel settings-panel">
+                <div className="section-header">
+                    <h2>Detection categories</h2>
+                    <span className="scan-detail-count">
+                        {enabledCategoryCount}/{PRIVACY_SCAN_CATEGORIES.length} active
+                    </span>
+                </div>
+                <p className="settings-help">
+                    Disabled categories are not detected, masked, shown in the scan
+                    grid, or offered for manual masking in future scans.
+                </p>
+                <div className="category-settings-list">
+                    {PRIVACY_SCAN_CATEGORIES.map(renderDetectionCategory)}
+                </div>
+            </section>
 
             <section className="panel settings-panel">
                 <div className="section-header">

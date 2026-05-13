@@ -13,19 +13,11 @@ import {
     ArrowDown,
     ArrowUp,
     ArrowUpDown,
-    Calendar,
     Check,
-    CircleHelp,
     Copy,
     Cpu,
     Eraser,
     FileText,
-    Globe,
-    Home,
-    Landmark,
-    Lock,
-    Mail,
-    Phone,
     RotateCcw,
     ScanSearch,
     Search,
@@ -33,7 +25,6 @@ import {
     Settings as SettingsIcon,
     ShieldCheck,
     StepForward,
-    UserRound,
     X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
@@ -59,10 +50,15 @@ import {
 } from '../../source/settings/storage';
 import {
     DEFAULT_EXTENSION_SETTINGS,
+    isSensitiveItemCategoryEnabled,
     prependPromptHeader,
     type ExtensionSettings,
 } from '../../source/settings/types';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import {
+    PRIVACY_SCAN_CATEGORIES,
+    type PrivacyScanCategory,
+} from './privacy-categories';
 import { SettingsPage } from './SettingsPage';
 import {
     getCategoryColorStyle,
@@ -158,60 +154,6 @@ type ScanDetailSearchTarget = {
     terms: string[];
     acronym: string;
 };
-
-type PrivacyScanCategory = {
-    category: SensitiveItemCategory;
-    label: string;
-    Icon: typeof Mail;
-};
-
-const PRIVACY_SCAN_CATEGORIES: PrivacyScanCategory[] = [
-    {
-        category: 'EMAIL',
-        label: 'Email',
-        Icon: Mail,
-    },
-    {
-        category: 'PHONE',
-        label: 'Phone',
-        Icon: Phone,
-    },
-    {
-        category: 'PERSON',
-        label: 'Person',
-        Icon: UserRound,
-    },
-    {
-        category: 'ADDRESS',
-        label: 'Address',
-        Icon: Home,
-    },
-    {
-        category: 'ACCOUNT',
-        label: 'Account',
-        Icon: Landmark,
-    },
-    {
-        category: 'DATE',
-        label: 'Date',
-        Icon: Calendar,
-    },
-    {
-        category: 'NETWORK',
-        label: 'Network',
-        Icon: Globe,
-    },
-    {
-        category: 'SECRET',
-        label: 'Secret',
-        Icon: Lock,
-    },
-    {
-        category: 'OTHER',
-        label: 'Other',
-        Icon: CircleHelp,
-    },
-];
 
 const formatCount = (count: number) =>
 {
@@ -1304,6 +1246,12 @@ export function App()
     };
     const updatePreviewSelectionPopover = () =>
     {
+        if (!hasEnabledDetectionCategories)
+        {
+            hidePreviewSelectionPopover();
+            return;
+        }
+
         const selectionPopover = getPreviewSelectionPopover(
             window.getSelection(),
             previewRef.current,
@@ -1332,6 +1280,16 @@ export function App()
             updatePreviewSelectionPopover();
         });
     };
+    const enabledPrivacyScanCategories = PRIVACY_SCAN_CATEGORIES.filter(
+        ({ category }) =>
+        {
+            return isSensitiveItemCategoryEnabled(
+                settings.enabledCategories,
+                category,
+            );
+        },
+    );
+    const hasEnabledDetectionCategories = enabledPrivacyScanCategories.length > 0;
     const previewContent = getPreviewContent(
         privatizedPrompt,
         previewSegments,
@@ -1351,18 +1309,30 @@ export function App()
         privatizedResult?.maskingMappings ?? [],
         ignoredMappingIds,
     );
-    const activeItemCount = getMaskingMappingItemCount(activeMaskingMappings);
+    const visibleMaskingMappings = activeMaskingMappings.filter((maskingMapping) =>
+    {
+        return isSensitiveItemCategoryEnabled(
+            settings.enabledCategories,
+            maskingMapping.category,
+        );
+    });
+    const activeItemCount = getMaskingMappingItemCount(visibleMaskingMappings);
     const itemCountLabel = `${formatCount(activeItemCount)} ${
         activeItemCount === 1 ? 'item' : 'items'
     } detected`;
     const countItemsByCategory = (category: SensitiveItemCategory) =>
     {
         return getMaskingMappingItemCount(
-            getMaskingMappingsByCategory(activeMaskingMappings, category),
+            getMaskingMappingsByCategory(visibleMaskingMappings, category),
         );
     };
     const toggleScanCategory = (category: SensitiveItemCategory) =>
     {
+        if (!isSensitiveItemCategoryEnabled(settings.enabledCategories, category))
+        {
+            return;
+        }
+
         setScanDetailSearchText('');
         setActiveScanCategory((currentCategory) =>
         {
@@ -1393,12 +1363,15 @@ export function App()
         );
     };
     const activeScanCategoryConfig =
-        activeScanCategory == null ? null : getPrivacyScanCategory(activeScanCategory);
+        activeScanCategory == null ||
+        !isSensitiveItemCategoryEnabled(settings.enabledCategories, activeScanCategory)
+            ? null
+            : getPrivacyScanCategory(activeScanCategory);
     const activeScanMappings =
         activeScanCategory == null
             ? []
             : getSortedMaskingMappings(
-                  getMaskingMappingsByCategory(activeMaskingMappings, activeScanCategory),
+                  getMaskingMappingsByCategory(visibleMaskingMappings, activeScanCategory),
                   scanDetailSortDirection,
               );
     const filteredActiveScanMappings = getSearchFilteredMaskingMappings(
@@ -1607,7 +1580,11 @@ export function App()
     };
     const manuallyPrivatizeSelection = (category: SensitiveItemCategory) =>
     {
-        if (privatizedResult == null || previewSelectionPopover == null)
+        if (
+            privatizedResult == null ||
+            previewSelectionPopover == null ||
+            !isSensitiveItemCategoryEnabled(settings.enabledCategories, category)
+        )
         {
             return;
         }
@@ -1743,6 +1720,33 @@ export function App()
     {
         settingsRef.current = settings;
     }, [settings]);
+
+    useEffect(() =>
+    {
+        if (hasEnabledDetectionCategories)
+        {
+            return;
+        }
+
+        hidePreviewSelectionPopover();
+    }, [hasEnabledDetectionCategories]);
+
+    useEffect(() =>
+    {
+        if (
+            activeScanCategory == null ||
+            isSensitiveItemCategoryEnabled(
+                settings.enabledCategories,
+                activeScanCategory,
+            )
+        )
+        {
+            return;
+        }
+
+        setActiveScanCategory(null);
+        setScanDetailSearchText('');
+    }, [activeScanCategory, settings.enabledCategories]);
 
     useEffect(() =>
     {
@@ -2082,6 +2086,7 @@ export function App()
             const result = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                enabledCategories: settings.enabledCategories,
                 onBenchmark: setLatestBenchmark,
             });
 
@@ -2127,6 +2132,7 @@ export function App()
             const result = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: true,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                enabledCategories: settings.enabledCategories,
                 onLocalModelProgress: setLocalModelProgress,
                 onBenchmark: setLatestBenchmark,
             });
@@ -2153,6 +2159,7 @@ export function App()
             const fallbackResult = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                enabledCategories: settings.enabledCategories,
                 onBenchmark: setLatestBenchmark,
             });
 
@@ -2327,12 +2334,15 @@ export function App()
                         disabled={
                             prompt.trim().length === 0 ||
                             isTestingLocalModel ||
-                            !settings.rulesDetectionEnabled
+                            !settings.rulesDetectionEnabled ||
+                            !hasEnabledDetectionCategories
                         }
                         title={
-                            settings.rulesDetectionEnabled
-                                ? undefined
-                                : 'Rules detection is disabled in settings.'
+                            !hasEnabledDetectionCategories
+                                ? 'Enable at least one detection category in settings.'
+                                : settings.rulesDetectionEnabled
+                                  ? undefined
+                                  : 'Rules detection is disabled in settings.'
                         }
                     >
                         <StepForward size={19} aria-hidden="true" />
@@ -2345,12 +2355,15 @@ export function App()
                         disabled={
                             prompt.trim().length === 0 ||
                             isTestingLocalModel ||
-                            !settings.localModelDetectionEnabled
+                            !settings.localModelDetectionEnabled ||
+                            !hasEnabledDetectionCategories
                         }
                         title={
-                            settings.localModelDetectionEnabled
-                                ? undefined
-                                : 'Local model test is disabled in settings.'
+                            !hasEnabledDetectionCategories
+                                ? 'Enable at least one detection category in settings.'
+                                : settings.localModelDetectionEnabled
+                                  ? undefined
+                                  : 'Local model test is disabled in settings.'
                         }
                     >
                         <Cpu size={17} aria-hidden="true" />
@@ -2401,9 +2414,15 @@ export function App()
                     </h2>
                     <span>{itemCountLabel}</span>
                 </div>
-                <div className="chip-row" aria-label="Detected item categories">
-                    {PRIVACY_SCAN_CATEGORIES.map(renderPrivacyScanCategory)}
-                </div>
+                {hasEnabledDetectionCategories ? (
+                    <div className="chip-row" aria-label="Detected item categories">
+                        {enabledPrivacyScanCategories.map(renderPrivacyScanCategory)}
+                    </div>
+                ) : (
+                    <p className="scan-detail-empty">
+                        No detection categories enabled.
+                    </p>
+                )}
                 {activeScanCategoryConfig != null ? (
                     <div
                         className="scan-detail"
@@ -2602,20 +2621,24 @@ export function App()
                                 Privatize as...
                             </div>
                             <div className="preview-selection-grid">
-                                {PRIVACY_SCAN_CATEGORIES.map(({ category, label, Icon }) => (
-                                    <button
-                                        key={category}
-                                        className="preview-selection-category-button"
-                                        style={getCategoryColorStyle(category)}
-                                        type="button"
-                                        title={`Privatize as ${label.toLowerCase()}`}
-                                        aria-label={`Privatize selected text as ${label.toLowerCase()}`}
-                                        onMouseDown={(event) => event.preventDefault()}
-                                        onClick={() => manuallyPrivatizeSelection(category)}
-                                    >
-                                        <Icon size={15} aria-hidden="true" />
-                                    </button>
-                                ))}
+                                {enabledPrivacyScanCategories.map(
+                                    ({ category, label, Icon }) => (
+                                        <button
+                                            key={category}
+                                            className="preview-selection-category-button"
+                                            style={getCategoryColorStyle(category)}
+                                            type="button"
+                                            title={`Privatize as ${label.toLowerCase()}`}
+                                            aria-label={`Privatize selected text as ${label.toLowerCase()}`}
+                                            onMouseDown={(event) => event.preventDefault()}
+                                            onClick={() =>
+                                                manuallyPrivatizeSelection(category)
+                                            }
+                                        >
+                                            <Icon size={15} aria-hidden="true" />
+                                        </button>
+                                    ),
+                                )}
                             </div>
                         </div>
                     </div>

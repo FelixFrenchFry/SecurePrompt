@@ -884,6 +884,13 @@ h2 {
     gap: 0;
 }
 
+.settings-help {
+    margin: -4px 0 10px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
 .settings-row {
     display: flex;
     align-items: center;
@@ -946,6 +953,58 @@ h2 {
 
 .settings-toggle.is-enabled .settings-toggle-thumb {
     transform: translateX(18px);
+}
+
+.category-settings-list {
+    display: grid;
+    gap: 8px;
+}
+
+.category-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid #dbe4ec;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: #fbfdff;
+}
+
+.category-setting-row.is-enabled {
+    border-color: var(--category-border, #dbe4ec);
+    background: var(--category-secondary, #f8fafc);
+}
+
+.category-setting-main {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.category-setting-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.category-setting-row.is-enabled .category-setting-label {
+    color: var(--category-primary, #334155);
+}
+
+.category-setting-label svg {
+    flex: 0 0 auto;
+}
+
+.category-setting-main p {
+    margin: 0;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.35;
 }
 
 .prompt-header-options {
@@ -1216,6 +1275,7 @@ h2 {
 .app-shell.is-dark .scan-detail-count,
 .app-shell.is-dark .scan-detail-empty,
 .app-shell.is-dark .benchmark-empty,
+.app-shell.is-dark .settings-help,
 .app-shell.is-dark .status-message,
 .app-shell.is-dark .footer {
     color: #94a3b8;
@@ -1248,6 +1308,24 @@ h2 {
 
 .app-shell.is-dark .benchmark-stage {
     color: #e2e8f0;
+}
+
+.app-shell.is-dark .category-setting-row {
+    border-color: #334155;
+    background: #020617;
+}
+
+.app-shell.is-dark .category-setting-row.is-enabled {
+    border-color: var(--category-primary, #334155);
+    background: #111827;
+}
+
+.app-shell.is-dark .category-setting-label {
+    color: #e2e8f0;
+}
+
+.app-shell.is-dark .category-setting-main p {
+    color: #94a3b8;
 }
 
 .app-shell.is-dark .prompt-header-option {

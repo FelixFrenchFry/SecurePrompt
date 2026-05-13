@@ -1,14 +1,17 @@
 // supported categories of sensitive items that can be detected in prompt data
-export type SensitiveItemCategory =
-    | 'EMAIL' // email addresses
-    | 'PHONE' // phone and mobile numbers
-    | 'PERSON' // names of private persons
-    | 'ADDRESS' // street addresses and postal addresses
-    | 'ACCOUNT' // IBANs, credit cards, tax IDs, etc...
-    | 'DATE' // calendar dates
-    | 'NETWORK' // URLs, domains, hostnames, IP addresses, etc...
-    | 'SECRET' // API keys, tokens, passwords, logins, etc...
-    | 'OTHER'; // sensitive item that does not fit a known category
+export const SENSITIVE_ITEM_CATEGORIES = [
+    'EMAIL', // email addresses
+    'PHONE', // phone and mobile numbers
+    'PERSON', // names of private persons
+    'ADDRESS', // street addresses and postal addresses
+    'ACCOUNT', // IBANs, credit cards, tax IDs, etc...
+    'DATE', // calendar dates
+    'NETWORK', // URLs, domains, hostnames, IP addresses, etc...
+    'SECRET', // API keys, tokens, passwords, logins, etc...
+    'OTHER', // sensitive item that does not fit a known category
+] as const;
+
+export type SensitiveItemCategory = (typeof SENSITIVE_ITEM_CATEGORIES)[number];
 
 export type PrivatizationMethod =
     | 'removal' // items get removed

@@ -15,6 +15,7 @@ The stable product constraint is simple: raw prompt text and original sensitive 
 - Highlighted masked spans with local hover restore.
 - Detected-item drawer with category filtering, search, occurrence sorting, and restore controls.
 - Prompt header setting with `none`, `basic`, `detailed`, and `custom` modes.
+- Detection category scope setting for enabling or disabling specific categories.
 - Dark mode and local settings persistence.
 - Pipeline progress and last-run diagnostics.
 - Prompt insertion into ChatGPT, Claude, Gemini, and Perplexity.
@@ -99,6 +100,7 @@ Settings are persisted locally in extension storage. They are limited to non-sen
 - Dark mode.
 - Rules detection enabled.
 - Local model test enabled.
+- Enabled detection categories.
 - Prompt header mode.
 - Custom prompt header text.
 

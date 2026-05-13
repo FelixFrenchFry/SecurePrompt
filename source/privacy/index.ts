@@ -48,6 +48,7 @@ export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
     useRulesDetection?: boolean;
+    enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
     onLocalModelProgress?: LocalModelProgressCallback;
     onBenchmark?: PrivacyBenchmarkCallback;
 };
@@ -65,6 +66,7 @@ export type ManualSensitiveItemInput = {
 type PrivatizedPromptFromItemsOptions = {
     preferredMaskingMappings?: readonly MaskingMapping[];
     useResidualRulesDetection?: boolean;
+    enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
     benchmark?: PrivacyBenchmarkRecorder;
 };
 
@@ -145,6 +147,40 @@ const RESIDUAL_MODEL_CATEGORIES = new Set<SensitiveItemCategory>([
     'NETWORK',
     'SECRET',
 ]);
+
+const filterSensitiveItemsByEnabledCategories = (
+    items: SensitiveItem[],
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
+) =>
+{
+    if (enabledCategories == null)
+    {
+        return items;
+    }
+
+    return items.filter((item) =>
+    {
+        return enabledCategories[item.category] !== false;
+    });
+};
+
+const getEnabledCategorySet = (
+    categories: ReadonlySet<SensitiveItemCategory>,
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
+) =>
+{
+    if (enabledCategories == null)
+    {
+        return categories;
+    }
+
+    return new Set(
+        [...categories].filter((category) =>
+        {
+            return enabledCategories[category] !== false;
+        }),
+    );
+};
 
 const getNow = () =>
 {
@@ -316,30 +352,41 @@ export const createPrivatizedPromptAsync = async (
 
     if (useLocalModelDetection)
     {
+        const detectEnabledModelItems = async () =>
+        {
+            return filterSensitiveItemsByEnabledCategories(
+                await detectSensitiveItemsWithLocalModel(
+                    inputText,
+                    options.onLocalModelProgress,
+                ),
+                options.enabledCategories,
+            );
+        };
         const modelItems = await (benchmark
             ? benchmark.measureAsync(
                   'modelDetection',
                   'Model scan',
-                  () =>
-                      detectSensitiveItemsWithLocalModel(
-                          inputText,
-                          options.onLocalModelProgress,
-                      ),
+                  detectEnabledModelItems,
                   (items) => items.length,
               )
-            : detectSensitiveItemsWithLocalModel(
-                  inputText,
-                  options.onLocalModelProgress,
-              ));
+            : detectEnabledModelItems());
 
         detectedItems.push(...modelItems);
     }
 
     const filteredItems = filterProtectedPlaceholderItems(inputText, detectedItems);
-    const result = createPrivatizedPromptFromItems(inputText, filteredItems, {
-        useResidualRulesDetection: useRulesDetection,
-        benchmark,
-    });
+    const result = createPrivatizedPromptFromItems(
+        inputText,
+        filterSensitiveItemsByEnabledCategories(
+            filteredItems,
+            options.enabledCategories,
+        ),
+        {
+            useResidualRulesDetection: useRulesDetection,
+            enabledCategories: options.enabledCategories,
+            benchmark,
+        },
+    );
 
     if (!useLocalModelDetection)
     {
@@ -358,6 +405,7 @@ export const createPrivatizedPromptAsync = async (
                           inputText,
                           result,
                           options.onLocalModelProgress,
+                          options.enabledCategories,
                       ),
                   (items) => items.length,
               )
@@ -365,6 +413,7 @@ export const createPrivatizedPromptAsync = async (
                   inputText,
                   result,
                   options.onLocalModelProgress,
+                  options.enabledCategories,
               ));
 
         const hardenedResult = benchmark
@@ -483,10 +532,19 @@ const createPrivatizedPromptFromItems = (
             ? benchmark.measure(
                   'rulesHardening',
                   'Rules hardening',
-                  () => detectResidualSensitiveItemsWithRules(inputText, result),
+                  () =>
+                      detectResidualSensitiveItemsWithRules(
+                          inputText,
+                          result,
+                          options.enabledCategories,
+                      ),
                   (items) => items.length,
               )
-            : detectResidualSensitiveItemsWithRules(inputText, result)
+            : detectResidualSensitiveItemsWithRules(
+                  inputText,
+                  result,
+                  options.enabledCategories,
+              )
         : [];
 
     return benchmark
@@ -600,6 +658,7 @@ const hardenPrivatizedPromptResult = (
 const detectResidualSensitiveItemsWithRules = (
     inputText: string,
     result: PrivatizedPromptResult,
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
 ): SensitiveItem[] =>
 {
     const residualInput = createResidualDetectionInput(result.segments);
@@ -622,7 +681,7 @@ const detectResidualSensitiveItemsWithRules = (
         result.items,
         residualInput,
         detectedItems,
-        RESIDUAL_RULE_CATEGORIES,
+        getEnabledCategorySet(RESIDUAL_RULE_CATEGORIES, enabledCategories),
     );
 };
 
@@ -630,6 +689,7 @@ const detectResidualSensitiveItemsWithLocalModel = async (
     inputText: string,
     result: PrivatizedPromptResult,
     onProgress: LocalModelProgressCallback | undefined,
+    enabledCategories: Partial<Record<SensitiveItemCategory, boolean>> | undefined,
 ): Promise<SensitiveItem[]> =>
 {
     const residualInput = createResidualDetectionInput(result.segments);
@@ -654,7 +714,7 @@ const detectResidualSensitiveItemsWithLocalModel = async (
         result.items,
         residualInput,
         detectedItems,
-        RESIDUAL_MODEL_CATEGORIES,
+        getEnabledCategorySet(RESIDUAL_MODEL_CATEGORIES, enabledCategories),
     );
 };
 
@@ -825,7 +885,10 @@ const detectSensitiveItemsSync = (
         detectedItems.push(...detectSensitiveItemsWithRules(inputText));
     }
 
-    return filterProtectedPlaceholderItems(inputText, detectedItems);
+    return filterSensitiveItemsByEnabledCategories(
+        filterProtectedPlaceholderItems(inputText, detectedItems),
+        options.enabledCategories,
+    );
 };
 
 const resolveSensitiveItemOverlaps = (

@@ -1,6 +1,11 @@
 import { browser } from 'wxt/browser';
 import {
+    SENSITIVE_ITEM_CATEGORIES,
+    type SensitiveItemCategory,
+} from '../privacy/types';
+import {
     DEFAULT_EXTENSION_SETTINGS,
+    type EnabledSensitiveItemCategories,
     type ExtensionSettings,
     type PromptHeaderMode,
 } from './types';
@@ -43,6 +48,10 @@ const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
             storedSettings.localModelDetectionEnabled,
             DEFAULT_EXTENSION_SETTINGS.localModelDetectionEnabled,
         ),
+        enabledCategories: getStoredEnabledCategories(
+            storedSettings.enabledCategories,
+            DEFAULT_EXTENSION_SETTINGS.enabledCategories,
+        ),
         promptHeaderMode: getStoredPromptHeaderMode(
             storedSettings.promptHeaderMode,
             DEFAULT_EXTENSION_SETTINGS.promptHeaderMode,
@@ -68,6 +77,28 @@ const getStoredStringSetting = (
 ) =>
 {
     return typeof value === 'string' ? value : fallbackValue;
+};
+
+const getStoredEnabledCategories = (
+    value: unknown,
+    fallbackValue: EnabledSensitiveItemCategories,
+): EnabledSensitiveItemCategories =>
+{
+    if (value == null || typeof value !== 'object')
+    {
+        return { ...fallbackValue };
+    }
+
+    const storedCategories = value as Partial<Record<SensitiveItemCategory, unknown>>;
+
+    return SENSITIVE_ITEM_CATEGORIES.reduce((enabledCategories, category) =>
+    {
+        enabledCategories[category] = getStoredBooleanSetting(
+            storedCategories[category],
+            fallbackValue[category],
+        );
+        return enabledCategories;
+    }, {} as EnabledSensitiveItemCategories);
 };
 
 const getStoredPromptHeaderMode = (

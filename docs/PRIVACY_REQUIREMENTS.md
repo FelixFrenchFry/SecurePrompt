@@ -14,7 +14,7 @@ The extension may keep the following data locally:
 
 - The raw prompt while the side panel is open.
 - Detected sensitive items and masking mappings while the current preview exists.
-- User settings, including dark mode, detection toggles, and prompt-header preferences.
+- User settings, including dark mode, detection toggles, enabled categories, and prompt-header preferences.
 - The last pipeline timing benchmark, as aggregate timing and count data only.
 
 Raw prompts, original detected values, and masking mappings must not be written to extension storage, browser storage, logs, analytics, telemetry, or remote services.
@@ -28,6 +28,8 @@ Allowed local detection sources:
 - Rules and heuristics.
 - The local `openai/privacy-filter` model.
 - Manual user selections in the privatized preview.
+
+Disabled categories must be filtered before masking and before residual hardening contributes new masks.
 
 The local model may download model assets from the configured model host after permission is granted. Those download requests must not contain raw prompt text, detected values, masking mappings, or user-entered prompt content.
 
