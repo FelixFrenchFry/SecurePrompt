@@ -1,5 +1,6 @@
 import ortWasmMjsUrl from 'secureprompt-onnx-runtime/ort-wasm-simd-threaded.asyncify.mjs?url';
 import ortWasmUrl from 'secureprompt-onnx-runtime/ort-wasm-simd-threaded.asyncify.wasm?url';
+import type { LocalModelProgressCallback } from '../../types';
 import {
     PRIVACY_FILTER_DEVICE,
     PRIVACY_FILTER_DTYPE,
@@ -66,6 +67,7 @@ type WebGpuRuntimeGlobal = typeof globalThis & {
 type PrivacyFilterPipelineLoadOptions = {
     device: typeof PRIVACY_FILTER_DEVICE;
     dtype: typeof PRIVACY_FILTER_DTYPE;
+    progress_callback: (progress: TransformersProgress) => void;
     session_options: {
         executionProviders: Array<{
             name: typeof PRIVACY_FILTER_DEVICE;
@@ -74,28 +76,69 @@ type PrivacyFilterPipelineLoadOptions = {
     };
 };
 
-let privacyFilterPipelinePromise: Promise<PrivacyFilterPipeline> | null = null;
+type TransformersProgress = {
+    status?: string;
+    name?: string;
+    file?: string;
+    progress?: number;
+    loaded?: number;
+    total?: number;
+};
 
-export const getPrivacyFilterPipeline = async (): Promise<PrivacyFilterPipeline> =>
+let privacyFilterPipelinePromise: Promise<PrivacyFilterPipeline> | null = null;
+let privacyFilterPipelineLoaded = false;
+
+export const getPrivacyFilterPipeline = async (
+    onProgress?: LocalModelProgressCallback,
+): Promise<PrivacyFilterPipeline> =>
 {
     if (privacyFilterPipelinePromise == null)
     {
-        privacyFilterPipelinePromise = loadPrivacyFilterPipeline().catch((error) =>
-        {
-            privacyFilterPipelinePromise = null;
-            throw error;
+        privacyFilterPipelinePromise = loadPrivacyFilterPipeline(onProgress)
+            .then((pipeline) =>
+            {
+                privacyFilterPipelineLoaded = true;
+                return pipeline;
+            })
+            .catch((error) =>
+            {
+                privacyFilterPipelinePromise = null;
+                privacyFilterPipelineLoaded = false;
+                throw error;
+            });
+    }
+    else
+    {
+        onProgress?.({
+            phase: 'load',
+            label: privacyFilterPipelineLoaded
+                ? 'Using loaded local model.'
+                : 'Waiting for local model.',
+            progress: privacyFilterPipelineLoaded ? 100 : undefined,
         });
     }
 
     return privacyFilterPipelinePromise;
 };
 
-const loadPrivacyFilterPipeline = async (): Promise<PrivacyFilterPipeline> =>
+const loadPrivacyFilterPipeline = async (
+    onProgress: LocalModelProgressCallback | undefined,
+): Promise<PrivacyFilterPipeline> =>
 {
+    onProgress?.({
+        phase: 'runtime',
+        label: 'Preparing local model runtime.',
+    });
+
     // dynamically import Transformers.js so the rules-only path does not load model code
     const { env, pipeline } = await import('@huggingface/transformers');
 
-    const pipelineOptions = await configurePrivacyFilterRuntime(env);
+    const pipelineOptions = await configurePrivacyFilterRuntime(env, onProgress);
+
+    onProgress?.({
+        phase: 'load',
+        label: 'Loading privacy model.',
+    });
 
     // model files may be downloaded, but prompt text must only be processed locally
     const classifier = await pipeline(
@@ -104,11 +147,18 @@ const loadPrivacyFilterPipeline = async (): Promise<PrivacyFilterPipeline> =>
         pipelineOptions,
     );
 
+    onProgress?.({
+        phase: 'load',
+        label: 'Local model loaded.',
+        progress: 100,
+    });
+
     return classifier as PrivacyFilterPipeline;
 };
 
 const configurePrivacyFilterRuntime = async (
     env: TransformersEnvironment,
+    onProgress: LocalModelProgressCallback | undefined,
 ): Promise<PrivacyFilterPipelineLoadOptions> =>
 {
     const wasmBackend = env.backends.onnx.wasm;
@@ -133,6 +183,7 @@ const configurePrivacyFilterRuntime = async (
     return {
         device: PRIVACY_FILTER_DEVICE,
         dtype: PRIVACY_FILTER_DTYPE,
+        progress_callback: createTransformersProgressCallback(onProgress),
         session_options: {
             executionProviders: [
                 {
@@ -142,6 +193,80 @@ const configurePrivacyFilterRuntime = async (
             ],
         },
     };
+};
+
+const createTransformersProgressCallback = (
+    onProgress: LocalModelProgressCallback | undefined,
+) =>
+{
+    return (progress: TransformersProgress) =>
+    {
+        if (onProgress == null)
+        {
+            return;
+        }
+
+        const status = progress.status;
+
+        if (status === 'progress' || status === 'progress_total')
+        {
+            onProgress({
+                phase: 'download',
+                label: 'Downloading model files.',
+                progress: getProgressPercent(progress.progress),
+                loadedBytes: getFiniteNumber(progress.loaded),
+                totalBytes: getFiniteNumber(progress.total),
+                file: progress.file,
+            });
+            return;
+        }
+
+        if (status === 'download' || status === 'initiate')
+        {
+            onProgress({
+                phase: 'download',
+                label: 'Preparing model download.',
+                file: progress.file,
+            });
+            return;
+        }
+
+        if (status === 'done')
+        {
+            onProgress({
+                phase: 'download',
+                label: 'Model file ready.',
+                file: progress.file,
+            });
+            return;
+        }
+
+        if (status === 'ready')
+        {
+            onProgress({
+                phase: 'load',
+                label: 'Model files ready.',
+                progress: 100,
+            });
+        }
+    };
+};
+
+const getProgressPercent = (progress: number | undefined) =>
+{
+    const value = getFiniteNumber(progress);
+
+    if (value == null)
+    {
+        return undefined;
+    }
+
+    return Math.max(0, Math.min(100, value));
+};
+
+const getFiniteNumber = (value: number | undefined) =>
+{
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 };
 
 const clearIgnoredWebGpuPowerPreference = (env: TransformersEnvironment) =>

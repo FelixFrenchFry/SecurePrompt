@@ -46,6 +46,7 @@ import {
     createPrivatizedPromptAsync,
     createPrivatizedPromptPreview,
     createPrivatizedPromptWithManualItem,
+    type LocalModelProgress,
     type MaskingMapping,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
@@ -82,6 +83,13 @@ const MODEL_HOST_PERMISSIONS = [
     'https://*.hf.co/*',
     'https://*.xethub.hf.co/*',
 ];
+
+const LOCAL_MODEL_PROGRESS_INDETERMINATE_PHASES = new Set([
+    'permission',
+    'runtime',
+    'load',
+    'postprocess',
+]);
 
 type PreviewTooltipRect = {
     left: number;
@@ -1217,6 +1225,109 @@ const requestCurrentChatTarget = async () =>
     })) as RuntimeResponse | undefined;
 };
 
+const getLocalModelProgressPercent = (progress: LocalModelProgress) =>
+{
+    if (typeof progress.progress !== 'number' || !Number.isFinite(progress.progress))
+    {
+        return null;
+    }
+
+    return clamp(progress.progress, 0, 100);
+};
+
+const getLocalModelProgressLabel = (progress: LocalModelProgress) =>
+{
+    if (progress.phase === 'error')
+    {
+        return 'Local model failed.';
+    }
+
+    if (progress.phase === 'permission' || progress.phase === 'runtime')
+    {
+        return 'Preparing model...';
+    }
+
+    if (progress.phase === 'download' && progress.progress == null)
+    {
+        return 'Checking model files...';
+    }
+
+    if (progress.phase === 'download')
+    {
+        return 'Downloading model...';
+    }
+
+    if (progress.phase === 'load')
+    {
+        return 'Loading model...';
+    }
+
+    if (progress.phase === 'inference')
+    {
+        return 'Scanning input...';
+    }
+
+    if (progress.phase === 'postprocess' || progress.phase === 'done')
+    {
+        return 'Finishing scan...';
+    }
+
+    return progress.label;
+};
+
+const getLocalModelProgressMeta = (progress: LocalModelProgress) =>
+{
+    if (
+        progress.loadedBytes != null &&
+        progress.totalBytes != null &&
+        progress.totalBytes > 0
+    )
+    {
+        return `${formatBytes(progress.loadedBytes)} / ${formatBytes(progress.totalBytes)}`;
+    }
+
+    if (progress.currentChunk != null && progress.totalChunks != null)
+    {
+        return `${progress.currentChunk}/${progress.totalChunks} chunks`;
+    }
+
+    const percent = getLocalModelProgressPercent(progress);
+
+    return percent == null ? '' : `${Math.round(percent)}%`;
+};
+
+const isLocalModelProgressIndeterminate = (progress: LocalModelProgress) =>
+{
+    return (
+        getLocalModelProgressPercent(progress) == null ||
+        LOCAL_MODEL_PROGRESS_INDETERMINATE_PHASES.has(progress.phase)
+    );
+};
+
+const formatBytes = (bytes: number) =>
+{
+    if (!Number.isFinite(bytes) || bytes <= 0)
+    {
+        return '0 B';
+    }
+
+    const megabytes = bytes / 1024 / 1024;
+
+    if (megabytes >= 1)
+    {
+        return `${megabytes >= 10 ? megabytes.toFixed(0) : megabytes.toFixed(1)} MB`;
+    }
+
+    const kilobytes = bytes / 1024;
+
+    if (kilobytes >= 1)
+    {
+        return `${kilobytes.toFixed(0)} KB`;
+    }
+
+    return `${bytes.toFixed(0)} B`;
+};
+
 export function App()
 {
     const [appView, setAppView] = useState<AppView>('main');
@@ -1242,6 +1353,8 @@ export function App()
     const [sendStatus, setSendStatus] = useState('');
     const [chatTargetLabel, setChatTargetLabel] = useState(AI_CHAT_FALLBACK_LABEL);
     const [hasChatTarget, setHasChatTarget] = useState(false);
+    const [localModelProgress, setLocalModelProgress] =
+        useState<LocalModelProgress | null>(null);
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
@@ -1434,6 +1547,22 @@ export function App()
     const sendButtonLabel = hasChatTarget
         ? `Send to ${chatTargetLabel}`
         : 'Open supported AI chat';
+    const visibleLocalModelProgress = isTestingLocalModel ? localModelProgress : null;
+    const localModelProgressLabel =
+        visibleLocalModelProgress == null
+            ? ''
+            : getLocalModelProgressLabel(visibleLocalModelProgress);
+    const localModelProgressPercent =
+        visibleLocalModelProgress == null
+            ? null
+            : getLocalModelProgressPercent(visibleLocalModelProgress);
+    const localModelProgressMeta =
+        visibleLocalModelProgress == null
+            ? ''
+            : getLocalModelProgressMeta(visibleLocalModelProgress);
+    const localModelProgressIsIndeterminate =
+        visibleLocalModelProgress != null &&
+        isLocalModelProgressIndeterminate(visibleLocalModelProgress);
     const clearScanDetailSearch = () =>
     {
         setScanDetailSearchText('');
@@ -2117,13 +2246,18 @@ export function App()
         }
 
         setIsTestingLocalModel(true);
-        setClipboardStatus('Loading local model. First run may download about 900 MB.');
+        setLocalModelProgress({
+            phase: 'permission',
+            label: 'Requesting model download permission.',
+        });
+        setClipboardStatus('');
         setSendStatus('');
 
         try {
             const hasPermission = await requestModelDownloadPermission();
 
             if (!hasPermission) {
+                setLocalModelProgress(null);
                 setClipboardStatus('Model download permission was not granted.');
                 return;
             }
@@ -2131,9 +2265,15 @@ export function App()
             const result = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: true,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                onLocalModelProgress: setLocalModelProgress,
             });
 
             applyPrivatizedResult(prompt, result);
+            setLocalModelProgress({
+                phase: 'done',
+                label: 'Local model result updated.',
+                progress: 100,
+            });
 
             if (!result.safeToInject) {
                 setClipboardStatus('Local model preview only. Sending is disabled.');
@@ -2142,6 +2282,11 @@ export function App()
 
             setClipboardStatus('Local model result updated.');
         } catch (error) {
+            setLocalModelProgress({
+                phase: 'error',
+                label: 'Local model failed.',
+            });
+
             const fallbackResult = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
@@ -2168,6 +2313,7 @@ export function App()
         setScanDetailSortDirection('neutral');
         setScanDetailSearchText('');
         setCanUsePrivatizedPrompt(false);
+        setLocalModelProgress(null);
         setClipboardStatus('');
         setSendStatus('');
         setCopied(false);
@@ -2344,6 +2490,40 @@ export function App()
                         {isTestingLocalModel ? 'Testing...' : 'Test model'}
                     </button>
                 </div>
+                {visibleLocalModelProgress != null ? (
+                    <div
+                        className="local-model-progress"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <div className="local-model-progress-header">
+                            <span>{localModelProgressLabel}</span>
+                            {localModelProgressMeta.length > 0 ? (
+                                <span className="local-model-progress-meta">
+                                    {localModelProgressMeta}
+                                </span>
+                            ) : null}
+                        </div>
+                        <div
+                            className={`local-model-progress-track${
+                                localModelProgressIsIndeterminate
+                                    ? ' is-indeterminate'
+                                    : ''
+                            }`}
+                            aria-hidden="true"
+                        >
+                            <div
+                                className="local-model-progress-fill"
+                                style={{
+                                    width:
+                                        localModelProgressPercent == null
+                                            ? undefined
+                                            : `${localModelProgressPercent}%`,
+                                }}
+                            />
+                        </div>
+                    </div>
+                ) : null}
             </section>
 
             <section className="panel">

@@ -20,6 +20,29 @@ export type DetectionSource =
     | 'model' // detected by an AI model trained to identify sensitive information
     | 'manual'; // identified manually by a user
 
+export type LocalModelProgressPhase =
+    | 'permission'
+    | 'runtime'
+    | 'download'
+    | 'load'
+    | 'inference'
+    | 'postprocess'
+    | 'done'
+    | 'error';
+
+export type LocalModelProgress = {
+    phase: LocalModelProgressPhase;
+    label: string;
+    progress?: number;
+    loadedBytes?: number;
+    totalBytes?: number;
+    currentChunk?: number;
+    totalChunks?: number;
+    file?: string;
+};
+
+export type LocalModelProgressCallback = (progress: LocalModelProgress) => void;
+
 // sensitive item found in the prompt data
 export type SensitiveItem = {
     id: string;

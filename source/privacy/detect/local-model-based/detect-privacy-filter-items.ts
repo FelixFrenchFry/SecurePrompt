@@ -1,4 +1,8 @@
-import type { SensitiveItem, SensitiveItemCategory } from '../../types';
+import type {
+    LocalModelProgressCallback,
+    SensitiveItem,
+    SensitiveItemCategory,
+} from '../../types';
 import {
     PRIVACY_FILTER_AGGREGATION_STRATEGY,
     PRIVACY_FILTER_CHUNK_MAX_LENGTH,
@@ -39,6 +43,7 @@ type PrivacyFilterDetectionState = {
 
 export const detectPrivacyFilterItems = async (
     inputText: string,
+    onProgress?: LocalModelProgressCallback,
 ): Promise<SensitiveItem[]> =>
 {
     if (inputText.length === 0)
@@ -46,19 +51,22 @@ export const detectPrivacyFilterItems = async (
         return [];
     }
 
-    const classifier = await getPrivacyFilterPipeline();
+    const classifier = await getPrivacyFilterPipeline(onProgress);
     const detectedItems: SensitiveItem[] = [];
     const detectionState = {
         nextItemIndex: 1,
     };
-
-    for (const chunk of createPrivacyFilterChunks(
+    const chunks = createPrivacyFilterChunks(
         inputText,
         0,
         inputText.length,
         PRIVACY_FILTER_CHUNK_MAX_LENGTH,
-    ))
+    );
+
+    for (const [chunkIndex, chunk] of chunks.entries())
     {
+        reportPrivacyFilterInferenceProgress(onProgress, chunkIndex, chunks.length);
+
         detectedItems.push(
             ...(await detectPrivacyFilterChunkItems(
                 classifier,
@@ -67,9 +75,41 @@ export const detectPrivacyFilterItems = async (
                 detectionState,
             )),
         );
+
+        reportPrivacyFilterInferenceProgress(onProgress, chunkIndex + 1, chunks.length);
     }
 
+    onProgress?.({
+        phase: 'postprocess',
+        label: 'Post-processing model detections.',
+    });
+
     return postProcessPrivacyFilterItems(inputText, detectedItems);
+};
+
+const reportPrivacyFilterInferenceProgress = (
+    onProgress: LocalModelProgressCallback | undefined,
+    completedChunks: number,
+    totalChunks: number,
+) =>
+{
+    if (totalChunks <= 0)
+    {
+        return;
+    }
+
+    const currentChunk = Math.min(completedChunks + 1, totalChunks);
+
+    onProgress?.({
+        phase: 'inference',
+        label:
+            totalChunks === 1
+                ? 'Running local model.'
+                : `Running local model chunk ${currentChunk} of ${totalChunks}.`,
+        progress: Math.min(100, Math.max(0, (completedChunks / totalChunks) * 100)),
+        currentChunk,
+        totalChunks,
+    });
 };
 
 const detectPrivacyFilterChunkItems = async (

@@ -11,6 +11,7 @@ import { detectPhoneItems } from './detect/rule-based/detect-phone-items';
 import { detectSecretItems } from './detect/rule-based/detect-secret-items';
 import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rule-based';
 import type {
+    LocalModelProgressCallback,
     MaskingMapping,
     PrivatizationMethod,
     PrivatizedPromptPreview,
@@ -22,6 +23,9 @@ import type {
 
 export type {
     DetectionSource,
+    LocalModelProgress,
+    LocalModelProgressCallback,
+    LocalModelProgressPhase,
     MaskingMapping,
     PrivatizationMethod,
     PrivatizedPromptPreview,
@@ -36,6 +40,7 @@ export { DEFAULT_PRIVATIZATION_METHOD } from './config';
 export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
     useRulesDetection?: boolean;
+    onLocalModelProgress?: LocalModelProgressCallback;
 };
 
 export type PrivatizedPromptPreviewOptions = {
@@ -148,6 +153,7 @@ export const createPrivatizedPromptAsync = async (
         const residualItems = await detectResidualSensitiveItemsWithLocalModel(
             inputText,
             result,
+            options.onLocalModelProgress,
         );
 
         return hardenPrivatizedPromptResult(inputText, result, residualItems);
@@ -343,6 +349,7 @@ const detectResidualSensitiveItemsWithRules = (
 const detectResidualSensitiveItemsWithLocalModel = async (
     inputText: string,
     result: PrivatizedPromptResult,
+    onProgress: LocalModelProgressCallback | undefined,
 ): Promise<SensitiveItem[]> =>
 {
     const residualInput = createResidualDetectionInput(result.segments);
@@ -352,7 +359,15 @@ const detectResidualSensitiveItemsWithLocalModel = async (
         return [];
     }
 
-    const detectedItems = await detectSensitiveItemsWithLocalModel(residualInput.text);
+    onProgress?.({
+        phase: 'postprocess',
+        label: 'Checking remaining unmasked text.',
+    });
+
+    const detectedItems = await detectSensitiveItemsWithLocalModel(
+        residualInput.text,
+        onProgress,
+    );
 
     return mapResidualSensitiveItems(
         inputText,
@@ -544,7 +559,12 @@ const detectSensitiveItemsAsync = async (
 
     if (useLocalModelDetection)
     {
-        detectedItems.push(...(await detectSensitiveItemsWithLocalModel(inputText)));
+        detectedItems.push(
+            ...(await detectSensitiveItemsWithLocalModel(
+                inputText,
+                options.onLocalModelProgress,
+            )),
+        );
     }
 
     return filterProtectedPlaceholderItems(inputText, detectedItems);
