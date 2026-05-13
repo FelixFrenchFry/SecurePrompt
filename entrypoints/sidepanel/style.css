@@ -919,6 +919,90 @@ h2 {
     transform: translateX(18px);
 }
 
+.benchmark-panel {
+    display: grid;
+    gap: 10px;
+}
+
+.benchmark-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.benchmark-summary span {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #f8fbff;
+    padding: 5px 7px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.benchmark-bar {
+    display: flex;
+    overflow: hidden;
+    height: 14px;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    background: #e2e8f0;
+}
+
+.benchmark-segment {
+    min-width: 4px;
+    height: 100%;
+    background: var(--benchmark-stage-color, #475569);
+}
+
+.benchmark-table {
+    display: grid;
+    font-size: 11px;
+}
+
+.benchmark-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 58px 44px 42px;
+    gap: 8px;
+    align-items: center;
+    min-height: 28px;
+    border-top: 1px solid #e2e8f0;
+    color: #475569;
+}
+
+.benchmark-row-header {
+    min-height: 24px;
+    border-top: none;
+    color: #64748b;
+    font-weight: 800;
+}
+
+.benchmark-stage {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: #334155;
+    font-weight: 650;
+}
+
+.benchmark-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--benchmark-stage-color, #475569);
+}
+
+.benchmark-empty {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
 .status-message {
     margin: -2px 0 0;
     color: #475569;
@@ -1019,15 +1103,39 @@ h2 {
 .app-shell.is-dark .scan-detail-columns,
 .app-shell.is-dark .scan-detail-count,
 .app-shell.is-dark .scan-detail-empty,
+.app-shell.is-dark .benchmark-empty,
 .app-shell.is-dark .status-message,
 .app-shell.is-dark .footer {
     color: #94a3b8;
 }
 
 .app-shell.is-dark .scan-detail-row,
+.app-shell.is-dark .benchmark-row,
 .app-shell.is-dark .settings-row {
     border-top-color: #334155;
     color: #cbd5e1;
+}
+
+.app-shell.is-dark .benchmark-summary {
+    color: #cbd5e1;
+}
+
+.app-shell.is-dark .benchmark-summary span {
+    border-color: #334155;
+    background: #020617;
+}
+
+.app-shell.is-dark .benchmark-bar {
+    border-color: #334155;
+    background: #1e293b;
+}
+
+.app-shell.is-dark .benchmark-row-header {
+    color: #94a3b8;
+}
+
+.app-shell.is-dark .benchmark-stage {
+    color: #e2e8f0;
 }
 
 .app-shell.is-dark .ghost-button,

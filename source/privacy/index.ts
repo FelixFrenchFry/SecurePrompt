@@ -13,6 +13,10 @@ import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rul
 import type {
     LocalModelProgressCallback,
     MaskingMapping,
+    PrivacyBenchmark,
+    PrivacyBenchmarkCallback,
+    PrivacyBenchmarkStage,
+    PrivacyBenchmarkStageTiming,
     PrivatizationMethod,
     PrivatizedPromptPreview,
     PrivatizedPromptResult,
@@ -27,6 +31,10 @@ export type {
     LocalModelProgressCallback,
     LocalModelProgressPhase,
     MaskingMapping,
+    PrivacyBenchmark,
+    PrivacyBenchmarkCallback,
+    PrivacyBenchmarkStage,
+    PrivacyBenchmarkStageTiming,
     PrivatizationMethod,
     PrivatizedPromptPreview,
     PrivatizedPromptResult,
@@ -41,6 +49,7 @@ export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
     useRulesDetection?: boolean;
     onLocalModelProgress?: LocalModelProgressCallback;
+    onBenchmark?: PrivacyBenchmarkCallback;
 };
 
 export type PrivatizedPromptPreviewOptions = {
@@ -56,6 +65,7 @@ export type ManualSensitiveItemInput = {
 type PrivatizedPromptFromItemsOptions = {
     preferredMaskingMappings?: readonly MaskingMapping[];
     useResidualRulesDetection?: boolean;
+    benchmark?: PrivacyBenchmarkRecorder;
 };
 
 type TextRange = {
@@ -71,6 +81,26 @@ type ResidualDetectionInput = {
     text: string;
     parts: ResidualDetectionPart[];
     protectedRanges: TextRange[];
+};
+
+type PrivacyBenchmarkRecorder = {
+    measure: <T>(
+        stage: PrivacyBenchmarkStage,
+        label: string,
+        callback: () => T,
+        getItemCount?: (value: T) => number | undefined,
+    ) => T;
+    measureAsync: <T>(
+        stage: PrivacyBenchmarkStage,
+        label: string,
+        callback: () => Promise<T>,
+        getItemCount?: (value: T) => number | undefined,
+    ) => Promise<T>;
+    finish: (
+        result: PrivatizedPromptResult,
+        rulesEnabled: boolean,
+        localModelEnabled: boolean,
+    ) => void;
 };
 
 const PRIVATIZATION_PIPELINE_IMPLEMENTED = false;
@@ -116,6 +146,139 @@ const RESIDUAL_MODEL_CATEGORIES = new Set<SensitiveItemCategory>([
     'SECRET',
 ]);
 
+const getNow = () =>
+{
+    return typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+};
+
+const createPrivacyBenchmarkRecorder = (
+    inputText: string,
+    onBenchmark: PrivacyBenchmarkCallback | undefined,
+): PrivacyBenchmarkRecorder | undefined =>
+{
+    if (onBenchmark == null)
+    {
+        return undefined;
+    }
+
+    const startedAt = Date.now();
+    const totalStartedAt = getNow();
+    const stages: PrivacyBenchmarkStageTiming[] = [];
+
+    const recordStage = (
+        stage: PrivacyBenchmarkStage,
+        label: string,
+        durationMs: number,
+        itemCount?: number,
+    ) =>
+    {
+        const existingStage = stages.find((timing) =>
+        {
+            return timing.stage === stage;
+        });
+
+        if (existingStage != null)
+        {
+            existingStage.durationMs += durationMs;
+
+            if (itemCount != null)
+            {
+                existingStage.itemCount = (existingStage.itemCount ?? 0) + itemCount;
+            }
+
+            return;
+        }
+
+        stages.push({
+            stage,
+            label,
+            durationMs,
+            itemCount,
+        });
+    };
+
+    const measure = <T>(
+        stage: PrivacyBenchmarkStage,
+        label: string,
+        callback: () => T,
+        getItemCount?: (value: T) => number | undefined,
+    ): T =>
+    {
+        const startedAt = getNow();
+
+        try
+        {
+            const value = callback();
+            recordStage(stage, label, getNow() - startedAt, getItemCount?.(value));
+            return value;
+        }
+        catch (error)
+        {
+            recordStage(stage, label, getNow() - startedAt);
+            throw error;
+        }
+    };
+
+    const measureAsync = async <T>(
+        stage: PrivacyBenchmarkStage,
+        label: string,
+        callback: () => Promise<T>,
+        getItemCount?: (value: T) => number | undefined,
+    ): Promise<T> =>
+    {
+        const startedAt = getNow();
+
+        try
+        {
+            const value = await callback();
+            recordStage(stage, label, getNow() - startedAt, getItemCount?.(value));
+            return value;
+        }
+        catch (error)
+        {
+            recordStage(stage, label, getNow() - startedAt);
+            throw error;
+        }
+    };
+
+    return {
+        measure,
+        measureAsync,
+        finish: (result, rulesEnabled, localModelEnabled) =>
+        {
+            const completedAt = Date.now();
+            const hardeningItemCount = stages
+                .filter((stage) =>
+                {
+                    return stage.stage === 'rulesHardening' || stage.stage === 'modelHardening';
+                })
+                .reduce((count, stage) =>
+                {
+                    return count + (stage.itemCount ?? 0);
+                }, 0);
+
+            onBenchmark({
+                startedAt,
+                completedAt,
+                totalDurationMs: getNow() - totalStartedAt,
+                inputCharacters: inputText.length,
+                inputLines: inputText.length === 0 ? 0 : inputText.split(/\r\n|\r|\n/).length,
+                rulesEnabled,
+                localModelEnabled,
+                safeToInject: result.safeToInject,
+                itemCount: result.items.length,
+                hardeningItemCount,
+                stages: stages.map((stage) =>
+                {
+                    return { ...stage };
+                }),
+            });
+        },
+    };
+};
+
 // sync (rules-only) pipeline
 export const createPrivatizedPrompt = (inputText: string): PrivatizedPromptResult =>
 {
@@ -135,31 +298,90 @@ export const createPrivatizedPromptAsync = async (
     options: PrivatizationPipelineOptions = {},
 ): Promise<PrivatizedPromptResult> =>
 {
-    const detectedItems = await detectSensitiveItemsAsync(inputText, options);
     const useRulesDetection = options.useRulesDetection ?? USE_RULES_DETECTION;
-    const result = createPrivatizedPromptFromItems(inputText, detectedItems, {
-        useResidualRulesDetection: useRulesDetection,
-    });
     const useLocalModelDetection =
         options.useLocalModelDetection ?? USE_LOCAL_MODEL_DETECTION;
+    const benchmark = createPrivacyBenchmarkRecorder(inputText, options.onBenchmark);
+    const detectedItems: SensitiveItem[] = [];
+    const rulesItems = benchmark
+        ? benchmark.measure(
+              'rulesDetection',
+              'Rules scan',
+              () => detectSensitiveItemsSync(inputText, options),
+              (items) => items.length,
+          )
+        : detectSensitiveItemsSync(inputText, options);
+
+    detectedItems.push(...rulesItems);
+
+    if (useLocalModelDetection)
+    {
+        const modelItems = await (benchmark
+            ? benchmark.measureAsync(
+                  'modelDetection',
+                  'Model scan',
+                  () =>
+                      detectSensitiveItemsWithLocalModel(
+                          inputText,
+                          options.onLocalModelProgress,
+                      ),
+                  (items) => items.length,
+              )
+            : detectSensitiveItemsWithLocalModel(
+                  inputText,
+                  options.onLocalModelProgress,
+              ));
+
+        detectedItems.push(...modelItems);
+    }
+
+    const filteredItems = filterProtectedPlaceholderItems(inputText, detectedItems);
+    const result = createPrivatizedPromptFromItems(inputText, filteredItems, {
+        useResidualRulesDetection: useRulesDetection,
+        benchmark,
+    });
 
     if (!useLocalModelDetection)
     {
+        benchmark?.finish(result, useRulesDetection, useLocalModelDetection);
         return result;
     }
 
     try
     {
-        const residualItems = await detectResidualSensitiveItemsWithLocalModel(
-            inputText,
-            result,
-            options.onLocalModelProgress,
-        );
+        const residualItems = await (benchmark
+            ? benchmark.measureAsync(
+                  'modelHardening',
+                  'Model hardening',
+                  () =>
+                      detectResidualSensitiveItemsWithLocalModel(
+                          inputText,
+                          result,
+                          options.onLocalModelProgress,
+                      ),
+                  (items) => items.length,
+              )
+            : detectResidualSensitiveItemsWithLocalModel(
+                  inputText,
+                  result,
+                  options.onLocalModelProgress,
+              ));
 
-        return hardenPrivatizedPromptResult(inputText, result, residualItems);
+        const hardenedResult = benchmark
+            ? benchmark.measure(
+                  'finalization',
+                  'Finalize result',
+                  () => hardenPrivatizedPromptResult(inputText, result, residualItems),
+              )
+            : hardenPrivatizedPromptResult(inputText, result, residualItems);
+
+        benchmark?.finish(hardenedResult, useRulesDetection, useLocalModelDetection);
+
+        return hardenedResult;
     }
     catch
     {
+        benchmark?.finish(result, useRulesDetection, useLocalModelDetection);
         return result;
     }
 };
@@ -216,6 +438,43 @@ const createPrivatizedPromptFromItems = (
     options: PrivatizedPromptFromItemsOptions = {},
 ): PrivatizedPromptResult =>
 {
+    const benchmark = options.benchmark;
+    const result = benchmark
+        ? benchmark.measure(
+              'resultAssembly',
+              'Build preview',
+              () => createInitialPrivatizedPromptResult(inputText, detectedItems, options),
+              (initialResult) => initialResult.items.length,
+          )
+        : createInitialPrivatizedPromptResult(inputText, detectedItems, options);
+    const useResidualRulesDetection =
+        options.useResidualRulesDetection ?? USE_RULES_DETECTION;
+    const residualItems = useResidualRulesDetection
+        ? benchmark
+            ? benchmark.measure(
+                  'rulesHardening',
+                  'Rules hardening',
+                  () => detectResidualSensitiveItemsWithRules(inputText, result),
+                  (items) => items.length,
+              )
+            : detectResidualSensitiveItemsWithRules(inputText, result)
+        : [];
+
+    return benchmark
+        ? benchmark.measure(
+              'finalization',
+              'Finalize result',
+              () => hardenPrivatizedPromptResult(inputText, result, residualItems),
+          )
+        : hardenPrivatizedPromptResult(inputText, result, residualItems);
+};
+
+const createInitialPrivatizedPromptResult = (
+    inputText: string,
+    detectedItems: SensitiveItem[],
+    options: PrivatizedPromptFromItemsOptions = {},
+): PrivatizedPromptResult =>
+{
     // 1. resolve overlaps and conflicts between detected items
     const finalItems = resolveSensitiveItemOverlaps(inputText, detectedItems);
 
@@ -253,7 +512,7 @@ const createPrivatizedPromptFromItems = (
         };
     }
 
-    const result = {
+    return {
         privatizedPrompt,
         method: DEFAULT_PRIVATIZATION_METHOD,
         items: finalItems,
@@ -261,14 +520,6 @@ const createPrivatizedPromptFromItems = (
         segments,
         safeToInject: PRIVATIZATION_PIPELINE_IMPLEMENTED,
     };
-
-    const useResidualRulesDetection =
-        options.useResidualRulesDetection ?? USE_RULES_DETECTION;
-    const residualItems = useResidualRulesDetection
-        ? detectResidualSensitiveItemsWithRules(inputText, result)
-        : [];
-
-    return hardenPrivatizedPromptResult(inputText, result, residualItems);
 };
 
 const hardenPrivatizedPromptResult = (
@@ -543,28 +794,6 @@ const detectSensitiveItemsSync = (
     if (useRulesDetection)
     {
         detectedItems.push(...detectSensitiveItemsWithRules(inputText));
-    }
-
-    return filterProtectedPlaceholderItems(inputText, detectedItems);
-};
-
-const detectSensitiveItemsAsync = async (
-    inputText: string,
-    options: PrivatizationPipelineOptions,
-): Promise<SensitiveItem[]> =>
-{
-    const detectedItems = detectSensitiveItemsSync(inputText, options);
-    const useLocalModelDetection =
-        options.useLocalModelDetection ?? USE_LOCAL_MODEL_DETECTION;
-
-    if (useLocalModelDetection)
-    {
-        detectedItems.push(
-            ...(await detectSensitiveItemsWithLocalModel(
-                inputText,
-                options.onLocalModelProgress,
-            )),
-        );
     }
 
     return filterProtectedPlaceholderItems(inputText, detectedItems);

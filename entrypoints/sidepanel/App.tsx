@@ -48,6 +48,7 @@ import {
     createPrivatizedPromptWithManualItem,
     type LocalModelProgress,
     type MaskingMapping,
+    type PrivacyBenchmark,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
     type SensitiveItem,
@@ -62,6 +63,10 @@ import {
     type ExtensionSettings,
 } from '../../source/settings/types';
 import { SettingsPage } from './SettingsPage';
+import {
+    getCategoryColorStyle,
+    type CategoryColorStyle,
+} from './theme';
 
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
@@ -157,70 +162,10 @@ type ScanDetailSearchTarget = {
     acronym: string;
 };
 
-type CategoryColors = {
-    primary: string;
-    secondary: string;
-    border: string;
-};
-
-type CategoryColorStyle = CSSProperties & {
-    '--category-primary': string;
-    '--category-secondary': string;
-    '--category-border': string;
-};
-
 type PrivacyScanCategory = {
     category: SensitiveItemCategory;
     label: string;
     Icon: typeof Mail;
-};
-
-const CATEGORY_COLORS: Record<SensitiveItemCategory, CategoryColors> = {
-    EMAIL: {
-        primary: '#243172',
-        secondary: '#f1f3fb',
-        border: '#c8cfe8',
-    },
-    PHONE: {
-        primary: '#166534',
-        secondary: '#ecfdf5',
-        border: '#bbf7d0',
-    },
-    PERSON: {
-        primary: '#2563eb',
-        secondary: '#eff6ff',
-        border: '#bfdbfe',
-    },
-    ADDRESS: {
-        primary: '#7c2d12',
-        secondary: '#fff7ed',
-        border: '#fdba74',
-    },
-    ACCOUNT: {
-        primary: '#6d28d9',
-        secondary: '#f5f3ff',
-        border: '#ddd6fe',
-    },
-    DATE: {
-        primary: '#a16207',
-        secondary: '#fefce8',
-        border: '#fde047',
-    },
-    NETWORK: {
-        primary: '#0f766e',
-        secondary: '#f0fdfa',
-        border: '#5eead4',
-    },
-    SECRET: {
-        primary: '#be123c',
-        secondary: '#fff1f2',
-        border: '#fecdd3',
-    },
-    OTHER: {
-        primary: '#334155',
-        secondary: '#f8fafc',
-        border: '#dbe4ec',
-    },
 };
 
 const PRIVACY_SCAN_CATEGORIES: PrivacyScanCategory[] = [
@@ -274,17 +219,6 @@ const PRIVACY_SCAN_CATEGORIES: PrivacyScanCategory[] = [
 const formatCount = (count: number) =>
 {
     return count > MAX_VISIBLE_COUNT ? `${MAX_VISIBLE_COUNT}+` : String(count);
-};
-
-const getCategoryColorStyle = (category: SensitiveItemCategory): CategoryColorStyle =>
-{
-    const colors = CATEGORY_COLORS[category];
-
-    return {
-        '--category-primary': colors.primary,
-        '--category-secondary': colors.secondary,
-        '--category-border': colors.border,
-    };
 };
 
 const getPrivacyScanCategoryColorStyle = (
@@ -1355,6 +1289,9 @@ export function App()
     const [hasChatTarget, setHasChatTarget] = useState(false);
     const [localModelProgress, setLocalModelProgress] =
         useState<LocalModelProgress | null>(null);
+    const [latestBenchmark, setLatestBenchmark] = useState<PrivacyBenchmark | null>(
+        null,
+    );
     const [isTestingLocalModel, setIsTestingLocalModel] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
@@ -2221,6 +2158,7 @@ export function App()
             const result = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                onBenchmark: setLatestBenchmark,
             });
 
             applyPrivatizedResult(prompt, result);
@@ -2266,6 +2204,7 @@ export function App()
                 useLocalModelDetection: true,
                 useRulesDetection: settings.rulesDetectionEnabled,
                 onLocalModelProgress: setLocalModelProgress,
+                onBenchmark: setLatestBenchmark,
             });
 
             applyPrivatizedResult(prompt, result);
@@ -2290,6 +2229,7 @@ export function App()
             const fallbackResult = await createPrivatizedPromptAsync(prompt, {
                 useLocalModelDetection: false,
                 useRulesDetection: settings.rulesDetectionEnabled,
+                onBenchmark: setLatestBenchmark,
             });
 
             applyPrivatizedResult(prompt, fallbackResult);
@@ -2314,6 +2254,7 @@ export function App()
         setScanDetailSearchText('');
         setCanUsePrivatizedPrompt(false);
         setLocalModelProgress(null);
+        setLatestBenchmark(null);
         setClipboardStatus('');
         setSendStatus('');
         setCopied(false);
@@ -2395,6 +2336,7 @@ export function App()
                 settings={settings}
                 isSaving={isSavingSettings}
                 status={settingsStatus}
+                latestBenchmark={latestBenchmark}
                 onBack={() => setAppView('main')}
                 onChange={updateSetting}
             />

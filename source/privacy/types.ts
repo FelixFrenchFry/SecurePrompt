@@ -43,6 +43,37 @@ export type LocalModelProgress = {
 
 export type LocalModelProgressCallback = (progress: LocalModelProgress) => void;
 
+export type PrivacyBenchmarkStage =
+    | 'rulesDetection'
+    | 'modelDetection'
+    | 'resultAssembly'
+    | 'rulesHardening'
+    | 'modelHardening'
+    | 'finalization';
+
+export type PrivacyBenchmarkStageTiming = {
+    stage: PrivacyBenchmarkStage;
+    label: string;
+    durationMs: number;
+    itemCount?: number;
+};
+
+export type PrivacyBenchmark = {
+    startedAt: number;
+    completedAt: number;
+    totalDurationMs: number;
+    inputCharacters: number;
+    inputLines: number;
+    rulesEnabled: boolean;
+    localModelEnabled: boolean;
+    safeToInject: boolean;
+    itemCount: number;
+    hardeningItemCount: number;
+    stages: PrivacyBenchmarkStageTiming[];
+};
+
+export type PrivacyBenchmarkCallback = (benchmark: PrivacyBenchmark) => void;
+
 // sensitive item found in the prompt data
 export type SensitiveItem = {
     id: string;
