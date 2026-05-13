@@ -304,7 +304,7 @@ h2 {
 
 .scan-detail-columns {
     display: grid;
-    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 38px 28px 28px;
+    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 28px 28px;
     align-items: center;
     gap: 8px;
     min-height: 24px;
@@ -312,10 +312,6 @@ h2 {
     font-size: 10px;
     font-weight: 750;
     text-transform: uppercase;
-}
-
-.scan-detail-columns > span:nth-child(3) {
-    text-align: center;
 }
 
 .scan-detail-list {
@@ -328,7 +324,7 @@ h2 {
 
 .scan-detail-row {
     display: grid;
-    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 38px 28px 28px;
+    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 28px 28px;
     align-items: center;
     gap: 8px;
     min-height: 32px;
@@ -358,38 +354,6 @@ h2 {
     white-space: nowrap;
 }
 
-.scan-detail-score {
-    display: inline-flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 2px;
-    width: 100%;
-    height: 18px;
-}
-
-.scan-detail-score-bar {
-    width: 4px;
-    border-radius: 999px;
-    background: var(--category-primary, #334155);
-    opacity: 0.18;
-}
-
-.scan-detail-score-bar:nth-child(1) {
-    height: 7px;
-}
-
-.scan-detail-score-bar:nth-child(2) {
-    height: 11px;
-}
-
-.scan-detail-score-bar:nth-child(3) {
-    height: 15px;
-}
-
-.scan-detail-score-bar.is-filled {
-    opacity: 1;
-}
-
 .scan-detail-count {
     color: #475569;
     font-weight: 800;
@@ -414,6 +378,12 @@ h2 {
 
 .scan-detail-sort-button {
     color: #475569;
+}
+
+.scan-detail-sort-button.is-active {
+    border-color: var(--category-border, #dbe4ec);
+    color: var(--category-primary, #334155);
+    background: var(--category-secondary, #f8fafc);
 }
 
 .scan-detail-sort-button:hover {
@@ -523,14 +493,6 @@ h2 {
     flex: 0 0 auto;
     gap: 6px;
     color: #cbd5e1;
-}
-
-.preview-tooltip-meta .scan-detail-score {
-    width: auto;
-}
-
-.preview-tooltip-meta .scan-detail-score-bar {
-    background: #cbd5e1;
 }
 
 .preview-tooltip-count {
@@ -1144,6 +1106,12 @@ h2 {
 .app-shell.is-dark .scan-detail-restore-button,
 .app-shell.is-dark .settings-row-label svg {
     color: #94a3b8;
+}
+
+.app-shell.is-dark .scan-detail-sort-button.is-active {
+    border-color: #475569;
+    color: var(--category-primary, #e2e8f0);
+    background: #1e293b;
 }
 
 .app-shell.is-dark .scan-detail-search-clear-button:hover,

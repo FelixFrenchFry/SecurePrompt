@@ -51,7 +51,6 @@ import {
     type PrivacyBenchmark,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
-    type SensitiveItem,
     type SensitiveItemCategory,
 } from '../../source/privacy';
 import {
@@ -72,8 +71,6 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
-const SCAN_DETAIL_SCORE_MEDIUM_THRESHOLD = 0.6;
-const SCAN_DETAIL_SCORE_HIGH_THRESHOLD = 0.85;
 const PREVIEW_TOOLTIP_MARGIN = 12;
 const PREVIEW_TOOLTIP_MAX_WIDTH = 260;
 const PREVIEW_TOOLTIP_GAP = 3;
@@ -150,8 +147,6 @@ type ShowPreviewTooltip = (
 ) => void;
 
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
-
-type ScanDetailScoreLevel = 1 | 2 | 3;
 
 type AppView = 'main' | 'settings';
 
@@ -348,80 +343,6 @@ const getSearchFilteredMaskingMappings = (
         });
 };
 
-const getMaskingMappingScoreLevel = (
-    maskingMapping: MaskingMapping,
-    items: SensitiveItem[],
-): ScanDetailScoreLevel =>
-{
-    const itemIds = new Set(maskingMapping.itemIds);
-    const confidences = items
-        .filter((item) =>
-        {
-            return itemIds.has(item.id);
-        })
-        .map((item) =>
-        {
-            return clamp(item.confidence, 0, 1);
-        });
-
-    if (confidences.length === 0)
-    {
-        return 1;
-    }
-
-    const confidence = Math.min(...confidences);
-
-    if (confidence >= SCAN_DETAIL_SCORE_HIGH_THRESHOLD)
-    {
-        return 3;
-    }
-
-    if (confidence >= SCAN_DETAIL_SCORE_MEDIUM_THRESHOLD)
-    {
-        return 2;
-    }
-
-    return 1;
-};
-
-const getScanDetailScoreLabel = (scoreLevel: ScanDetailScoreLevel) =>
-{
-    if (scoreLevel === 3)
-    {
-        return 'Confidence score: high';
-    }
-
-    if (scoreLevel === 2)
-    {
-        return 'Confidence score: medium';
-    }
-
-    return 'Confidence score: low';
-};
-
-const renderScanDetailScore = (scoreLevel: ScanDetailScoreLevel) =>
-{
-    const scoreLabel = getScanDetailScoreLabel(scoreLevel);
-
-    return (
-        <span
-            className="scan-detail-score"
-            title={scoreLabel}
-            aria-label={scoreLabel}
-            role="img"
-        >
-            {[0, 1, 2].map((index) => (
-                <span
-                    key={index}
-                    className={`scan-detail-score-bar${
-                        index < scoreLevel ? ' is-filled' : ''
-                    }`}
-                    aria-hidden="true"
-                />
-            ))}
-        </span>
-    );
-};
 
 const getMaskingMappingById = (
     maskingMappings: MaskingMapping[],
@@ -657,6 +578,18 @@ const getScanDetailSortButtonLabel = (sortDirection: ScanDetailSortDirection) =>
     }
 
     return 'Sort by occurrence count low to high';
+};
+
+const getScanDetailSortTitle = (sortDirection: ScanDetailSortDirection) =>
+{
+    const buttonLabel = getScanDetailSortButtonLabel(sortDirection);
+
+    if (sortDirection === 'neutral')
+    {
+        return buttonLabel;
+    }
+
+    return `${getScanDetailSortLabel(sortDirection)}. ${buttonLabel}.`;
 };
 
 const getScanDetailSortIcon = (sortDirection: ScanDetailSortDirection) =>
@@ -1412,10 +1345,6 @@ export function App()
                   privatizedResult.maskingMappings,
                   previewTooltip.mappingId,
               );
-    const previewTooltipScoreLevel =
-        previewTooltipMapping == null
-            ? null
-            : getMaskingMappingScoreLevel(previewTooltipMapping, privatizedResult?.items ?? []);
     const activeMaskingMappings = getActiveMaskingMappings(
         privatizedResult?.maskingMappings ?? [],
         ignoredMappingIds,
@@ -1477,11 +1406,9 @@ export function App()
     const activeScanCount = getMaskingMappingItemCount(activeScanMappings);
     const hasScanDetailSearch = scanDetailSearchText.trim().length > 0;
     const ScanDetailSortIcon = getScanDetailSortIcon(scanDetailSortDirection);
-    const scanDetailSortLabel = getScanDetailSortLabel(scanDetailSortDirection);
     const scanDetailSortButtonLabel =
         getScanDetailSortButtonLabel(scanDetailSortDirection);
-    const scanDetailSortTitle =
-        `${scanDetailSortLabel}. ${scanDetailSortButtonLabel}.`;
+    const scanDetailSortTitle = getScanDetailSortTitle(scanDetailSortDirection);
     const sendButtonLabel = hasChatTarget
         ? `Send to ${chatTargetLabel}`
         : 'Open supported AI chat';
@@ -1736,11 +1663,6 @@ export function App()
     };
     const renderScanDetailRow = (maskingMapping: MaskingMapping) =>
     {
-        const scoreLevel = getMaskingMappingScoreLevel(
-            maskingMapping,
-            privatizedResult?.items ?? [],
-        );
-
         return (
             <li key={maskingMapping.id} className="scan-detail-row">
                 <span className="scan-detail-mask">
@@ -1749,7 +1671,6 @@ export function App()
                 <span className="scan-detail-original" title={maskingMapping.original}>
                     {maskingMapping.original}
                 </span>
-                {renderScanDetailScore(scoreLevel)}
                 <span className="scan-detail-count">
                     {formatCount(maskingMapping.itemIds.length)}x
                 </span>
@@ -2519,12 +2440,16 @@ export function App()
                                 <div className="scan-detail-columns">
                                     <span>Mask</span>
                                     <span>Original</span>
-                                    <span>Score</span>
                                     <button
-                                        className="scan-detail-sort-button"
+                                        className={`scan-detail-sort-button${
+                                            scanDetailSortDirection !== 'neutral'
+                                                ? ' is-active'
+                                                : ''
+                                        }`}
                                         type="button"
                                         title={scanDetailSortTitle}
                                         aria-label={scanDetailSortButtonLabel}
+                                        aria-pressed={scanDetailSortDirection !== 'neutral'}
                                         onClick={cycleScanDetailSortDirection}
                                     >
                                         <ScanDetailSortIcon size={14} aria-hidden="true" />
@@ -2625,10 +2550,8 @@ export function App()
                                     <div className="preview-tooltip-text">
                                         {previewTooltip.text}
                                     </div>
-                                    {previewTooltipMapping != null &&
-                                    previewTooltipScoreLevel != null ? (
+                                    {previewTooltipMapping != null ? (
                                         <div className="preview-tooltip-meta">
-                                            {renderScanDetailScore(previewTooltipScoreLevel)}
                                             <span className="preview-tooltip-count">
                                                 {formatCount(
                                                     previewTooltipMapping.itemIds.length,
