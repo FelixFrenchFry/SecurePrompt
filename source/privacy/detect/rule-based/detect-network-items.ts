@@ -11,6 +11,8 @@ const MAILTO_PATTERN = /\bmailto:[^\s"'<>()[\]{}]+/gi;
 const LOCALHOST_PATTERN = /\blocalhost(?::\d{1,5})?\b/gi;
 const PRIVATE_HOST_PATTERN =
     /\b(?=[a-z0-9.-]*(?:^|\.)(?:corp|home|internal|intranet|lan|local)(?:\.|$))(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?::\d{1,5})?\b/gi;
+const RESERVED_TEST_HOST_PATTERN =
+    /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.){2,}example\.test(?::\d{1,5})?\b/gi;
 
 const NON_NETWORK_CONTEXT_LABELS = [
     'asset tag',
@@ -51,6 +53,7 @@ export const detectNetworkItems = (inputText: string): SensitiveItem[] =>
         ...detectEmailNetworkExtensionCandidates(inputText),
         ...detectLocalhostNetworkCandidates(inputText),
         ...detectPrivateHostNetworkCandidates(inputText),
+        ...detectReservedTestHostNetworkCandidates(inputText),
         ...detectIpAddressNetworkCandidates(inputText),
     ];
     const finalCandidates = mergeNetworkCandidates(candidates);
@@ -151,6 +154,22 @@ const detectLocalhostNetworkCandidates = (inputText: string): NetworkCandidate[]
 const detectPrivateHostNetworkCandidates = (inputText: string): NetworkCandidate[] =>
 {
     return [...inputText.matchAll(PRIVATE_HOST_PATTERN)]
+        .map((match) =>
+        {
+            return createNetworkCandidate(
+                inputText,
+                match.index,
+                match.index + match[0].length,
+            );
+        })
+        .filter((candidate) => candidate != null);
+};
+
+const detectReservedTestHostNetworkCandidates = (
+    inputText: string,
+): NetworkCandidate[] =>
+{
+    return [...inputText.matchAll(RESERVED_TEST_HOST_PATTERN)]
         .map((match) =>
         {
             return createNetworkCandidate(
@@ -340,6 +359,11 @@ const isValidHostValue = (value: string) =>
         return true;
     }
 
+    if (isReservedTestHostValue(value))
+    {
+        return true;
+    }
+
     const parsed = parse(value);
     const hostname = parsed.hostname ?? '';
 
@@ -370,7 +394,9 @@ const isValidUrlHostname = (hostname: string) =>
             normalizedHostname,
             parsed.domain,
             parsed.publicSuffix,
-        ) || isValidPrivateHostname(normalizedHostname)
+        ) ||
+        isValidPrivateHostname(normalizedHostname) ||
+        isReservedTestHostValue(normalizedHostname)
     );
 };
 
@@ -395,6 +421,19 @@ const isValidPrivateHostname = (hostname: string) =>
     return (
         labels.length >= 2 &&
         labels.some((label) => PRIVATE_NETWORK_SUFFIXES.includes(label)) &&
+        labels.every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
+    );
+};
+
+const isReservedTestHostValue = (value: string) =>
+{
+    const host = value.toLowerCase().replace(/:\d{1,5}$/, '');
+    const labels = host.split('.');
+
+    return (
+        labels.length >= 4 &&
+        labels.at(-2) === 'example' &&
+        labels.at(-1) === 'test' &&
         labels.every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
     );
 };

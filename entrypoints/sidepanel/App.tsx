@@ -79,6 +79,7 @@ const PREVIEW_TOOLTIP_BRIDGE_PADDING = 10;
 const PREVIEW_TOOLTIP_BRIDGE_OVERLAP = 2;
 const PREVIEW_SELECTION_POPOVER_MAX_WIDTH = 236;
 const AI_CHAT_FALLBACK_LABEL = 'AI chat';
+const LOCAL_MODEL_FALLBACK_PROGRESS_LABEL = 'Creating rules-only fallback...';
 const MODEL_HOST_PERMISSIONS = [
     'https://huggingface.co/*',
     'https://*.huggingface.co/*',
@@ -132,6 +133,12 @@ type PreviewSelectionPopover = {
     arrowLeft: number;
     placement: 'above' | 'below';
 };
+
+type UnsafeRulesOnlyFallbackOutcome =
+    | 'applied'
+    | 'disabled'
+    | 'failed'
+    | 'stale';
 
 type PreviewTooltipEvent =
     | ReactPointerEvent<HTMLElement>
@@ -568,7 +575,8 @@ const renderPreviewSegment = (
     hidePreviewTooltip: () => void,
 ) =>
 {
-    if (segment.type === 'text') {
+    if (segment.type === 'text')
+    {
         return (
             <span
                 key={`preview-text-${index}`}
@@ -635,11 +643,13 @@ const getPreviewContent = (
     hidePreviewTooltip: () => void,
 ) =>
 {
-    if (!privatizedPrompt) {
+    if (!privatizedPrompt)
+    {
         return EMPTY_PREVIEW_TEXT;
     }
 
-    if (previewSegments.length === 0) {
+    if (previewSegments.length === 0)
+    {
         return privatizedPrompt;
     }
 
@@ -1052,6 +1062,11 @@ const getLocalModelProgressPercent = (progress: LocalModelProgress) =>
 
 const getLocalModelProgressLabel = (progress: LocalModelProgress) =>
 {
+    if (progress.label === LOCAL_MODEL_FALLBACK_PROGRESS_LABEL)
+    {
+        return progress.label;
+    }
+
     if (progress.phase === 'error')
     {
         return 'Local model failed.';
@@ -1978,19 +1993,23 @@ export function App()
     {
         return () =>
         {
-            if (copyResetTimerRef.current !== undefined) {
+            if (copyResetTimerRef.current !== undefined)
+            {
                 window.clearTimeout(copyResetTimerRef.current);
             }
 
-            if (clearResetTimerRef.current !== undefined) {
+            if (clearResetTimerRef.current !== undefined)
+            {
                 window.clearTimeout(clearResetTimerRef.current);
             }
 
-            if (previewTooltipHideTimerRef.current !== undefined) {
+            if (previewTooltipHideTimerRef.current !== undefined)
+            {
                 window.clearTimeout(previewTooltipHideTimerRef.current);
             }
 
-            if (previewSelectionFrameRef.current !== undefined) {
+            if (previewSelectionFrameRef.current !== undefined)
+            {
                 window.cancelAnimationFrame(previewSelectionFrameRef.current);
             }
         };
@@ -2225,21 +2244,28 @@ export function App()
         inputText: string,
         runId: number,
         error: unknown,
-    ) =>
+    ): Promise<UnsafeRulesOnlyFallbackOutcome> =>
     {
+        const failureSummary = getLocalModelFailureSummary(error);
         const failureStatus = getLocalModelFailureStatus(error);
 
         if (privatizationRunIdRef.current !== runId)
         {
-            return;
+            return 'stale';
         }
 
         if (!settings.rulesDetectionEnabled)
         {
-            setClipboardStatus(`${failureStatus} Rules fallback is disabled.`);
+            setLocalModelProgress(null);
+            setClipboardStatus(`${failureSummary} Rules fallback is disabled.`);
             setCanUsePrivatizedPrompt(false);
-            return;
+            return 'disabled';
         }
+
+        setLocalModelProgress({
+            phase: 'postprocess',
+            label: LOCAL_MODEL_FALLBACK_PROGRESS_LABEL,
+        });
 
         try
         {
@@ -2258,26 +2284,30 @@ export function App()
 
             if (privatizationRunIdRef.current !== runId)
             {
-                return;
+                return 'stale';
             }
 
             applyPrivatizedResult(inputText, {
                 ...fallbackResult,
                 safeToInject: false,
             });
+            setLocalModelProgress(null);
             setClipboardStatus(failureStatus);
+            return 'applied';
         }
         catch
         {
             if (privatizationRunIdRef.current !== runId)
             {
-                return;
+                return 'stale';
             }
 
+            setLocalModelProgress(null);
             setClipboardStatus(
-                `${failureStatus} Could not create rules-only fallback.`,
+                `${failureSummary} Could not create rules-only fallback.`,
             );
             setCanUsePrivatizedPrompt(false);
+            return 'failed';
         }
     };
 
@@ -2383,12 +2413,17 @@ export function App()
 
             if (settings.localModelDetectionEnabled)
             {
-                setLocalModelProgress({
-                    phase: 'error',
-                    label: 'Local model failed.',
-                });
+                const fallbackOutcome = await applyUnsafeRulesOnlyFallback(
+                    inputText,
+                    runId,
+                    error,
+                );
 
-                await applyUnsafeRulesOnlyFallback(inputText, runId, error);
+                if (fallbackOutcome === 'stale')
+                {
+                    return;
+                }
+
                 return;
             }
 
@@ -2429,12 +2464,14 @@ export function App()
         setCopied(false);
         setCleared(true);
 
-        if (copyResetTimerRef.current !== undefined) {
+        if (copyResetTimerRef.current !== undefined)
+        {
             window.clearTimeout(copyResetTimerRef.current);
             copyResetTimerRef.current = undefined;
         }
 
-        if (clearResetTimerRef.current !== undefined) {
+        if (clearResetTimerRef.current !== undefined)
+        {
             window.clearTimeout(clearResetTimerRef.current);
         }
 
@@ -2447,17 +2484,20 @@ export function App()
 
     const copyPrivatizedPrompt = async () =>
     {
-        if (!privatizedPrompt) {
+        if (!privatizedPrompt)
+        {
             return;
         }
 
-        try {
+        try
+        {
             await navigator.clipboard.writeText(privatizedPrompt);
             setCopied(true);
             setClipboardStatus('');
             setSendStatus('');
 
-            if (copyResetTimerRef.current !== undefined) {
+            if (copyResetTimerRef.current !== undefined)
+            {
                 window.clearTimeout(copyResetTimerRef.current);
             }
 
@@ -2466,7 +2506,9 @@ export function App()
                 setCopied(false);
                 copyResetTimerRef.current = undefined;
             }, ACTION_FEEDBACK_MS);
-        } catch {
+        }
+        catch
+        {
             setClipboardStatus('Could not copy privatized prompt.');
         }
     };
@@ -2483,7 +2525,8 @@ export function App()
             return;
         }
 
-        try {
+        try
+        {
             setClipboardStatus('');
             const promptText = prependPromptHeader(privatizedPrompt, settingsRef.current);
             const response = (await browser.runtime.sendMessage({
@@ -2492,13 +2535,16 @@ export function App()
             })) as RuntimeResponse | undefined;
             updateChatTargetState(response);
 
-            if (response?.ok) {
+            if (response?.ok)
+            {
                 setSendStatus(`Sent to ${response.providerLabel ?? chatTargetLabel}.`);
                 return;
             }
 
             setSendStatus(response?.error ?? 'Could not send to the AI chat page.');
-        } catch (error) {
+        }
+        catch (error)
+        {
             const message =
                 error instanceof Error ? error.message : 'Could not send to the AI chat page.';
             setSendStatus(message);
@@ -2917,7 +2963,8 @@ export function App()
 
 const requestModelDownloadPermission = async () =>
 {
-    if (browser.permissions?.request == null) {
+    if (browser.permissions?.request == null)
+    {
         return true;
     }
 
@@ -2928,34 +2975,44 @@ const requestModelDownloadPermission = async () =>
 
 const getLocalModelFailureStatus = (error: unknown) =>
 {
+    return `${getLocalModelFailureSummary(error)} Showing rules-only preview.`;
+};
+
+const getLocalModelFailureSummary = (error: unknown) =>
+{
     const message = getLocalModelFailureMessage(error);
 
-    if (isLocalModelRuntimeError(message)) {
-        return 'Local model runtime failed. Showing rules-only preview.';
+    if (isLocalModelRuntimeError(message))
+    {
+        return 'Local model runtime failed.';
     }
 
     if (/permission|not granted/i.test(message))
     {
-        return 'Model download permission was not granted. Showing rules-only preview.';
+        return 'Model download permission was not granted.';
     }
 
-    if (/QuotaExceeded|quota|storage/i.test(message)) {
-        return 'Local model storage failed. Showing rules-only preview.';
+    if (/QuotaExceeded|quota|storage/i.test(message))
+    {
+        return 'Local model storage failed.';
     }
 
-    if (/Failed to fetch|NetworkError|Load failed|ERR_|401|403|404/i.test(message)) {
-        return 'Local model download failed. Showing rules-only preview.';
+    if (/Failed to fetch|NetworkError|Load failed|ERR_|401|403|404/i.test(message))
+    {
+        return 'Local model download failed.';
     }
 
-    if (/Unsupported device|backend|execution provider/i.test(message)) {
-        return 'Local model backend is unsupported. Showing rules-only preview.';
+    if (/Unsupported device|backend|execution provider/i.test(message))
+    {
+        return 'Local model backend is unsupported.';
     }
 
-    if (/memory|allocation|Array buffer/i.test(message)) {
-        return 'Local model ran out of browser memory. Showing rules-only preview.';
+    if (/memory|allocation|Array buffer/i.test(message))
+    {
+        return 'Local model ran out of browser memory.';
     }
 
-    return 'Could not run local model. Showing rules-only preview.';
+    return 'Could not run local model.';
 };
 
 const getLocalModelFailureMessage = (error: unknown) =>

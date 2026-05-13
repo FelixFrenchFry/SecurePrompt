@@ -14,6 +14,8 @@ const VAT_ID_CANDIDATE_PATTERN = /\b[A-Z]{2}[A-Z0-9](?:[.-]?[A-Z0-9]){3,13}\b/g;
 const US_SSN_CANDIDATE_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;
 const US_TAX_COMPACT_CANDIDATE_PATTERN = /\b\d{9}\b/g;
 const US_EIN_CANDIDATE_PATTERN = /\b\d{2}-\d{7}\b/g;
+const SUPPORT_TICKET_CANDIDATE_PATTERN = /\bSUP-\d{4,}\b/g;
+const SUPPORT_TICKET_VALUE_PATTERN = /^SUP-\d{4,}$/;
 
 const US_SSN_CONTEXT_LABELS = [
     'itin',
@@ -61,6 +63,7 @@ export const detectAccountItems = (inputText: string): SensitiveItem[] =>
         ...detectUsSsnAccountCandidates(inputText),
         ...detectUsEinAccountCandidates(inputText),
         ...detectUsRoutingAccountCandidates(inputText),
+        ...detectSupportTicketAccountCandidates(inputText),
     ];
     const finalCandidates = mergeAccountCandidates(candidates);
 
@@ -243,6 +246,23 @@ const detectUsRoutingAccountCandidates = (inputText: string): AccountCandidate[]
                 match.index + match[0].length,
                 isValidUsRoutingNumberValue,
                 US_ROUTING_CONTEXT_LABELS,
+            );
+        })
+        .filter((candidate) => candidate != null);
+};
+
+const detectSupportTicketAccountCandidates = (
+    inputText: string,
+): AccountCandidate[] =>
+{
+    return [...inputText.matchAll(SUPPORT_TICKET_CANDIDATE_PATTERN)]
+        .map((match) =>
+        {
+            return createAccountCandidate(
+                inputText,
+                match.index,
+                match.index + match[0].length,
+                isValidSupportTicketValue,
             );
         })
         .filter((candidate) => candidate != null);
@@ -431,6 +451,11 @@ const isValidUsRoutingNumberValue = (value: string) =>
         Number(digits[8]);
 
     return checksum % 10 === 0;
+};
+
+const isValidSupportTicketValue = (value: string) =>
+{
+    return SUPPORT_TICKET_VALUE_PATTERN.test(value);
 };
 
 const isValidUsItinGroup = (group: number) =>
