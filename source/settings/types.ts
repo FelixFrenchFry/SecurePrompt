@@ -22,6 +22,8 @@ export const BASIC_PROMPT_HEADER =
 export const DETAILED_PROMPT_HEADER =
     'NOTE: Sensitive values in the prompt were replaced locally with stable typed placeholders before submission. EMAIL_001 represents an email address. PHONE_001 represents a phone number. PERSON_001 represents a private person or name. ADDRESS_001 represents a street address, postal address, or private location. ACCOUNT_001 represents an account, customer, payment, invoice, bank, tax, subscription, tenant, contract, ticket, or similar identifier. DATE_001 represents a date or time value. NETWORK_001 represents a URL, domain, hostname, IP address, endpoint, email link, or private infrastructure reference. SECRET_001 represents a credential, token, API key, password, private key, connection string, webhook, or similar secret. OTHER_001 represents a sensitive value that does not fit one of the named categories. Repeated placeholders refer to the same original value within this specific prompt. Different placeholder numbers usually refer to different original values, even within the same category. Do not infer, reconstruct, guess, or invent original private values. Preserve placeholders when referring to them, keep category distinctions intact, and preserve the surrounding operational meaning.';
 
+const PROMPT_HEADER_SEPARATOR = '\n\n';
+
 export const DEFAULT_ENABLED_CATEGORIES = SENSITIVE_ITEM_CATEGORIES.reduce(
     (enabledCategories, category) =>
     {
@@ -82,5 +84,5 @@ export const prependPromptHeader = (
         return promptText;
     }
 
-    return `${promptHeader}\n\n${promptText}`;
+    return `${promptHeader}${PROMPT_HEADER_SEPARATOR}${promptText}`;
 };
