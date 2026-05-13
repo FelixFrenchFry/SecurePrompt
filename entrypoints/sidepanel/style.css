@@ -1130,20 +1130,34 @@ h2 {
 
 .benchmark-summary {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     color: #475569;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 650;
 }
 
-.benchmark-summary span {
+.benchmark-summary-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
     overflow: hidden;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
     background: #f8fbff;
-    padding: 5px 7px;
+    padding: 7px 9px;
+}
+
+.benchmark-summary-label {
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.benchmark-summary-value {
+    color: #334155;
+    font-weight: 800;
+    text-align: right;
     white-space: nowrap;
 }
 
@@ -1164,17 +1178,24 @@ h2 {
 
 .benchmark-table {
     display: grid;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .benchmark-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 58px 44px 42px;
+    grid-template-columns: minmax(0, 1fr) 64px 48px 82px;
     gap: 8px;
     align-items: center;
-    min-height: 28px;
+    min-height: 30px;
     border-top: 1px solid #e2e8f0;
     color: #475569;
+}
+
+.benchmark-row > span {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .benchmark-row-header {
@@ -1367,9 +1388,13 @@ h2 {
     color: #cbd5e1;
 }
 
-.app-shell.is-dark .benchmark-summary span {
+.app-shell.is-dark .benchmark-summary-row {
     border-color: #334155;
     background: #020617;
+}
+
+.app-shell.is-dark .benchmark-summary-value {
+    color: #e2e8f0;
 }
 
 .app-shell.is-dark .benchmark-bar {

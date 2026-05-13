@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import type {
     PrivacyBenchmark,
-    PrivacyBenchmarkStageTiming,
+    PrivacyBenchmarkStage,
 } from '../../source/privacy';
 import { getBenchmarkStageColorStyle } from './theme';
 
@@ -15,6 +15,55 @@ type DiagnosticsPanelProps = {
 };
 
 const MIN_BENCHMARK_SEGMENT_PERCENT = 1.5;
+
+type BenchmarkPhaseId =
+    | 'itemDetection'
+    | 'safetyCheck'
+    | 'outputGeneration';
+
+type BenchmarkPhaseSummary = {
+    id: BenchmarkPhaseId;
+    label: string;
+    description: string;
+    stages: PrivacyBenchmarkStage[];
+    representativeStage: PrivacyBenchmarkStage;
+    itemMode: 'found' | 'extra' | 'final';
+};
+
+type BenchmarkPhaseTiming = BenchmarkPhaseSummary & {
+    durationMs: number;
+    itemCount: number | undefined;
+};
+
+const BENCHMARK_PHASES: BenchmarkPhaseSummary[] = [
+    {
+        id: 'itemDetection',
+        label: 'Item detection',
+        description:
+            'Initial scan of the input. This combines enabled rule-based detectors and the local model when it is enabled.',
+        stages: ['rulesDetection', 'modelDetection'],
+        representativeStage: 'modelDetection',
+        itemMode: 'found',
+    },
+    {
+        id: 'safetyCheck',
+        label: 'Safety check',
+        description:
+            'Follow-up scan after the first preview is built. This looks for sensitive items that may still be visible in the output.',
+        stages: ['rulesHardening', 'modelHardening'],
+        representativeStage: 'modelHardening',
+        itemMode: 'extra',
+    },
+    {
+        id: 'outputGeneration',
+        label: 'Output generation',
+        description:
+            'Builds the final masked output. This resolves overlaps, assigns stable placeholders, and prepares the preview.',
+        stages: ['resultAssembly', 'finalization'],
+        representativeStage: 'resultAssembly',
+        itemMode: 'final',
+    },
+];
 
 const formatBenchmarkDuration = (durationMs: number) =>
 {
@@ -31,17 +80,24 @@ const formatBenchmarkShare = (share: number) =>
     return `${share.toFixed(0)}%`;
 };
 
-const getBenchmarkStageShare = (
-    stage: PrivacyBenchmarkStageTiming,
-    benchmark: PrivacyBenchmark,
-) =>
+const formatBenchmarkItemCount = (phase: BenchmarkPhaseTiming) =>
+{
+    if (phase.itemCount == null)
+    {
+        return '-';
+    }
+
+    return `${phase.itemCount.toLocaleString()} ${phase.itemMode}`;
+};
+
+const getBenchmarkDurationShare = (durationMs: number, benchmark: PrivacyBenchmark) =>
 {
     if (benchmark.totalDurationMs <= 0)
     {
         return 0;
     }
 
-    return Math.max(0, (stage.durationMs / benchmark.totalDurationMs) * 100);
+    return Math.max(0, (durationMs / benchmark.totalDurationMs) * 100);
 };
 
 const getBenchmarkModeLabel = (benchmark: PrivacyBenchmark) =>
@@ -54,66 +110,123 @@ const getBenchmarkModeLabel = (benchmark: PrivacyBenchmark) =>
     return benchmark.rulesEnabled ? 'Rules only' : 'Detection disabled';
 };
 
-const getBenchmarkStageTitle = (
-    stage: PrivacyBenchmarkStageTiming,
+const getBenchmarkPhaseTimings = (benchmark: PrivacyBenchmark) =>
+{
+    return BENCHMARK_PHASES.map((phase): BenchmarkPhaseTiming =>
+    {
+        const stageTimings = benchmark.stages.filter((stage) =>
+        {
+            return phase.stages.includes(stage.stage);
+        });
+        const durationMs = stageTimings.reduce((duration, stage) =>
+        {
+            return duration + stage.durationMs;
+        }, 0);
+        const detectedItemCount = stageTimings.reduce<number | undefined>(
+            (count, stage) =>
+            {
+                if (stage.itemCount == null)
+                {
+                    return count;
+                }
+
+                return (count ?? 0) + stage.itemCount;
+            },
+            undefined,
+        );
+
+        return {
+            ...phase,
+            durationMs,
+            itemCount:
+                phase.itemMode === 'final' ? benchmark.itemCount : detectedItemCount,
+        };
+    });
+};
+
+const getBenchmarkPhaseTitle = (
+    phase: BenchmarkPhaseTiming,
     benchmark: PrivacyBenchmark,
 ) =>
 {
-    const share = getBenchmarkStageShare(stage, benchmark);
-    const itemCount =
-        stage.itemCount == null
-            ? ''
-            : `\n${stage.itemCount} item${stage.itemCount === 1 ? '' : 's'}`;
+    const share = getBenchmarkDurationShare(phase.durationMs, benchmark);
 
-    return `${stage.label}\n${formatBenchmarkDuration(stage.durationMs)}\n${formatBenchmarkShare(share)} of total${itemCount}`;
+    return `${phase.label}\n${phase.description}\n${formatBenchmarkDuration(
+        phase.durationMs,
+    )}\n${formatBenchmarkShare(share)} of total\n${formatBenchmarkItemCount(
+        phase,
+    )}`;
+};
+
+const getBenchmarkSummaryRows = (benchmark: PrivacyBenchmark) =>
+{
+    return [
+        {
+            label: 'Mode',
+            value: getBenchmarkModeLabel(benchmark),
+            title: 'Which detectors ran during the last scan.',
+        },
+        {
+            label: 'Input size',
+            value: `${benchmark.inputCharacters.toLocaleString()} chars`,
+            title: 'Number of characters processed from the original prompt.',
+        },
+        {
+            label: 'Final masks',
+            value: benchmark.itemCount.toLocaleString(),
+            title:
+                'Number of distinct masked items in the final output after overlaps and follow-up checks.',
+        },
+    ];
 };
 
 const renderBenchmarkBarSegment = (
     benchmark: PrivacyBenchmark,
-    stage: PrivacyBenchmarkStageTiming,
+    phase: BenchmarkPhaseTiming,
 ) =>
 {
-    const share = getBenchmarkStageShare(stage, benchmark);
+    const share = getBenchmarkDurationShare(phase.durationMs, benchmark);
 
-    if (stage.durationMs <= 0)
+    if (phase.durationMs <= 0)
     {
         return null;
     }
 
     return (
         <span
-            key={stage.stage}
+            key={phase.id}
             className="benchmark-segment"
             style={{
-                ...getBenchmarkStageColorStyle(stage.stage),
+                ...getBenchmarkStageColorStyle(phase.representativeStage),
                 flexBasis: `${Math.max(share, MIN_BENCHMARK_SEGMENT_PERCENT)}%`,
             }}
-            title={getBenchmarkStageTitle(stage, benchmark)}
-            aria-label={getBenchmarkStageTitle(stage, benchmark)}
+            title={getBenchmarkPhaseTitle(phase, benchmark)}
+            aria-label={getBenchmarkPhaseTitle(phase, benchmark)}
         />
     );
 };
 
 const renderBenchmarkRow = (
     benchmark: PrivacyBenchmark,
-    stage: PrivacyBenchmarkStageTiming,
+    phase: BenchmarkPhaseTiming,
 ) =>
 {
-    const share = getBenchmarkStageShare(stage, benchmark);
+    const share = getBenchmarkDurationShare(phase.durationMs, benchmark);
+    const title = getBenchmarkPhaseTitle(phase, benchmark);
 
     return (
-        <div key={stage.stage} className="benchmark-row">
-            <span className="benchmark-stage">
+        <div key={phase.id} className="benchmark-row" title={title}>
+            <span className="benchmark-stage" aria-label={phase.description}>
                 <span
                     className="benchmark-dot"
-                    style={getBenchmarkStageColorStyle(stage.stage)}
+                    style={getBenchmarkStageColorStyle(phase.representativeStage)}
                     aria-hidden="true"
                 />
-                {stage.label}
+                {phase.label}
             </span>
-            <span>{formatBenchmarkDuration(stage.durationMs)}</span>
+            <span>{formatBenchmarkDuration(phase.durationMs)}</span>
             <span>{formatBenchmarkShare(share)}</span>
-            <span>{stage.itemCount == null ? '-' : stage.itemCount}</span>
+            <span>{formatBenchmarkItemCount(phase)}</span>
         </div>
     );
 };
@@ -129,13 +242,25 @@ const renderDiagnosticsContent = (benchmark: PrivacyBenchmark | null) =>
         );
     }
 
+    const phases = getBenchmarkPhaseTimings(benchmark);
+
     return (
         <div className="benchmark-panel">
             <div className="benchmark-summary">
-                <span>{getBenchmarkModeLabel(benchmark)}</span>
-                <span>{benchmark.inputCharacters.toLocaleString()} chars</span>
-                <span>{benchmark.itemCount.toLocaleString()} items</span>
-                <span>{benchmark.hardeningItemCount.toLocaleString()} hardened</span>
+                {getBenchmarkSummaryRows(benchmark).map((row) => (
+                    <span
+                        key={row.label}
+                        className="benchmark-summary-row"
+                        title={row.title}
+                    >
+                        <span className="benchmark-summary-label">
+                            {row.label}
+                        </span>
+                        <span className="benchmark-summary-value">
+                            {row.value}
+                        </span>
+                    </span>
+                ))}
             </div>
 
             <div
@@ -145,19 +270,19 @@ const renderDiagnosticsContent = (benchmark: PrivacyBenchmark | null) =>
                     benchmark.totalDurationMs,
                 )} total.`}
             >
-                {benchmark.stages.map((stage) =>
-                    renderBenchmarkBarSegment(benchmark, stage),
+                {phases.map((phase) =>
+                    renderBenchmarkBarSegment(benchmark, phase),
                 )}
             </div>
 
             <div className="benchmark-table">
                 <div className="benchmark-row benchmark-row-header">
-                    <span>Stage</span>
+                    <span>Phase</span>
                     <span>Time</span>
                     <span>Share</span>
                     <span>Items</span>
                 </div>
-                {benchmark.stages.map((stage) => renderBenchmarkRow(benchmark, stage))}
+                {phases.map((phase) => renderBenchmarkRow(benchmark, phase))}
             </div>
         </div>
     );
