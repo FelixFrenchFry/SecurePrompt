@@ -14,6 +14,8 @@ import {
     ArrowUp,
     ArrowUpDown,
     Check,
+    CircleMinus,
+    CirclePlus,
     Copy,
     Cpu,
     Eraser,
@@ -144,6 +146,8 @@ type ShowPreviewTooltip = (
 ) => void;
 
 type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
+
+type ScanCategoryStaleState = 'added' | 'removed';
 
 type AppView = 'main' | 'settings';
 
@@ -1170,6 +1174,10 @@ export function App()
         null,
     );
     const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
+    const [isPreviewStale, setIsPreviewStale] = useState(false);
+    const [resultEnabledCategories, setResultEnabledCategories] = useState<
+        ExtensionSettings['enabledCategories'] | null
+    >(null);
     const [isPrivatizing, setIsPrivatizing] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
@@ -1247,7 +1255,7 @@ export function App()
     };
     const updatePreviewSelectionPopover = () =>
     {
-        if (!hasEnabledDetectionCategories)
+        if (!hasEnabledDetectionCategories || isPreviewStale)
         {
             hidePreviewSelectionPopover();
             return;
@@ -1290,9 +1298,78 @@ export function App()
             );
         },
     );
+    const getScanCategoryStaleState = (
+        category: SensitiveItemCategory,
+    ): ScanCategoryStaleState | null =>
+    {
+        if (!isPreviewStale || resultEnabledCategories == null)
+        {
+            return null;
+        }
+
+        const isEnabled = isSensitiveItemCategoryEnabled(
+            settings.enabledCategories,
+            category,
+        );
+        const wasEnabled = isSensitiveItemCategoryEnabled(
+            resultEnabledCategories,
+            category,
+        );
+
+        if (isEnabled && !wasEnabled)
+        {
+            return 'added';
+        }
+
+        if (!isEnabled && wasEnabled)
+        {
+            return 'removed';
+        }
+
+        return null;
+    };
+    const privacyScanDisplayCategories = PRIVACY_SCAN_CATEGORIES.filter(
+        ({ category }) =>
+        {
+            return (
+                isSensitiveItemCategoryEnabled(
+                    settings.enabledCategories,
+                    category,
+                ) ||
+                (isPreviewStale &&
+                    resultEnabledCategories != null &&
+                    isSensitiveItemCategoryEnabled(
+                        resultEnabledCategories,
+                        category,
+                    ))
+            );
+        },
+    );
+    const privacyScanDisplayCategorySet = new Set(
+        privacyScanDisplayCategories.map(({ category }) => category),
+    );
     const hasEnabledDetectionCategories = enabledPrivacyScanCategories.length > 0;
+    const hasPrivacyScanDisplayCategories =
+        privacyScanDisplayCategories.length > 0;
     const hasEnabledDetectionSources =
         settings.rulesDetectionEnabled || settings.localModelDetectionEnabled;
+    const hasPreview = privatizedPrompt.length > 0;
+    const hasCategorySettingChanges =
+        isPreviewStale &&
+        resultEnabledCategories != null &&
+        PRIVACY_SCAN_CATEGORIES.some(({ category }) =>
+        {
+            return getScanCategoryStaleState(category) != null;
+        });
+    const staleScanNotice = hasCategorySettingChanges
+        ? {
+              before: 'Detection category settings changed. Run ',
+              after: ' again to apply the updated conditions to your input.',
+          }
+        : {
+              before: 'Input or detection settings changed. Run ',
+              after: ' again before copying or sending the output.',
+          };
     const previewContent = getPreviewContent(
         privatizedPrompt,
         previewSegments,
@@ -1314,10 +1391,7 @@ export function App()
     );
     const visibleMaskingMappings = activeMaskingMappings.filter((maskingMapping) =>
     {
-        return isSensitiveItemCategoryEnabled(
-            settings.enabledCategories,
-            maskingMapping.category,
-        );
+        return privacyScanDisplayCategorySet.has(maskingMapping.category);
     });
     const activeItemCount = getMaskingMappingItemCount(visibleMaskingMappings);
     const itemCountLabel = `${formatCount(activeItemCount)} ${
@@ -1331,7 +1405,7 @@ export function App()
     };
     const toggleScanCategory = (category: SensitiveItemCategory) =>
     {
-        if (!isSensitiveItemCategoryEnabled(settings.enabledCategories, category))
+        if (!privacyScanDisplayCategorySet.has(category))
         {
             return;
         }
@@ -1350,24 +1424,50 @@ export function App()
         const count = countItemsByCategory(category);
         const isActive = activeScanCategory === category;
         const isDimmed = activeScanCategory != null && !isActive;
+        const staleState = getScanCategoryStaleState(category);
+        const StaleIcon = staleState === 'added' ? CirclePlus : CircleMinus;
+        const staleStateTitle =
+            staleState === 'added'
+                ? `${label} is enabled now and will be scanned after re-running Privatize.`
+                : `${label} is disabled now and will be removed after re-running Privatize.`;
+        const staleStateLabel =
+            staleState === 'added'
+                ? 'will be added on the next scan'
+                : 'will be removed on the next scan';
+        const staleClassName =
+            staleState == null ? '' : ` is-setting-${staleState}`;
 
         return (
-            <button
-                key={category}
-                className={`chip${isActive ? ' is-active' : ''}${isDimmed ? ' is-dimmed' : ''}`}
-                style={getPrivacyScanCategoryColorStyle(category, count)}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() => toggleScanCategory(category)}
-            >
-                <Icon size={17} aria-hidden="true" />
-                {label} {formatCount(count)}
-            </button>
+            <div key={category} className="chip-shell">
+                <button
+                    className={`chip${isActive ? ' is-active' : ''}${isDimmed ? ' is-dimmed' : ''}${staleClassName}`}
+                    style={getPrivacyScanCategoryColorStyle(category, count)}
+                    type="button"
+                    aria-pressed={isActive}
+                    title={staleState == null ? undefined : staleStateTitle}
+                    aria-label={
+                        staleState == null
+                            ? `${label} ${formatCount(count)}`
+                            : `${label} ${formatCount(count)}, ${staleStateLabel}`
+                    }
+                    onClick={() => toggleScanCategory(category)}
+                >
+                    <Icon size={17} aria-hidden="true" />
+                    {label} {formatCount(count)}
+                </button>
+                {staleState != null ? (
+                    <StaleIcon
+                        className={`chip-stale-marker is-${staleState}`}
+                        size={17}
+                        aria-hidden="true"
+                    />
+                ) : null}
+            </div>
         );
     };
     const activeScanCategoryConfig =
         activeScanCategory == null ||
-        !isSensitiveItemCategoryEnabled(settings.enabledCategories, activeScanCategory)
+        !privacyScanDisplayCategorySet.has(activeScanCategory)
             ? null
             : getPrivacyScanCategory(activeScanCategory);
     const activeScanMappings =
@@ -1381,6 +1481,13 @@ export function App()
         activeScanMappings,
         scanDetailSearchText,
     );
+    const activeScanCategoryStaleState =
+        activeScanCategory == null
+            ? null
+            : getScanCategoryStaleState(activeScanCategory);
+    const activeScanCategoryIsDisplayed =
+        activeScanCategory == null ||
+        privacyScanDisplayCategorySet.has(activeScanCategory);
     const activeScanCount = getMaskingMappingItemCount(activeScanMappings);
     const hasScanDetailSearch = scanDetailSearchText.trim().length > 0;
     const ScanDetailSortIcon = getScanDetailSortIcon(scanDetailSortDirection);
@@ -1390,6 +1497,16 @@ export function App()
     const sendButtonLabel = hasChatTarget
         ? `Send to ${chatTargetLabel}`
         : 'Open supported AI chat';
+    const privatizeButtonLabel = isPrivatizing
+        ? 'Privatizing...'
+        : isPreviewStale
+          ? 'Re-run Privatize'
+          : 'Privatize';
+    const sendButtonTitle = isPreviewStale
+        ? 'Re-run Privatize before sending.'
+        : hasChatTarget
+          ? undefined
+          : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.';
     const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
     const localModelProgressLabel =
         visibleLocalModelProgress == null
@@ -1414,6 +1531,8 @@ export function App()
         setLocalModelProgress(null);
         setCanUsePrivatizedPrompt(false);
         setSendStatus('');
+        setIsPreviewStale(hasPreview);
+        hidePreviewSelectionPopover();
     };
     const clearScanDetailSearch = () =>
     {
@@ -1458,9 +1577,11 @@ export function App()
         setScanDetailSearchText('');
         setPrivatizedInputText(inputText);
         setPrivatizedResult(result);
+        setResultEnabledCategories({ ...settingsRef.current.enabledCategories });
         setPrivatizedPrompt(result.privatizedPrompt);
         setPreviewSegments(result.segments);
         setCanUsePrivatizedPrompt(result.safeToInject);
+        setIsPreviewStale(false);
     };
     const restoreMaskingMapping = (maskingMapping: MaskingMapping) =>
     {
@@ -1749,6 +1870,13 @@ export function App()
         setIsPrivatizing(false);
         setLocalModelProgress(null);
         setCanUsePrivatizedPrompt(false);
+        setSendStatus('');
+
+        if (hasPreview)
+        {
+            setIsPreviewStale(true);
+            hidePreviewSelectionPopover();
+        }
     }, [
         settings.enabledCategories,
         settings.localModelDetectionEnabled,
@@ -1757,20 +1885,14 @@ export function App()
 
     useEffect(() =>
     {
-        if (
-            activeScanCategory == null ||
-            isSensitiveItemCategoryEnabled(
-                settings.enabledCategories,
-                activeScanCategory,
-            )
-        )
+        if (activeScanCategoryIsDisplayed)
         {
             return;
         }
 
         setActiveScanCategory(null);
         setScanDetailSearchText('');
-    }, [activeScanCategory, settings.enabledCategories]);
+    }, [activeScanCategoryIsDisplayed]);
 
     useEffect(() =>
     {
@@ -2288,6 +2410,7 @@ export function App()
         setPrivatizedPrompt('');
         setPrivatizedInputText('');
         setPrivatizedResult(null);
+        setResultEnabledCategories(null);
         setPreviewSegments([]);
         setPreviewTooltip(null);
         setPreviewSelectionPopover(null);
@@ -2296,6 +2419,7 @@ export function App()
         setScanDetailSortDirection('neutral');
         setScanDetailSearchText('');
         setCanUsePrivatizedPrompt(false);
+        setIsPreviewStale(false);
         setIsPrivatizing(false);
         setLocalModelProgress(null);
         setLatestBenchmark(null);
@@ -2349,7 +2473,13 @@ export function App()
 
     const sendToAiChat = async () =>
     {
-        if (!privatizedPrompt || !canUsePrivatizedPrompt || !hasChatTarget) {
+        if (
+            !privatizedPrompt ||
+            !canUsePrivatizedPrompt ||
+            isPreviewStale ||
+            !hasChatTarget
+        )
+        {
             return;
         }
 
@@ -2441,7 +2571,7 @@ export function App()
                 />
                 <div className="action-grid">
                     <button
-                        className="secondary-button"
+                        className="primary-button"
                         type="button"
                         onClick={privatizePrompt}
                         disabled={
@@ -2459,7 +2589,7 @@ export function App()
                         }
                     >
                         <StepForward size={19} aria-hidden="true" />
-                        {isPrivatizing ? 'Privatizing...' : 'Privatize'}
+                        {privatizeButtonLabel}
                     </button>
                 </div>
                 {visibleLocalModelProgress != null ? (
@@ -2506,15 +2636,22 @@ export function App()
                     </h2>
                     <span>{itemCountLabel}</span>
                 </div>
-                {hasEnabledDetectionCategories ? (
+                {hasPrivacyScanDisplayCategories ? (
                     <div className="chip-row" aria-label="Detected item categories">
-                        {enabledPrivacyScanCategories.map(renderPrivacyScanCategory)}
+                        {privacyScanDisplayCategories.map(renderPrivacyScanCategory)}
                     </div>
                 ) : (
                     <p className="scan-detail-empty">
                         No detection categories enabled.
                     </p>
                 )}
+                {isPreviewStale ? (
+                    <p className="stale-preview-notice" role="status">
+                        {staleScanNotice.before}
+                        <strong>Privatize</strong>
+                        {staleScanNotice.after}
+                    </p>
+                ) : null}
                 {activeScanCategoryConfig != null ? (
                     <div
                         className="scan-detail"
@@ -2577,13 +2714,21 @@ export function App()
                                     <p className="scan-detail-empty">
                                         {hasScanDetailSearch
                                             ? 'No matching originals.'
+                                            : activeScanCategoryStaleState === 'added'
+                                              ? 'Will be scanned after you re-run Privatize.'
+                                              : activeScanCategoryStaleState === 'removed'
+                                                ? 'Will be removed after you re-run Privatize.'
                                             : `No ${activeScanCategoryConfig.label.toLowerCase()} items masked.`}
                                     </p>
                                 )}
                             </>
                         ) : (
                             <p className="scan-detail-empty">
-                                No {activeScanCategoryConfig.label.toLowerCase()} items masked.
+                                {activeScanCategoryStaleState === 'added'
+                                    ? 'Will be scanned after you re-run Privatize.'
+                                    : activeScanCategoryStaleState === 'removed'
+                                      ? 'Will be removed after you re-run Privatize.'
+                                    : `No ${activeScanCategoryConfig.label.toLowerCase()} items masked.`}
                             </p>
                         )}
                     </div>
@@ -2617,9 +2762,16 @@ export function App()
                         Copy
                     </button>
                 </div>
+                {isPreviewStale ? (
+                    <p className="stale-preview-notice">
+                        This preview does not match the updated settings. Run{' '}
+                        <strong>Privatize</strong> again before copying or sending the
+                        output.
+                    </p>
+                ) : null}
                 <div
                     ref={previewRef}
-                    className="preview"
+                    className={`preview${isPreviewStale ? ' is-stale' : ''}`}
                     aria-live="polite"
                     onPointerUp={schedulePreviewSelectionPopover}
                     onKeyUp={schedulePreviewSelectionPopover}
@@ -2739,12 +2891,13 @@ export function App()
                     className="primary-button panel-action"
                     type="button"
                     onClick={sendToAiChat}
-                    disabled={!privatizedPrompt || !canUsePrivatizedPrompt || !hasChatTarget}
-                    title={
-                        hasChatTarget
-                            ? undefined
-                            : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.'
+                    disabled={
+                        !privatizedPrompt ||
+                        !canUsePrivatizedPrompt ||
+                        isPreviewStale ||
+                        !hasChatTarget
                     }
+                    title={sendButtonTitle}
                 >
                     <Send size={18} aria-hidden="true" />
                     {sendButtonLabel}

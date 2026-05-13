@@ -176,7 +176,14 @@ h2 {
     gap: 8px;
 }
 
+.chip-shell {
+    position: relative;
+    min-width: 0;
+}
+
 .chip {
+    position: relative;
+    width: 100%;
     min-height: 36px;
     border: 1px solid var(--category-primary, #334155);
     border-radius: 8px;
@@ -201,6 +208,29 @@ h2 {
 
 .chip.is-dimmed {
     opacity: 0.4;
+}
+
+.chip.is-setting-added,
+.chip.is-setting-removed {
+    opacity: 0.4;
+}
+
+.chip-stale-marker {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.2);
+    pointer-events: none;
+}
+
+.chip-stale-marker.is-added {
+    color: #16a34a;
+}
+
+.chip-stale-marker.is-removed {
+    color: #dc2626;
 }
 
 .chip:hover,
@@ -405,6 +435,23 @@ h2 {
     font-size: 12px;
 }
 
+.stale-preview-notice {
+    margin: 10px 0 0;
+    border: 1px solid #facc15;
+    border-radius: 8px;
+    padding: 8px 9px;
+    color: #854d0e;
+    background: #fefce8;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.stale-preview-notice strong {
+    color: var(--brand-blue);
+    font-weight: 750;
+}
+
 .diagnostics-panel {
     margin-top: 10px;
     border-top: 1px solid #e2e8f0;
@@ -478,6 +525,11 @@ h2 {
     background: #fbfdff;
     line-height: 1.5;
     white-space: pre-wrap;
+}
+
+.preview.is-stale {
+    border-color: #facc15;
+    background: #fffbeb;
 }
 
 .preview-mask {
@@ -676,6 +728,7 @@ h2 {
     margin-top: 12px;
 }
 
+.action-grid .primary-button,
 .action-grid .secondary-button {
     width: 100%;
 }
@@ -1003,8 +1056,8 @@ h2 {
 .category-setting-main p {
     margin: 0;
     color: #64748b;
-    font-size: 11px;
-    line-height: 1.35;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .prompt-header-options {
@@ -1195,6 +1248,10 @@ h2 {
     color: #86efac;
 }
 
+.app-shell.is-dark .chip-stale-marker {
+    border-color: #111827;
+}
+
 .app-shell.is-dark .prompt-input,
 .app-shell.is-dark .preview {
     border-color: #334155;
@@ -1279,6 +1336,17 @@ h2 {
 .app-shell.is-dark .status-message,
 .app-shell.is-dark .footer {
     color: #94a3b8;
+}
+
+.app-shell.is-dark .stale-preview-notice {
+    border-color: #a16207;
+    color: #fde68a;
+    background: #422006;
+}
+
+.app-shell.is-dark .preview.is-stale {
+    border-color: #a16207;
+    background: #100b05;
 }
 
 .app-shell.is-dark .scan-detail-row,
