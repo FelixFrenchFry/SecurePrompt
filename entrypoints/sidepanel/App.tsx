@@ -2764,7 +2764,7 @@ export function App()
                 </div>
                 {isPreviewStale ? (
                     <p className="stale-preview-notice">
-                        This preview does not match the updated settings. Run{' '}
+                        Does not match the updated settings. Run{' '}
                         <strong>Privatize</strong> again before copying or sending the
                         output.
                     </p>

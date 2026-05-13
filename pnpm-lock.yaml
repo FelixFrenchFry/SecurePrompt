@@ -16,6 +16,9 @@ importers:
             card-validator:
                 specifier: ^10.0.4
                 version: 10.0.4
+            chrono-node:
+                specifier: ^2.9.1
+                version: 2.9.1
             german-tax-id-validator:
                 specifier: ^1.0.7
                 version: 1.0.7
@@ -1264,6 +1267,13 @@ packages:
             }
         engines: { node: '>=12.13.0' }
         hasBin: true
+
+    chrono-node@2.9.1:
+        resolution:
+            {
+                integrity: sha512-nqP8Zp11efCYQIESXPxeDM8ikzN5BDb3Zzou+a66fZq+X2hzKFdsNLQE2/uBAh//BZEMbaMo1eTnagK7hOenAg==,
+            }
+        engines: { node: ^12.20.0 || ^14.13.1 || >=16.0.0 }
 
     ci-info@4.4.0:
         resolution:
@@ -4120,6 +4130,8 @@ snapshots:
             lighthouse-logger: 2.0.2
         transitivePeerDependencies:
             - supports-color
+
+    chrono-node@2.9.1: {}
 
     ci-info@4.4.0: {}
 

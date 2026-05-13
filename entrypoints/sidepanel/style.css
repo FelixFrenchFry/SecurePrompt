@@ -448,8 +448,15 @@ h2 {
 }
 
 .stale-preview-notice strong {
-    color: var(--brand-blue);
+    display: inline-block;
+    border: 1px solid var(--brand-blue);
+    border-radius: 5px;
+    padding: 0 4px;
+    color: #ffffff;
+    background: var(--brand-blue);
     font-weight: 750;
+    line-height: 1.35;
+    white-space: nowrap;
 }
 
 .diagnostics-panel {

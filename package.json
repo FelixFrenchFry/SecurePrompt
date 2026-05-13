@@ -26,6 +26,7 @@
         "@huggingface/transformers": "4.2.0",
         "awesome-phonenumber": "^7.8.0",
         "card-validator": "^10.0.4",
+        "chrono-node": "^2.9.1",
         "german-tax-id-validator": "^1.0.7",
         "ibantools": "^4.5.4",
         "ip-regex": "^5.0.0",

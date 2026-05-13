@@ -5,6 +5,10 @@ import {
 } from './config';
 import { detectSensitiveItemsWithLocalModel } from './detect/local-model-based/detection-local-model-based';
 import { detectAccountItems } from './detect/rule-based/detect-account-items';
+import {
+    detectDateItems,
+    isClearlyInvalidDateItem,
+} from './detect/rule-based/detect-date-items';
 import { detectEmailItems } from './detect/rule-based/detect-email-items';
 import { detectNetworkItems } from './detect/rule-based/detect-network-items';
 import { detectPhoneItems } from './detect/rule-based/detect-phone-items';
@@ -127,6 +131,7 @@ const AUTHORITATIVE_RULE_CATEGORIES = new Set<SensitiveItemCategory>([
     'EMAIL',
     'PHONE',
     'ACCOUNT',
+    'DATE',
     'NETWORK',
     'SECRET',
 ]);
@@ -135,6 +140,7 @@ const RESIDUAL_RULE_CATEGORIES = new Set<SensitiveItemCategory>([
     'EMAIL',
     'PHONE',
     'ACCOUNT',
+    'DATE',
     'NETWORK',
     'SECRET',
 ]);
@@ -407,7 +413,10 @@ export const createPrivatizedPromptAsync = async (
         detectedItems.push(...modelItems);
     }
 
-    const filteredItems = filterProtectedPlaceholderItems(inputText, detectedItems);
+    const filteredItems = filterInvalidModelDateItems(
+        inputText,
+        filterProtectedPlaceholderItems(inputText, detectedItems),
+    );
     const result = createPrivatizedPromptFromItems(
         inputText,
         filterSensitiveItemsByEnabledCategories(
@@ -711,6 +720,7 @@ const detectResidualSensitiveItemsWithRules = (
         ...detectEmailItems(residualInput.text),
         ...detectPhoneItems(residualInput.text),
         ...detectAccountItems(residualInput.text),
+        ...detectDateItems(residualInput.text),
         ...detectNetworkItems(residualInput.text),
         ...detectSecretItems(residualInput.text),
     ];
@@ -821,6 +831,23 @@ const filterProtectedPlaceholderItems = (
     });
 };
 
+const filterInvalidModelDateItems = (inputText: string, items: SensitiveItem[]) =>
+{
+    return items.filter((item) =>
+    {
+        return !isInvalidModelDateItem(inputText, item);
+    });
+};
+
+const isInvalidModelDateItem = (inputText: string, item: SensitiveItem) =>
+{
+    return (
+        item.source === 'model' &&
+        item.category === 'DATE' &&
+        isClearlyInvalidDateItem(inputText, item)
+    );
+};
+
 const mapResidualSensitiveItems = (
     inputText: string,
     existingItems: SensitiveItem[],
@@ -925,7 +952,10 @@ const detectSensitiveItemsSync = (
     }
 
     return filterSensitiveItemsByEnabledCategories(
-        filterProtectedPlaceholderItems(inputText, detectedItems),
+        filterInvalidModelDateItems(
+            inputText,
+            filterProtectedPlaceholderItems(inputText, detectedItems),
+        ),
         options.enabledCategories,
     );
 };
@@ -1332,6 +1362,13 @@ const compareOverlapRepresentatives = (left: SensitiveItem, right: SensitiveItem
         return manualDifference;
     }
 
+    const ruleDatePhoneDifference = compareRuleDatePhoneOverlapPriority(left, right);
+
+    if (ruleDatePhoneDifference !== 0)
+    {
+        return ruleDatePhoneDifference;
+    }
+
     const categoryDifference =
         getSensitiveItemCategoryPriority(left.category) -
         getSensitiveItemCategoryPriority(right.category);
@@ -1349,6 +1386,29 @@ const compareOverlapRepresentatives = (left: SensitiveItem, right: SensitiveItem
     }
 
     return compareItemsByPosition(left, right);
+};
+
+const compareRuleDatePhoneOverlapPriority = (
+    left: SensitiveItem,
+    right: SensitiveItem,
+) =>
+{
+    if (isRuleDateItem(left) && right.category === 'PHONE')
+    {
+        return -1;
+    }
+
+    if (left.category === 'PHONE' && isRuleDateItem(right))
+    {
+        return 1;
+    }
+
+    return 0;
+};
+
+const isRuleDateItem = (item: SensitiveItem) =>
+{
+    return item.source === 'rules' && item.category === 'DATE';
 };
 
 const getManualSourcePriority = (item: SensitiveItem) =>
