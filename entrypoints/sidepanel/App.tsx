@@ -158,7 +158,9 @@ type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
 type ScanCategoryStaleState = 'added' | 'removed';
 
-type AppView = 'main' | 'reader' | 'settings';
+type AppView = 'main' | 'promptReader' | 'reader' | 'settings';
+
+type WorkspaceTab = 'prompt' | 'privatized';
 
 type ScanDetailSearchTarget = {
     normalized: string;
@@ -1163,6 +1165,7 @@ const formatBytes = (bytes: number) =>
 export function App()
 {
     const [appView, setAppView] = useState<AppView>('main');
+    const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('prompt');
     const [settings, setSettings] = useState<ExtensionSettings>(
         DEFAULT_EXTENSION_SETTINGS,
     );
@@ -1524,6 +1527,20 @@ export function App()
         : hasChatTarget
           ? undefined
           : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.';
+    const privatizePromptDisabled =
+        prompt.trim().length === 0 ||
+        isPrivatizing ||
+        !hasEnabledDetectionSources ||
+        !hasEnabledDetectionCategories;
+    const privatizeButtonTitle = !hasEnabledDetectionCategories
+        ? 'Enable at least one detection category in settings.'
+        : hasEnabledDetectionSources
+          ? undefined
+          : 'Enable rules or local model detection in settings.';
+    const copyPrivatizedPromptDisabled = !privatizedPrompt || isPreviewStale;
+    const copyButtonTitle = isPreviewStale
+        ? 'Re-run Privatize before copying.'
+        : 'Copy privatized prompt';
     const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
     const localModelProgressLabel =
         visibleLocalModelProgress == null
@@ -1540,6 +1557,17 @@ export function App()
     const localModelProgressIsIndeterminate =
         visibleLocalModelProgress != null &&
         isLocalModelProgressIndeterminate(visibleLocalModelProgress);
+    const selectWorkspaceTab = (tab: WorkspaceTab) =>
+    {
+        if (tab === workspaceTab)
+        {
+            return;
+        }
+
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setWorkspaceTab(tab);
+    };
     const updatePrompt = (event: ReactChangeEvent<HTMLTextAreaElement>) =>
     {
         privatizationRunIdRef.current += 1;
@@ -1599,6 +1627,12 @@ export function App()
         setPreviewSegments(result.segments);
         setCanUsePrivatizedPrompt(result.safeToInject);
         setIsPreviewStale(false);
+        setWorkspaceTab('privatized');
+
+        if (appView === 'promptReader')
+        {
+            setAppView('main');
+        }
     };
     const restoreMaskingMapping = (maskingMapping: MaskingMapping) =>
     {
@@ -2404,7 +2438,7 @@ export function App()
                 return;
             }
 
-            setClipboardStatus('Privatized prompt ready.');
+            setClipboardStatus('');
         }
         catch (error)
         {
@@ -2465,6 +2499,7 @@ export function App()
         setSendStatus('');
         setCopied(false);
         setCleared(true);
+        setWorkspaceTab('prompt');
 
         if (copyResetTimerRef.current !== undefined)
         {
@@ -2486,7 +2521,7 @@ export function App()
 
     const copyPrivatizedPrompt = async () =>
     {
-        if (!privatizedPrompt)
+        if (copyPrivatizedPromptDisabled)
         {
             return;
         }
@@ -2553,23 +2588,74 @@ export function App()
         }
     };
 
+    const openPromptReaderView = () =>
+    {
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setAppView('promptReader');
+    };
+
+    const closePromptReaderView = () =>
+    {
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setWorkspaceTab('prompt');
+        setAppView('main');
+    };
+
     const openReaderView = () =>
     {
         hidePreviewTooltip();
-        setPreviewSelectionPopover(null);
+        hidePreviewSelectionPopover();
         setAppView('reader');
     };
 
     const closeReaderView = () =>
     {
         hidePreviewTooltip();
-        setPreviewSelectionPopover(null);
+        hidePreviewSelectionPopover();
         setAppView('main');
     };
 
+    const renderPromptSurface = (variant: 'compact' | 'reader') => (
+        <div
+            className={`prompt-input-shell${
+                variant === 'compact' ? ' has-expand-button' : ''
+            }`}
+        >
+            <textarea
+                id={variant === 'compact' ? 'original-prompt' : 'original-prompt-reader'}
+                className={`prompt-input${
+                    variant === 'reader' ? ' prompt-input-reader' : ''
+                }`}
+                value={prompt}
+                onChange={updatePrompt}
+                placeholder="Type or paste your prompt here..."
+                spellCheck="true"
+            />
+            {variant === 'compact' ? (
+                <button
+                    className="preview-expand-button"
+                    type="button"
+                    title="Open expanded prompt"
+                    aria-label="Open expanded prompt"
+                    onClick={openPromptReaderView}
+                >
+                    <Maximize2 size={15} aria-hidden="true" />
+                </button>
+            ) : null}
+        </div>
+    );
+
     const renderPreviewSurface = (variant: 'compact' | 'reader') => (
         <>
-            <div className="preview-shell">
+            <div
+                className={`preview-shell${
+                    variant === 'compact' && privatizedPrompt
+                        ? ' has-expand-button'
+                        : ''
+                }`}
+            >
                 <div
                     ref={previewRef}
                     className={`preview${
@@ -2705,6 +2791,108 @@ export function App()
         </>
     );
 
+    if (appView === 'promptReader')
+    {
+        return (
+            <main
+                className={`app-shell reader-shell${
+                    settings.darkModeEnabled ? ' is-dark' : ''
+                }`}
+            >
+                <header className="app-header reader-header">
+                    <button
+                        className="icon-button"
+                        type="button"
+                        title="Back"
+                        aria-label="Back"
+                        onClick={closePromptReaderView}
+                    >
+                        <ArrowLeft size={18} aria-hidden="true" />
+                    </button>
+                    <div className="brand-lockup">
+                        <h1>Prompt</h1>
+                    </div>
+                </header>
+
+                <section className="panel reader-panel">
+                    <div className="section-header">
+                        <label
+                            className="label label-with-icon"
+                            htmlFor="original-prompt-reader"
+                        >
+                            <FileText size={18} aria-hidden="true" />
+                            <span>Original prompt</span>
+                        </label>
+                        <button
+                            className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
+                            type="button"
+                            onClick={clearPrompts}
+                            disabled={!prompt && !privatizedPrompt && !cleared}
+                        >
+                            {cleared ? (
+                                <Check size={16} aria-hidden="true" />
+                            ) : (
+                                <Eraser size={16} aria-hidden="true" />
+                            )}
+                            Clear
+                        </button>
+                    </div>
+                    {renderPromptSurface('reader')}
+                    <button
+                        className="primary-button panel-action"
+                        type="button"
+                        onClick={privatizePrompt}
+                        disabled={privatizePromptDisabled}
+                        title={privatizeButtonTitle}
+                    >
+                        <StepForward size={19} aria-hidden="true" />
+                        {privatizeButtonLabel}
+                    </button>
+                    {visibleLocalModelProgress != null ? (
+                        <div
+                            className="local-model-progress"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            <div className="local-model-progress-header">
+                                <span>{localModelProgressLabel}</span>
+                                {localModelProgressMeta.length > 0 ? (
+                                    <span className="local-model-progress-meta">
+                                        {localModelProgressMeta}
+                                    </span>
+                                ) : null}
+                            </div>
+                            <div
+                                className={`local-model-progress-track${
+                                    localModelProgressIsIndeterminate
+                                        ? ' is-indeterminate'
+                                        : ''
+                                }`}
+                                aria-hidden="true"
+                            >
+                                <div
+                                    className="local-model-progress-fill"
+                                    style={{
+                                        width:
+                                            localModelProgressPercent == null
+                                                ? undefined
+                                                : `${localModelProgressPercent}%`,
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    ) : null}
+                </section>
+
+                {clipboardStatus || sendStatus ? (
+                    <p className="status-message" role="status">
+                        {sendStatus || clipboardStatus}
+                    </p>
+                ) : null}
+            </main>
+        );
+    }
+
     if (appView === 'reader')
     {
         return (
@@ -2739,9 +2927,9 @@ export function App()
                                 copied ? ' is-copied' : ''
                             }`}
                             type="button"
-                            title="Copy privatized prompt"
+                            title={copyButtonTitle}
                             onClick={copyPrivatizedPrompt}
-                            disabled={!privatizedPrompt}
+                            disabled={copyPrivatizedPromptDisabled}
                         >
                             {copied ? (
                                 <Check size={16} aria-hidden="true" />
@@ -2821,57 +3009,137 @@ export function App()
                 </div>
             </header>
 
-            <section className="panel">
+            <section className="panel workspace-panel">
                 <div className="section-header">
-                    <label className="label label-with-icon" htmlFor="original-prompt">
-                        <FileText size={18} aria-hidden="true" />
-                        <span>Original prompt</span>
-                    </label>
+                    {workspaceTab === 'prompt' ? (
+                        <label
+                            className="label label-with-icon"
+                            htmlFor="original-prompt"
+                        >
+                            <FileText size={18} aria-hidden="true" />
+                            <span>Original prompt</span>
+                        </label>
+                    ) : (
+                        <h2 className="label-with-icon">
+                            <ShieldCheck size={18} aria-hidden="true" />
+                            <span>Privatized prompt</span>
+                        </h2>
+                    )}
+                    {workspaceTab === 'prompt' ? (
+                        <button
+                            className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
+                            type="button"
+                            onClick={clearPrompts}
+                            disabled={!prompt && !privatizedPrompt && !cleared}
+                        >
+                            {cleared ? (
+                                <Check size={16} aria-hidden="true" />
+                            ) : (
+                                <Eraser size={16} aria-hidden="true" />
+                            )}
+                            Clear
+                        </button>
+                    ) : (
+                        <button
+                            className={`ghost-button copy-button${copied ? ' is-copied' : ''}`}
+                            type="button"
+                            title={copyButtonTitle}
+                            onClick={copyPrivatizedPrompt}
+                            disabled={copyPrivatizedPromptDisabled}
+                        >
+                            {copied ? (
+                                <Check size={16} aria-hidden="true" />
+                            ) : (
+                                <Copy size={16} aria-hidden="true" />
+                            )}
+                            Copy
+                        </button>
+                    )}
+                </div>
+                <div className="workspace-tabs" role="tablist" aria-label="Prompt workspace">
                     <button
-                        className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
+                        id="workspace-tab-prompt"
+                        className={`workspace-tab${workspaceTab === 'prompt' ? ' is-active' : ''}`}
                         type="button"
-                        onClick={clearPrompts}
-                        disabled={!prompt && !privatizedPrompt && !cleared}
+                        role="tab"
+                        aria-selected={workspaceTab === 'prompt'}
+                        aria-controls="workspace-panel-prompt"
+                        onClick={() => selectWorkspaceTab('prompt')}
                     >
-                        {cleared ? (
-                            <Check size={16} aria-hidden="true" />
-                        ) : (
-                            <Eraser size={16} aria-hidden="true" />
-                        )}
-                        Clear
+                        <FileText size={16} aria-hidden="true" />
+                        Prompt
+                    </button>
+                    <button
+                        id="workspace-tab-privatized"
+                        className={`workspace-tab${
+                            workspaceTab === 'privatized' ? ' is-active' : ''
+                        }${isPreviewStale ? ' is-stale' : ''}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={workspaceTab === 'privatized'}
+                        aria-controls="workspace-panel-privatized"
+                        onClick={() => selectWorkspaceTab('privatized')}
+                    >
+                        <ShieldCheck size={16} aria-hidden="true" />
+                        Privatized
+                        {isPreviewStale ? (
+                            <span className="workspace-tab-status">Stale</span>
+                        ) : null}
                     </button>
                 </div>
-                <textarea
-                    id="original-prompt"
-                    className="prompt-input"
-                    value={prompt}
-                    onChange={updatePrompt}
-                    placeholder="Type or paste your prompt here..."
-                    spellCheck="true"
-                />
-                <div className="action-grid">
-                    <button
-                        className="primary-button"
-                        type="button"
-                        onClick={privatizePrompt}
-                        disabled={
-                            prompt.trim().length === 0 ||
-                            isPrivatizing ||
-                            !hasEnabledDetectionSources ||
-                            !hasEnabledDetectionCategories
-                        }
-                        title={
-                            !hasEnabledDetectionCategories
-                                ? 'Enable at least one detection category in settings.'
-                                : hasEnabledDetectionSources
-                                  ? undefined
-                                  : 'Enable rules or local model detection in settings.'
-                        }
+                {workspaceTab === 'prompt' ? (
+                    <div
+                        id="workspace-panel-prompt"
+                        className="workspace-tab-panel"
+                        role="tabpanel"
+                        aria-labelledby="workspace-tab-prompt"
                     >
-                        <StepForward size={19} aria-hidden="true" />
-                        {privatizeButtonLabel}
-                    </button>
-                </div>
+                        {renderPromptSurface('compact')}
+                        <div className="action-grid">
+                            <button
+                                className="primary-button"
+                                type="button"
+                                onClick={privatizePrompt}
+                                disabled={privatizePromptDisabled}
+                                title={privatizeButtonTitle}
+                            >
+                                <StepForward size={19} aria-hidden="true" />
+                                {privatizeButtonLabel}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div
+                        id="workspace-panel-privatized"
+                        className="workspace-tab-panel"
+                        role="tabpanel"
+                        aria-labelledby="workspace-tab-privatized"
+                    >
+                        {isPreviewStale ? (
+                            <p className="stale-preview-notice">
+                                Does not match the updated settings. Run{' '}
+                                <strong>Privatize</strong> again before copying or
+                                sending the output.
+                            </p>
+                        ) : null}
+                        {renderPreviewSurface('compact')}
+                        <button
+                            className="primary-button panel-action"
+                            type="button"
+                            onClick={sendToAiChat}
+                            disabled={
+                                !privatizedPrompt ||
+                                !canUsePrivatizedPrompt ||
+                                isPreviewStale ||
+                                !hasChatTarget
+                            }
+                            title={sendButtonTitle}
+                        >
+                            <Send size={18} aria-hidden="true" />
+                            {sendButtonLabel}
+                        </button>
+                    </div>
+                )}
                 {visibleLocalModelProgress != null ? (
                     <div
                         className="local-model-progress"
@@ -2907,6 +3175,12 @@ export function App()
                     </div>
                 ) : null}
             </section>
+
+            {clipboardStatus || sendStatus ? (
+                <p className="status-message" role="status">
+                    {sendStatus || clipboardStatus}
+                </p>
+            ) : null}
 
             <section className="panel">
                 <div className="section-header">
@@ -3021,57 +3295,6 @@ export function App()
                     }
                 />
             </section>
-
-            <section className="panel">
-                <div className="section-header">
-                    <h2 className="label-with-icon">
-                        <ShieldCheck size={18} aria-hidden="true" />
-                        <span>Privatized prompt</span>
-                    </h2>
-                    <button
-                        className={`ghost-button copy-button${copied ? ' is-copied' : ''}`}
-                        type="button"
-                        onClick={copyPrivatizedPrompt}
-                        disabled={!privatizedPrompt}
-                    >
-                        {copied ? (
-                            <Check size={16} aria-hidden="true" />
-                        ) : (
-                            <Copy size={16} aria-hidden="true" />
-                        )}
-                        Copy
-                    </button>
-                </div>
-                {isPreviewStale ? (
-                    <p className="stale-preview-notice">
-                        Does not match the updated settings. Run{' '}
-                        <strong>Privatize</strong> again before copying or sending the
-                        output.
-                    </p>
-                ) : null}
-                {renderPreviewSurface('compact')}
-                <button
-                    className="primary-button panel-action"
-                    type="button"
-                    onClick={sendToAiChat}
-                    disabled={
-                        !privatizedPrompt ||
-                        !canUsePrivatizedPrompt ||
-                        isPreviewStale ||
-                        !hasChatTarget
-                    }
-                    title={sendButtonTitle}
-                >
-                    <Send size={18} aria-hidden="true" />
-                    {sendButtonLabel}
-                </button>
-            </section>
-
-            {clipboardStatus || sendStatus ? (
-                <p className="status-message" role="status">
-                    {sendStatus || clipboardStatus}
-                </p>
-            ) : null}
 
             <footer className="footer">Local memory only</footer>
         </main>
