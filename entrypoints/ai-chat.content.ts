@@ -357,13 +357,6 @@ const insertTextWithExecCommand = (element: HTMLElement, text: string) =>
     return inserted;
 };
 
-const replaceContentEditableText = (element: HTMLElement, text: string) =>
-{
-    focusComposerInput(element);
-    element.textContent = text;
-    dispatchInputEventsWithText(element, text);
-};
-
 const insertTextIntoRichTextComposer = async (
     element: HTMLElement,
     text: string,
@@ -394,8 +387,6 @@ const insertTextIntoRichTextComposer = async (
     {
         return;
     }
-
-    replaceContentEditableText(element, text);
 };
 
 const TEXT_INPUT_INSERTION_ADAPTER: PromptInsertionAdapter = {

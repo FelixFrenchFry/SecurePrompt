@@ -67,6 +67,10 @@ export type ManualSensitiveItemInput = {
     end: number;
 };
 
+export type ManualSensitiveItemOptions = {
+    enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
+};
+
 type PrivatizedPromptFromItemsOptions = {
     preferredMaskingMappings?: readonly MaskingMapping[];
     useResidualRulesDetection?: boolean;
@@ -505,6 +509,7 @@ export const createPrivatizedPromptWithManualItem = (
         'items' | 'maskingMappings' | 'safeToInject'
     >,
     manualItemInput: ManualSensitiveItemInput,
+    options: ManualSensitiveItemOptions = {},
 ): PrivatizedPromptResult =>
 {
     const manualItem = createManualSensitiveItem(
@@ -525,6 +530,7 @@ export const createPrivatizedPromptWithManualItem = (
         ],
         {
             preferredMaskingMappings: result.maskingMappings,
+            enabledCategories: options.enabledCategories,
         },
     );
 

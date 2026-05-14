@@ -562,16 +562,27 @@ h2 {
     line-height: 1.35;
 }
 
-.stale-preview-notice strong {
+.stale-preview-action {
     display: inline-block;
     border: 1px solid var(--brand-blue);
     border-radius: 5px;
     padding: 0 4px;
     color: #ffffff;
     background: var(--brand-blue);
+    cursor: pointer;
     font-weight: 750;
     line-height: 1.35;
     white-space: nowrap;
+}
+
+.stale-preview-action:hover {
+    border-color: var(--brand-blue-hover);
+    background: var(--brand-blue-hover);
+}
+
+.stale-preview-action:focus-visible {
+    outline: 3px solid rgba(14, 165, 233, 0.3);
+    outline-offset: 2px;
 }
 
 .diagnostics-panel {
@@ -1328,7 +1339,7 @@ h2 {
 }
 
 .benchmark-summary-value {
-    color: var(--brand-blue);
+    color: #334155;
     font-weight: 800;
     text-align: right;
     white-space: nowrap;
@@ -1638,7 +1649,7 @@ h2 {
 }
 
 .app-shell.is-dark .benchmark-summary-value {
-    color: #f5d0fe;
+    color: #e2e8f0;
 }
 
 .app-shell.is-dark .benchmark-bar {

@@ -1448,8 +1448,8 @@ export function App()
         const StaleIcon = staleState === 'added' ? CirclePlus : CircleMinus;
         const staleStateTitle =
             staleState === 'added'
-                ? `${label} is enabled now and will be scanned after re-running Privatize.`
-                : `${label} is disabled now and will be removed after re-running Privatize.`;
+                ? `${label} is enabled now and will be scanned after you run Privatize again.`
+                : `${label} is disabled now and will be removed after you run Privatize again.`;
         const staleStateLabel =
             staleState === 'added'
                 ? 'will be added on the next scan'
@@ -1517,13 +1517,9 @@ export function App()
     const sendButtonLabel = hasChatTarget
         ? `Send to ${chatTargetLabel}`
         : 'Open supported AI chat';
-    const privatizeButtonLabel = isPrivatizing
-        ? 'Privatizing...'
-        : isPreviewStale
-          ? 'Re-run Privatize'
-          : 'Privatize';
+    const privatizeButtonLabel = isPrivatizing ? 'Privatizing...' : 'Privatize';
     const sendButtonTitle = isPreviewStale
-        ? 'Re-run Privatize before sending.'
+        ? 'Run Privatize again before sending.'
         : hasChatTarget
           ? undefined
           : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.';
@@ -1539,7 +1535,7 @@ export function App()
           : 'Enable rules or local model detection in settings.';
     const copyPrivatizedPromptDisabled = !privatizedPrompt || isPreviewStale;
     const copyButtonTitle = isPreviewStale
-        ? 'Re-run Privatize before copying.'
+        ? 'Run Privatize again before copying.'
         : 'Copy privatized prompt';
     const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
     const localModelProgressLabel =
@@ -1567,6 +1563,17 @@ export function App()
         hidePreviewTooltip();
         hidePreviewSelectionPopover();
         setWorkspaceTab(tab);
+    };
+    const showPromptWorkspace = () =>
+    {
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setWorkspaceTab('prompt');
+        setAppView('main');
+        window.requestAnimationFrame(() =>
+        {
+            document.getElementById('original-prompt')?.focus({ preventScroll: true });
+        });
     };
     const updatePrompt = (event: ReactChangeEvent<HTMLTextAreaElement>) =>
     {
@@ -1782,6 +1789,9 @@ export function App()
                     category,
                     start: previewSelectionPopover.start,
                     end: previewSelectionPopover.end,
+                },
+                {
+                    enabledCategories: settings.enabledCategories,
                 },
             );
             const manualOriginals = getManualSelectionOriginals(
@@ -2942,8 +2952,14 @@ export function App()
                     {isPreviewStale ? (
                         <p className="stale-preview-notice">
                             Does not match the updated settings. Run{' '}
-                            <strong>Privatize</strong> again before copying or sending
-                            the output.
+                            <button
+                                className="stale-preview-action"
+                                type="button"
+                                onClick={showPromptWorkspace}
+                            >
+                                Privatize
+                            </button>{' '}
+                            again before copying or sending the output.
                         </p>
                     ) : null}
                     {renderPreviewSurface('reader')}
@@ -3118,8 +3134,14 @@ export function App()
                         {isPreviewStale ? (
                             <p className="stale-preview-notice">
                                 Does not match the updated settings. Run{' '}
-                                <strong>Privatize</strong> again before copying or
-                                sending the output.
+                                <button
+                                    className="stale-preview-action"
+                                    type="button"
+                                    onClick={showPromptWorkspace}
+                                >
+                                    Privatize
+                                </button>{' '}
+                                again before copying or sending the output.
                             </p>
                         ) : null}
                         {renderPreviewSurface('compact')}
@@ -3176,12 +3198,6 @@ export function App()
                 ) : null}
             </section>
 
-            {clipboardStatus || sendStatus ? (
-                <p className="status-message" role="status">
-                    {sendStatus || clipboardStatus}
-                </p>
-            ) : null}
-
             <section className="panel">
                 <div className="section-header">
                     <h2 className="label-with-icon">
@@ -3202,7 +3218,13 @@ export function App()
                 {isPreviewStale ? (
                     <p className="stale-preview-notice" role="status">
                         {staleScanNotice.before}
-                        <strong>Privatize</strong>
+                        <button
+                            className="stale-preview-action"
+                            type="button"
+                            onClick={showPromptWorkspace}
+                        >
+                            Privatize
+                        </button>
                         {staleScanNotice.after}
                     </p>
                 ) : null}
@@ -3269,9 +3291,9 @@ export function App()
                                         {hasScanDetailSearch
                                             ? 'No matching originals.'
                                             : activeScanCategoryStaleState === 'added'
-                                              ? 'Will be scanned after you re-run Privatize.'
+                                              ? 'Will be scanned after you run Privatize again.'
                                               : activeScanCategoryStaleState === 'removed'
-                                                ? 'Will be removed after you re-run Privatize.'
+                                                ? 'Will be removed after you run Privatize again.'
                                             : `No ${activeScanCategoryConfig.label.toLowerCase()} items masked.`}
                                     </p>
                                 )}
@@ -3279,9 +3301,9 @@ export function App()
                         ) : (
                             <p className="scan-detail-empty">
                                 {activeScanCategoryStaleState === 'added'
-                                    ? 'Will be scanned after you re-run Privatize.'
+                                    ? 'Will be scanned after you run Privatize again.'
                                     : activeScanCategoryStaleState === 'removed'
-                                      ? 'Will be removed after you re-run Privatize.'
+                                      ? 'Will be removed after you run Privatize again.'
                                     : `No ${activeScanCategoryConfig.label.toLowerCase()} items masked.`}
                             </p>
                         )}
@@ -3295,6 +3317,12 @@ export function App()
                     }
                 />
             </section>
+
+            {clipboardStatus || sendStatus ? (
+                <p className="status-message" role="status">
+                    {sendStatus || clipboardStatus}
+                </p>
+            ) : null}
 
             <footer className="footer">Local memory only</footer>
         </main>

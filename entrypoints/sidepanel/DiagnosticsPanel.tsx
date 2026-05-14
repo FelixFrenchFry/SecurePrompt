@@ -17,8 +17,8 @@ type DiagnosticsPanelProps = {
 const MIN_BENCHMARK_SEGMENT_PERCENT = 1.5;
 
 type BenchmarkPhaseId =
-    | 'itemDetection'
-    | 'safetyCheck'
+    | 'modelDetection'
+    | 'rulesDetection'
     | 'outputGeneration';
 
 type BenchmarkPhaseSummary = {
@@ -35,26 +35,26 @@ type BenchmarkPhaseTiming = BenchmarkPhaseSummary & {
 
 const BENCHMARK_PHASES: BenchmarkPhaseSummary[] = [
     {
-        id: 'itemDetection',
-        label: 'Item detection',
+        id: 'modelDetection',
+        label: 'Model-based item detection',
         description:
-            'Initial scan of the input. This combines enabled rule-based detectors and the local model when it is enabled.',
-        stages: ['rulesDetection', 'modelDetection'],
+            'Runs the local model scan and the model-based follow-up check when local model detection is enabled.',
+        stages: ['modelDetection', 'modelHardening'],
         representativeStage: 'modelDetection',
     },
     {
-        id: 'safetyCheck',
-        label: 'Safety check',
+        id: 'rulesDetection',
+        label: 'Rule-based item detection',
         description:
-            'Follow-up scan after the first preview is built. This looks for sensitive items that may still be visible in the output.',
-        stages: ['rulesHardening', 'modelHardening'],
-        representativeStage: 'modelHardening',
+            'Runs deterministic detectors before preview creation and again after masking to catch remaining rule-detectable values.',
+        stages: ['rulesDetection', 'rulesHardening'],
+        representativeStage: 'rulesDetection',
     },
     {
         id: 'outputGeneration',
-        label: 'Mask output',
+        label: 'Finalization and mask output',
         description:
-            'Builds the final masked output. This resolves overlaps, assigns stable placeholders, and prepares the preview.',
+            'Resolves overlaps, assigns stable placeholders, applies masks, and prepares the final preview.',
         stages: ['resultAssembly', 'finalization'],
         representativeStage: 'resultAssembly',
     },
