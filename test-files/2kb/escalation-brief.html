@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Synthetic Privacy Fixture 2 KB</title>
+</head>
+<body>
+<main>
+<h1>Cross-Functional Incident Review</h1>
+<article data-case="INC-2026-000481">
+<h2>Regional billing export failure</h2>
+<dl>
+<dt>Owner</dt><dd>Evelyn Stone &lt;evelyn.stone@example-corp.test&gt;</dd>
+<dt>Reviewer</dt><dd>Marcus Keller</dd>
+<dt>Phone</dt><dd>+1-415-555-0198</dd>
+<dt>Address</dt><dd>742 Evergreen Terrace, Springfield, IL 62704</dd>
+<dt>Date</dt><dd>2026-05-10T14:30:00Z</dd>
+<dt>Endpoint</dt><dd>billing-worker-042.internal.example.test</dd>
+<dt>Account</dt><dd>cus_TEST_1234567890</dd>
+<dt>Credential marker</dt><dd>SECRET_001</dd>
+</dl>
+<p>37 customer export jobs delayed and duplicate audit records created Recommended action: pause incremental export and verify affected invoice batches.</p>
+<pre>Edge cases: &quot;Evelyn Stone,&quot; &lt;evelyn.stone@example-corp.test&gt;; (Marcus Keller) [+1-415-555-0198]; cus_TEST_1234567890/SECRET_001.
+Adjacent values: EvelynStoneevelyn.stone@example-corp.test+1-415-555-0198 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Sofia Ivanova discussed DATASET-OMEGA-4412 at s3://restricted-dataset-example/phase-a.</pre>
+</article>
+
+<article data-case="INC-2026-000482">
+<h2>Healthcare lab callback backlog</h2>
+<dl>
+<dt>Owner</dt><dd>Dr. Lina Patel &lt;lina.patel@clinic.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Omar Al Haddad</dd>
+<dt>Phone</dt><dd>+44 7700 900123</dd>
+<dt>Address</dt><dd>Flat 4B, 88 King's Road, Chelsea, London SW3 4NX</dd>
+<dt>Date</dt><dd>May 12, 2026</dd>
+<dt>Endpoint</dt><dd>lab-results.eu.example.test</dd>
+<dt>Account</dt><dd>PAT-778821-ALPHA</dd>
+<dt>Credential marker</dt><dd>SECRET_002</dd>
+</dl>
+<p>callback queue breached the service target for oncology follow-up Recommended action: route urgent callbacks to the APAC support lead and audit access notes.</p>
+<pre>Edge cases: &quot;Dr. Lina Pa

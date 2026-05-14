@@ -1,0 +1,12 @@
+Synthetic privacy fixture: mixed incident packet
+Target size: 1 KB
+Instruction: preserve operational meaning, severity, blockers, dependencies, dates, contacts, accounts, infrastructure, and credential markers while replacing private values.
+
+Executive summary 1: Regional billing export failure.
+Domain: billing migration. Owner Evelyn Stone and reviewer Marcus Keller coordinated response from 742 Evergreen Terrace, Springfield, IL 62704.
+Contact path included evelyn.stone@example-corp.test, +1-415-555-0198, and endpoint billing-worker-042.internal.example.test.
+Operational impact: 37 customer export jobs delayed and duplicate audit records created. Recommended action: pause incremental export and verify affected invoice batches.
+
+Timeline: reported at May 12, 2026; first escalation used 31.12.2025; follow-up checkpoint was Q2 2026.
+At T+15 minutes, Dr. Lina Patel saw retries against lab-results.eu.example.test; at T+42 minutes, Omar Al Haddad linked account PAT-778821-ALPHA.
+Invalid and ambiguous decoys nearb

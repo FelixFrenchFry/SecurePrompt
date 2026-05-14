@@ -1,0 +1,24 @@
+{
+  "kind": "synthetic-privacy-fixture",
+  "records": [
+    {
+      "id": "INC-2026-000481",
+      "title": "Regional billing export failure",
+      "owner": "Evelyn Stone",
+      "reviewer": "Marcus Keller",
+      "email": "evelyn.stone@example-corp.test",
+      "phone": "+1-415-555-0198",
+      "address": "742 Evergreen Terrace, Springfield, IL 62704",
+      "date": "2026-05-10T14:30:00Z",
+      "endpoint": "billing-worker-042.internal.example.test",
+      "account": "cus_TEST_1234567890",
+      "credentialMarker": "SECRET_001",
+      "notes": [
+        "Export jobs delayed and duplicate audit records created.",
+        "Decoys include version 1.2.3, token bucket algorithm, and May I ask a question?",
+        "Placeholders EMAIL_001, PERSON_002, SECRET_003, NETWORK_004 should stay coherent."
+      ]
+    }
+  ],
+  "padding": "                                                                                                                                                                                      "
+}

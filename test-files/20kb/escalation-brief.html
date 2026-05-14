@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Synthetic Privacy Fixture 20 KB</title>
+</head>
+<body>
+<main>
+<h1>Cross-Functional Incident Review</h1>
+<article data-case="INC-2026-000481">
+<h2>Regional billing export failure</h2>
+<dl>
+<dt>Owner</dt><dd>Evelyn Stone &lt;evelyn.stone@example-corp.test&gt;</dd>
+<dt>Reviewer</dt><dd>Marcus Keller</dd>
+<dt>Phone</dt><dd>+1-415-555-0198</dd>
+<dt>Address</dt><dd>742 Evergreen Terrace, Springfield, IL 62704</dd>
+<dt>Date</dt><dd>2026-05-10T14:30:00Z</dd>
+<dt>Endpoint</dt><dd>billing-worker-042.internal.example.test</dd>
+<dt>Account</dt><dd>cus_TEST_1234567890</dd>
+<dt>Credential marker</dt><dd>SECRET_001</dd>
+</dl>
+<p>37 customer export jobs delayed and duplicate audit records created Recommended action: pause incremental export and verify affected invoice batches.</p>
+<pre>Edge cases: &quot;Evelyn Stone,&quot; &lt;evelyn.stone@example-corp.test&gt;; (Marcus Keller) [+1-415-555-0198]; cus_TEST_1234567890/SECRET_001.
+Adjacent values: EvelynStoneevelyn.stone@example-corp.test+1-415-555-0198 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Sofia Ivanova discussed DATASET-OMEGA-4412 at s3://restricted-dataset-example/phase-a.</pre>
+</article>
+
+<article data-case="INC-2026-000482">
+<h2>Healthcare lab callback backlog</h2>
+<dl>
+<dt>Owner</dt><dd>Dr. Lina Patel &lt;lina.patel@clinic.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Omar Al Haddad</dd>
+<dt>Phone</dt><dd>+44 7700 900123</dd>
+<dt>Address</dt><dd>Flat 4B, 88 King's Road, Chelsea, London SW3 4NX</dd>
+<dt>Date</dt><dd>May 12, 2026</dd>
+<dt>Endpoint</dt><dd>lab-results.eu.example.test</dd>
+<dt>Account</dt><dd>PAT-778821-ALPHA</dd>
+<dt>Credential marker</dt><dd>SECRET_002</dd>
+</dl>
+<p>callback queue breached the service target for oncology follow-up Recommended action: route urgent callbacks to the APAC support lead and audit access notes.</p>
+<pre>Edge cases: &quot;Dr. Lina Patel,&quot; &lt;lina.patel@clinic.example.test&gt;; (Omar Al Haddad) [+44 7700 900123]; PAT-778821-ALPHA/SECRET_002.
+Adjacent values: Dr.LinaPatellina.patel@clinic.example.test+44 7700 900123 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Ipek Demir discussed ACCT-998877665544 at https://incident-console.example-corp.test/cases/INC-2026-0481.</pre>
+</article>
+
+<article data-case="INC-2026-000483">
+<h2>Legal discovery hold review</h2>
+<dl>
+<dt>Owner</dt><dd>Mei-Ling Zhao &lt;mei-ling.zhao@review.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Patrick O'Connor</dd>
+<dt>Phone</dt><dd>+353 1 555 0199</dd>
+<dt>Address</dt><dd>Invalidenstrasse 43, 10115 Berlin, Germany</dd>
+<dt>Date</dt><dd>31.12.2025</dd>
+<dt>Endpoint</dt><dd>ediscovery-hold.internal.example.test</dd>
+<dt>Account</dt><dd>CASE-2026-004812</dd>
+<dt>Credential marker</dt><dd>SECRET_003</dd>
+</dl>
+<p>custodian export required legal approval before external transfer Recommended action: separate privileged notes and preserve custodian mapping stability.</p>
+<pre>Edge cases: &quot;Mei-Ling Zhao,&quot; &lt;mei-ling.zhao@review.example.test&gt;; (Patrick O'Connor) [+353 1 555 0199]; CASE-2026-004812/SECRET_003.
+Adjacent values: Mei-LingZhaomei-ling.zhao@review.example.test+353 1 555 0199 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Evelyn Stone discussed cus_TEST_1234567890 at billing-worker-042.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000484">
+<h2>Vendor payment exception</h2>
+<dl>
+<dt>Owner</dt><dd>Ana Maria Lopez &lt;ana.lopez@finance.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Jean-Baptiste Durand</dd>
+<dt>Phone</dt><dd>+34 600 123 456</dd>
+<dt>Address</dt><dd>Via Roma 22, 00184 Roma, Italy</dd>
+<dt>Date</dt><dd>Q2 2026</dd>
+<dt>Endpoint</dt><dd>payments-api.eu-west-1.example.test</dd>
+<dt>Account</dt><dd>GB82 WEST 1234 5698 7654 32</dd>
+<dt>Credential marker</dt><dd>SECRET_004</dd>
+</dl>
+<p>supplier remittance was held pending tax identifier reconciliation Recommended action: confirm IBAN ownership and redact payment references in summary.</p>
+<pre>Edge cases: &quot;Ana Maria Lopez,&quot; &lt;ana.lopez@finance.example.test&gt;; (Jean-Baptiste Durand) [+34 600 123 456]; GB82 WEST 1234 5698 7654 32/SECRET_004.
+Adjacent values: AnaMariaLopezana.lopez@finance.example.test+34 600 123 456 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Dr. Lina Patel discussed PAT-778821-ALPHA at lab-results.eu.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000485">
+<h2>Research data sharing review</h2>
+<dl>
+<dt>Owner</dt><dd>Sofia Ivanova &lt;sofia.ivanova@research.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Yamada Taro</dd>
+<dt>Phone</dt><dd>+81 3 1234 5678</dd>
+<dt>Address</dt><dd>〒100-0001 東京都千代田区千代田1-1</dd>
+<dt>Date</dt><dd>2026-W19</dd>
+<dt>Endpoint</dt><dd>s3://restricted-dataset-example/phase-a</dd>
+<dt>Account</dt><dd>DATASET-OMEGA-4412</dd>
+<dt>Credential marker</dt><dd>SECRET_005</dd>
+</dl>
+<p>de-identified cohort export needed a second privacy review Recommended action: preserve cohort counts while masking patient and collaborator names.</p>
+<pre>Edge cases: &quot;Sofia Ivanova,&quot; &lt;sofia.ivanova@research.example.test&gt;; (Yamada Taro) [+81 3 1234 5678]; DATASET-OMEGA-4412/SECRET_005.
+Adjacent values: SofiaIvanovasofia.ivanova@research.example.test+81 3 1234 5678 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Mei-Ling Zhao discussed CASE-2026-004812 at ediscovery-hold.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000486">
+<h2>Product telemetry incident</h2>
+<dl>
+<dt>Owner</dt><dd>Ipek Demir &lt;ipek.demir@platform.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Chloe van der Meer</dd>
+<dt>Phone</dt><dd>+49 30 901820</dd>
+<dt>Address</dt><dd>Keizersgracht 123, 1015 CJ Amsterdam, Netherlands</dd>
+<dt>Date</dt><dd>next Monday at 09:00 UTC</dd>
+<dt>Endpoint</dt><dd>https://incident-console.example-corp.test/cases/INC-2026-0481</dd>
+<dt>Account</dt><dd>ACCT-998877665544</dd>
+<dt>Credential marker</dt><dd>SECRET_006</dd>
+</dl>
+<p>telemetry samples exposed private tenant labels in debug payloads Recommended action: rotate diagnostic markers and disable verbose telemetry sampling.</p>
+<pre>Edge cases: &quot;Ipek Demir,&quot; &lt;ipek.demir@platform.example.test&gt;; (Chloe van der Meer) [+49 30 901820]; ACCT-998877665544/SECRET_006.
+Adjacent values: IpekDemiripek.demir@platform.example.test+49 30 901820 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Ana Maria Lopez discussed GB82 WEST 1234 5698 7654 32 at payments-api.eu-west-1.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000487">
+<h2>Regional billing export failure</h2>
+<dl>
+<dt>Owner</dt><dd>Evelyn Stone &lt;evelyn.stone@example-corp.test&gt;</dd>
+<dt>Reviewer</dt><dd>Marcus Keller</dd>
+<dt>Phone</dt><dd>+1-415-555-0198</dd>
+<dt>Address</dt><dd>742 Evergreen Terrace, Springfield, IL 62704</dd>
+<dt>Date</dt><dd>2026-05-10T14:30:00Z</dd>
+<dt>Endpoint</dt><dd>billing-worker-042.internal.example.test</dd>
+<dt>Account</dt><dd>cus_TEST_1234567890</dd>
+<dt>Credential marker</dt><dd>SECRET_001</dd>
+</dl>
+<p>37 customer export jobs delayed and duplicate audit records created Recommended action: pause incremental export and verify affected invoice batches.</p>
+<pre>Edge cases: &quot;Evelyn Stone,&quot; &lt;evelyn.stone@example-corp.test&gt;; (Marcus Keller) [+1-415-555-0198]; cus_TEST_1234567890/SECRET_001.
+Adjacent values: EvelynStoneevelyn.stone@example-corp.test+1-415-555-0198 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Sofia Ivanova discussed DATASET-OMEGA-4412 at s3://restricted-dataset-example/phase-a.</pre>
+</article>
+
+<article data-case="INC-2026-000488">
+<h2>Healthcare lab callback backlog</h2>
+<dl>
+<dt>Owner</dt><dd>Dr. Lina Patel &lt;lina.patel@clinic.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Omar Al Haddad</dd>
+<dt>Phone</dt><dd>+44 7700 900123</dd>
+<dt>Address</dt><dd>Flat 4B, 88 King's Road, Chelsea, London SW3 4NX</dd>
+<dt>Date</dt><dd>May 12, 2026</dd>
+<dt>Endpoint</dt><dd>lab-results.eu.example.test</dd>
+<dt>Account</dt><dd>PAT-778821-ALPHA</dd>
+<dt>Credential marker</dt><dd>SECRET_002</dd>
+</dl>
+<p>callback queue breached the service target for oncology follow-up Recommended action: route urgent callbacks to the APAC support lead and audit access notes.</p>
+<pre>Edge cases: &quot;Dr. Lina Patel,&quot; &lt;lina.patel@clinic.example.test&gt;; (Omar Al Haddad) [+44 7700 900123]; PAT-778821-ALPHA/SECRET_002.
+Adjacent values: Dr.LinaPatellina.patel@clinic.example.test+44 7700 900123 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Ipek Demir discussed ACCT-998877665544 at https://incident-console.example-corp.test/cases/INC-2026-0481.</pre>
+</article>
+
+<article data-case="INC-2026-000489">
+<h2>Legal discovery hold review</h2>
+<dl>
+<dt>Owner</dt><dd>Mei-Ling Zhao &lt;mei-ling.zhao@review.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Patrick O'Connor</dd>
+<dt>Phone</dt><dd>+353 1 555 0199</dd>
+<dt>Address</dt><dd>Invalidenstrasse 43, 10115 Berlin, Germany</dd>
+<dt>Date</dt><dd>31.12.2025</dd>
+<dt>Endpoint</dt><dd>ediscovery-hold.internal.example.test</dd>
+<dt>Account</dt><dd>CASE-2026-004812</dd>
+<dt>Credential marker</dt><dd>SECRET_003</dd>
+</dl>
+<p>custodian export required legal approval before external transfer Recommended action: separate privileged notes and preserve custodian mapping stability.</p>
+<pre>Edge cases: &quot;Mei-Ling Zhao,&quot; &lt;mei-ling.zhao@review.example.test&gt;; (Patrick O'Connor) [+353 1 555 0199]; CASE-2026-004812/SECRET_003.
+Adjacent values: Mei-LingZhaomei-ling.zhao@review.example.test+353 1 555 0199 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Evelyn Stone discussed cus_TEST_1234567890 at billing-worker-042.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000490">
+<h2>Vendor payment exception</h2>
+<dl>
+<dt>Owner</dt><dd>Ana Maria Lopez &lt;ana.lopez@finance.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Jean-Baptiste Durand</dd>
+<dt>Phone</dt><dd>+34 600 123 456</dd>
+<dt>Address</dt><dd>Via Roma 22, 00184 Roma, Italy</dd>
+<dt>Date</dt><dd>Q2 2026</dd>
+<dt>Endpoint</dt><dd>payments-api.eu-west-1.example.test</dd>
+<dt>Account</dt><dd>GB82 WEST 1234 5698 7654 32</dd>
+<dt>Credential marker</dt><dd>SECRET_004</dd>
+</dl>
+<p>supplier remittance was held pending tax identifier reconciliation Recommended action: confirm IBAN ownership and redact payment references in summary.</p>
+<pre>Edge cases: &quot;Ana Maria Lopez,&quot; &lt;ana.lopez@finance.example.test&gt;; (Jean-Baptiste Durand) [+34 600 123 456]; GB82 WEST 1234 5698 7654 32/SECRET_004.
+Adjacent values: AnaMariaLopezana.lopez@finance.example.test+34 600 123 456 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Dr. Lina Patel discussed PAT-778821-ALPHA at lab-results.eu.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000491">
+<h2>Research data sharing review</h2>
+<dl>
+<dt>Owner</dt><dd>Sofia Ivanova &lt;sofia.ivanova@research.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Yamada Taro</dd>
+<dt>Phone</dt><dd>+81 3 1234 5678</dd>
+<dt>Address</dt><dd>〒100-0001 東京都千代田区千代田1-1</dd>
+<dt>Date</dt><dd>2026-W19</dd>
+<dt>Endpoint</dt><dd>s3://restricted-dataset-example/phase-a</dd>
+<dt>Account</dt><dd>DATASET-OMEGA-4412</dd>
+<dt>Credential marker</dt><dd>SECRET_005</dd>
+</dl>
+<p>de-identified cohort export needed a second privacy review Recommended action: preserve cohort counts while masking patient and collaborator names.</p>
+<pre>Edge cases: &quot;Sofia Ivanova,&quot; &lt;sofia.ivanova@research.example.test&gt;; (Yamada Taro) [+81 3 1234 5678]; DATASET-OMEGA-4412/SECRET_005.
+Adjacent values: SofiaIvanovasofia.ivanova@research.example.test+81 3 1234 5678 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Mei-Ling Zhao discussed CASE-2026-004812 at ediscovery-hold.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000492">
+<h2>Product telemetry incident</h2>
+<dl>
+<dt>Owner</dt><dd>Ipek Demir &lt;ipek.demir@platform.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Chloe van der Meer</dd>
+<dt>Phone</dt><dd>+49 30 901820</dd>
+<dt>Address</dt><dd>Keizersgracht 123, 1015 CJ Amsterdam, Netherlands</dd>
+<dt>Date</dt><dd>next Monday at 09:00 UTC</dd>
+<dt>Endpoint</dt><dd>https://incident-console.example-corp.test/cases/INC-2026-0481</dd>
+<dt>Account</dt><dd>ACCT-998877665544</dd>
+<dt>Credential marker</dt><dd>SECRET_006</dd>
+</dl>
+<p>telemetry samples exposed private tenant labels in debug payloads Recommended action: rotate diagnostic markers and disable verbose telemetry sampling.</p>
+<pre>Edge cases: &quot;Ipek Demir,&quot; &lt;ipek.demir@platform.example.test&gt;; (Chloe van der Meer) [+49 30 901820]; ACCT-998877665544/SECRET_006.
+Adjacent values: IpekDemiripek.demir@platform.example.test+49 30 901820 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Ana Maria Lopez discussed GB82 WEST 1234 5698 7654 32 at payments-api.eu-west-1.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000493">
+<h2>Regional billing export failure</h2>
+<dl>
+<dt>Owner</dt><dd>Evelyn Stone &lt;evelyn.stone@example-corp.test&gt;</dd>
+<dt>Reviewer</dt><dd>Marcus Keller</dd>
+<dt>Phone</dt><dd>+1-415-555-0198</dd>
+<dt>Address</dt><dd>742 Evergreen Terrace, Springfield, IL 62704</dd>
+<dt>Date</dt><dd>2026-05-10T14:30:00Z</dd>
+<dt>Endpoint</dt><dd>billing-worker-042.internal.example.test</dd>
+<dt>Account</dt><dd>cus_TEST_1234567890</dd>
+<dt>Credential marker</dt><dd>SECRET_001</dd>
+</dl>
+<p>37 customer export jobs delayed and duplicate audit records created Recommended action: pause incremental export and verify affected invoice batches.</p>
+<pre>Edge cases: &quot;Evelyn Stone,&quot; &lt;evelyn.stone@example-corp.test&gt;; (Marcus Keller) [+1-415-555-0198]; cus_TEST_1234567890/SECRET_001.
+Adjacent values: EvelynStoneevelyn.stone@example-corp.test+1-415-555-0198 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Sofia Ivanova discussed DATASET-OMEGA-4412 at s3://restricted-dataset-example/phase-a.</pre>
+</article>
+
+<article data-case="INC-2026-000494">
+<h2>Healthcare lab callback backlog</h2>
+<dl>
+<dt>Owner</dt><dd>Dr. Lina Patel &lt;lina.patel@clinic.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Omar Al Haddad</dd>
+<dt>Phone</dt><dd>+44 7700 900123</dd>
+<dt>Address</dt><dd>Flat 4B, 88 King's Road, Chelsea, London SW3 4NX</dd>
+<dt>Date</dt><dd>May 12, 2026</dd>
+<dt>Endpoint</dt><dd>lab-results.eu.example.test</dd>
+<dt>Account</dt><dd>PAT-778821-ALPHA</dd>
+<dt>Credential marker</dt><dd>SECRET_002</dd>
+</dl>
+<p>callback queue breached the service target for oncology follow-up Recommended action: route urgent callbacks to the APAC support lead and audit access notes.</p>
+<pre>Edge cases: &quot;Dr. Lina Patel,&quot; &lt;lina.patel@clinic.example.test&gt;; (Omar Al Haddad) [+44 7700 900123]; PAT-778821-ALPHA/SECRET_002.
+Adjacent values: Dr.LinaPatellina.patel@clinic.example.test+44 7700 900123 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Ipek Demir discussed ACCT-998877665544 at https://incident-console.example-corp.test/cases/INC-2026-0481.</pre>
+</article>
+
+<article data-case="INC-2026-000495">
+<h2>Legal discovery hold review</h2>
+<dl>
+<dt>Owner</dt><dd>Mei-Ling Zhao &lt;mei-ling.zhao@review.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Patrick O'Connor</dd>
+<dt>Phone</dt><dd>+353 1 555 0199</dd>
+<dt>Address</dt><dd>Invalidenstrasse 43, 10115 Berlin, Germany</dd>
+<dt>Date</dt><dd>31.12.2025</dd>
+<dt>Endpoint</dt><dd>ediscovery-hold.internal.example.test</dd>
+<dt>Account</dt><dd>CASE-2026-004812</dd>
+<dt>Credential marker</dt><dd>SECRET_003</dd>
+</dl>
+<p>custodian export required legal approval before external transfer Recommended action: separate privileged notes and preserve custodian mapping stability.</p>
+<pre>Edge cases: &quot;Mei-Ling Zhao,&quot; &lt;mei-ling.zhao@review.example.test&gt;; (Patrick O'Connor) [+353 1 555 0199]; CASE-2026-004812/SECRET_003.
+Adjacent values: Mei-LingZhaomei-ling.zhao@review.example.test+353 1 555 0199 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Evelyn Stone discussed cus_TEST_1234567890 at billing-worker-042.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000496">
+<h2>Vendor payment exception</h2>
+<dl>
+<dt>Owner</dt><dd>Ana Maria Lopez &lt;ana.lopez@finance.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Jean-Baptiste Durand</dd>
+<dt>Phone</dt><dd>+34 600 123 456</dd>
+<dt>Address</dt><dd>Via Roma 22, 00184 Roma, Italy</dd>
+<dt>Date</dt><dd>Q2 2026</dd>
+<dt>Endpoint</dt><dd>payments-api.eu-west-1.example.test</dd>
+<dt>Account</dt><dd>GB82 WEST 1234 5698 7654 32</dd>
+<dt>Credential marker</dt><dd>SECRET_004</dd>
+</dl>
+<p>supplier remittance was held pending tax identifier reconciliation Recommended action: confirm IBAN ownership and redact payment references in summary.</p>
+<pre>Edge cases: &quot;Ana Maria Lopez,&quot; &lt;ana.lopez@finance.example.test&gt;; (Jean-Baptiste Durand) [+34 600 123 456]; GB82 WEST 1234 5698 7654 32/SECRET_004.
+Adjacent values: AnaMariaLopezana.lopez@finance.example.test+34 600 123 456 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Dr. Lina Patel discussed PAT-778821-ALPHA at lab-results.eu.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000497">
+<h2>Research data sharing review</h2>
+<dl>
+<dt>Owner</dt><dd>Sofia Ivanova &lt;sofia.ivanova@research.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Yamada Taro</dd>
+<dt>Phone</dt><dd>+81 3 1234 5678</dd>
+<dt>Address</dt><dd>〒100-0001 東京都千代田区千代田1-1</dd>
+<dt>Date</dt><dd>2026-W19</dd>
+<dt>Endpoint</dt><dd>s3://restricted-dataset-example/phase-a</dd>
+<dt>Account</dt><dd>DATASET-OMEGA-4412</dd>
+<dt>Credential marker</dt><dd>SECRET_005</dd>
+</dl>
+<p>de-identified cohort export needed a second privacy review Recommended action: preserve cohort counts while masking patient and collaborator names.</p>
+<pre>Edge cases: &quot;Sofia Ivanova,&quot; &lt;sofia.ivanova@research.example.test&gt;; (Yamada Taro) [+81 3 1234 5678]; DATASET-OMEGA-4412/SECRET_005.
+Adjacent values: SofiaIvanovasofia.ivanova@research.example.test+81 3 1234 5678 should reveal boundary behavior.
+Embedded placeholders: AliceEMAIL_001Morgan, GooPERSON_001e, DATE_001May, NETWORK_004, and SECRET_003 should not be corrupted.
+Cross-reference: Mei-Ling Zhao discussed CASE-2026-004812 at ediscovery-hold.internal.example.test.</pre>
+</article>
+
+<article data-case="INC-2026-000498">
+<h2>Product telemetry incident</h2>
+<dl>
+<dt>Owner</dt><dd>Ipek Demir &lt;ipek.demir@platform.example.test&gt;</dd>
+<dt>Reviewer</dt><dd>Chloe van der Meer</dd>
+<dt>Phone</dt><dd>+49 30 901820</dd>
+<dt>Addres
