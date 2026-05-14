@@ -53,6 +53,7 @@ export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
     useRulesDetection?: boolean;
     enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
+    preferredMaskingMappings?: readonly MaskingMapping[];
     onLocalModelProgress?: LocalModelProgressCallback;
     onBenchmark?: PrivacyBenchmarkCallback;
 };
@@ -69,6 +70,7 @@ export type ManualSensitiveItemInput = {
 
 export type ManualSensitiveItemOptions = {
     enabledCategories?: Partial<Record<SensitiveItemCategory, boolean>>;
+    preferredMaskingMappings?: readonly MaskingMapping[];
 };
 
 type PrivatizedPromptFromItemsOptions = {
@@ -428,6 +430,7 @@ export const createPrivatizedPromptAsync = async (
             options.enabledCategories,
         ),
         {
+            preferredMaskingMappings: options.preferredMaskingMappings,
             useResidualRulesDetection: useRulesDetection,
             enabledCategories: options.enabledCategories,
             safeToInject,
@@ -529,7 +532,8 @@ export const createPrivatizedPromptWithManualItem = (
             manualItem,
         ],
         {
-            preferredMaskingMappings: result.maskingMappings,
+            preferredMaskingMappings:
+                options.preferredMaskingMappings ?? result.maskingMappings,
             enabledCategories: options.enabledCategories,
         },
     );

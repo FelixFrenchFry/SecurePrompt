@@ -19,9 +19,11 @@ import {
     CirclePlus,
     Copy,
     Cpu,
+    Download,
     Eraser,
     FileText,
     Maximize2,
+    Paperclip,
     RotateCcw,
     ScanSearch,
     Search,
@@ -29,9 +31,16 @@ import {
     Settings as SettingsIcon,
     ShieldCheck,
     StepForward,
+    Upload,
     X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
+import {
+    extractTextFile,
+    formatTextFileSize,
+    SUPPORTED_TEXT_FILE_ACCEPT,
+} from '../../source/documents/extract-text-file';
+import type { FileTextDocument } from '../../source/documents/types';
 import {
     GET_CHAT_TARGET_MESSAGE,
     INJECT_PROMPT_MESSAGE,
@@ -44,6 +53,7 @@ import {
     type LocalModelProgress,
     type MaskingMapping,
     type PrivacyBenchmark,
+    type PrivacyBenchmarkStageTiming,
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
     type SensitiveItemCategory,
@@ -113,6 +123,7 @@ type PreviewTooltipBridge = {
 };
 
 type PreviewTooltip = {
+    target: PreviewTarget;
     text: string;
     mappingId: string;
     mask: string;
@@ -126,6 +137,7 @@ type PreviewTooltip = {
 };
 
 type PreviewSelectionPopover = {
+    target: PreviewTarget;
     text: string;
     start: number;
     end: number;
@@ -148,6 +160,7 @@ type PreviewTooltipEvent =
     | ReactKeyboardEvent<HTMLElement>;
 
 type ShowPreviewTooltip = (
+    target: PreviewTarget,
     event: PreviewTooltipEvent,
     text: string,
     mappingId: string,
@@ -158,9 +171,30 @@ type ScanDetailSortDirection = 'neutral' | 'ascending' | 'descending';
 
 type ScanCategoryStaleState = 'added' | 'removed';
 
-type AppView = 'main' | 'promptReader' | 'reader' | 'settings';
+type AppView = 'main' | 'promptReader' | 'reader' | 'fileReader' | 'settings';
 
 type WorkspaceTab = 'prompt' | 'privatized';
+
+type FileReaderTab = 'original' | 'privatized';
+
+type PreviewTarget =
+    | {
+          kind: 'prompt';
+      }
+    | {
+          kind: 'file';
+          attachmentId: string;
+      };
+
+const PROMPT_PREVIEW_TARGET: PreviewTarget = { kind: 'prompt' };
+
+type TextFileAttachment = {
+    document: FileTextDocument;
+    result: PrivatizedPromptResult | null;
+    ignoredMappingIds: string[];
+    error: string | null;
+    included: boolean;
+};
 
 type ScanDetailSearchTarget = {
     normalized: string;
@@ -571,6 +605,7 @@ const clamp = (value: number, minimum: number, maximum: number) =>
 };
 
 const renderPreviewSegment = (
+    target: PreviewTarget,
     segment: PrivatizedPromptSegment,
     index: number,
     activeScanCategory: SensitiveItemCategory | null,
@@ -605,11 +640,23 @@ const renderPreviewSegment = (
             tabIndex={0}
             aria-label={`${segment.text} masks ${segment.category.toLowerCase()}`}
             onPointerEnter={(event) =>
-                showPreviewTooltip(event, segment.original, segment.mappingId, segment.text)
+                showPreviewTooltip(
+                    target,
+                    event,
+                    segment.original,
+                    segment.mappingId,
+                    segment.text,
+                )
             }
             onPointerLeave={queueHidePreviewTooltip}
             onFocus={(event) =>
-                showPreviewTooltip(event, segment.original, segment.mappingId, segment.text)
+                showPreviewTooltip(
+                    target,
+                    event,
+                    segment.original,
+                    segment.mappingId,
+                    segment.text,
+                )
             }
             onBlur={queueHidePreviewTooltip}
             onKeyDown={(event) =>
@@ -625,6 +672,7 @@ const renderPreviewSegment = (
                 {
                     event.preventDefault();
                     showPreviewTooltip(
+                        target,
                         event,
                         segment.original,
                         segment.mappingId,
@@ -639,6 +687,7 @@ const renderPreviewSegment = (
 };
 
 const getPreviewContent = (
+    target: PreviewTarget,
     privatizedPrompt: string,
     previewSegments: PrivatizedPromptSegment[],
     activeScanCategory: SensitiveItemCategory | null,
@@ -660,6 +709,7 @@ const getPreviewContent = (
     return previewSegments.map((segment, index) =>
     {
         return renderPreviewSegment(
+            target,
             segment,
             index,
             activeScanCategory,
@@ -812,6 +862,7 @@ const getPreviewSelectionPopover = (
     selection: Selection | null,
     previewElement: HTMLElement | null,
     inputText: string,
+    target: PreviewTarget,
 ): PreviewSelectionPopover | null =>
 {
     if (
@@ -852,6 +903,7 @@ const getPreviewSelectionPopover = (
     }
 
     return {
+        target,
         ...selectedRange,
         ...getPreviewSelectionPopoverPosition(anchorRect),
     };
@@ -1162,10 +1214,332 @@ const formatBytes = (bytes: number) =>
     return `${bytes.toFixed(0)} B`;
 };
 
+const getTextFileAttachmentLabel = (
+    attachment: TextFileAttachment,
+    index: number,
+) =>
+{
+    return `Attachment ${index + 1} (.${attachment.document.format})`;
+};
+
+const getTextFileAttachmentLineCount = (attachment: TextFileAttachment) =>
+{
+    if (attachment.document.text.length === 0)
+    {
+        return 0;
+    }
+
+    return attachment.document.text.split(/\r\n|\r|\n/).length;
+};
+
+const getTextFileAttachmentItemCount = (attachment: TextFileAttachment) =>
+{
+    return getMaskingMappingItemCount(
+        getActiveTextFileAttachmentMappings(attachment),
+    );
+};
+
+const getActiveTextFileAttachmentMappings = (attachment: TextFileAttachment) =>
+{
+    if (attachment.result == null)
+    {
+        return [];
+    }
+
+    return getActiveMaskingMappings(
+        attachment.result.maskingMappings,
+        attachment.ignoredMappingIds,
+    );
+};
+
+const getTextFileAttachmentPreview = (attachment: TextFileAttachment) =>
+{
+    if (attachment.result == null)
+    {
+        return null;
+    }
+
+    if (attachment.ignoredMappingIds.length === 0)
+    {
+        return {
+            privatizedPrompt: attachment.result.privatizedPrompt,
+            segments: attachment.result.segments,
+        };
+    }
+
+    try
+    {
+        return createPrivatizedPromptPreview(
+            attachment.document.text,
+            attachment.result,
+            {
+                ignoredMappingIds: attachment.ignoredMappingIds,
+            },
+        );
+    }
+    catch
+    {
+        return {
+            privatizedPrompt: attachment.result.privatizedPrompt,
+            segments: attachment.result.segments,
+        };
+    }
+};
+
+const getTextFileAttachmentPreviewText = (attachment: TextFileAttachment) =>
+{
+    return getTextFileAttachmentPreview(attachment)?.privatizedPrompt ?? '';
+};
+
+const mergePreferredMaskingMappings = (
+    currentMappings: readonly MaskingMapping[],
+    nextMappings: readonly MaskingMapping[],
+) =>
+{
+    const mappingKeys = new Set(
+        currentMappings.map((maskingMapping) =>
+        {
+            return getMaskingMappingKey(maskingMapping);
+        }),
+    );
+    const mergedMappings = [...currentMappings];
+
+    for (const maskingMapping of nextMappings)
+    {
+        const mappingKey = getMaskingMappingKey(maskingMapping);
+
+        if (mappingKeys.has(mappingKey))
+        {
+            continue;
+        }
+
+        mappingKeys.add(mappingKey);
+        mergedMappings.push(maskingMapping);
+    }
+
+    return mergedMappings;
+};
+
+const getBundleActiveMaskingMappings = (
+    promptResult: PrivatizedPromptResult | null,
+    promptIgnoredMappingIds: readonly string[],
+    attachments: readonly TextFileAttachment[],
+) =>
+{
+    const mappingsByKey = new Map<string, MaskingMapping>();
+
+    if (promptResult != null)
+    {
+        addBundleMaskingMappings(
+            mappingsByKey,
+            'prompt',
+            getActiveMaskingMappings(promptResult.maskingMappings, [
+                ...promptIgnoredMappingIds,
+            ]),
+        );
+    }
+
+    for (const attachment of attachments)
+    {
+        addBundleMaskingMappings(
+            mappingsByKey,
+            attachment.document.id,
+            getActiveTextFileAttachmentMappings(attachment),
+        );
+    }
+
+    return [...mappingsByKey.values()];
+};
+
+const addBundleMaskingMappings = (
+    mappingsByKey: Map<string, MaskingMapping>,
+    sourceId: string,
+    mappings: readonly MaskingMapping[],
+) =>
+{
+    for (const maskingMapping of mappings)
+    {
+        const mappingKey = getMaskingMappingKey(maskingMapping);
+        const existingMapping = mappingsByKey.get(mappingKey);
+        const itemIds = maskingMapping.itemIds.map((itemId) =>
+        {
+            return `${sourceId}:${itemId}`;
+        });
+
+        if (existingMapping != null)
+        {
+            existingMapping.itemIds.push(...itemIds);
+            continue;
+        }
+
+        mappingsByKey.set(mappingKey, {
+            ...maskingMapping,
+            id: `bundle-mapping-${mappingsByKey.size + 1}`,
+            itemIds,
+        });
+    }
+};
+
+const getMaskingMappingKey = (maskingMapping: MaskingMapping) =>
+{
+    return `${maskingMapping.category}\n${maskingMapping.original}`;
+};
+
+const isSameMaskingMapping = (
+    left: MaskingMapping,
+    right: MaskingMapping,
+) =>
+{
+    return (
+        left.category === right.category &&
+        left.original === right.original &&
+        left.mask === right.mask
+    );
+};
+
+const composePrivatizedOutput = (
+    privatizedPrompt: string,
+    attachments: readonly TextFileAttachment[],
+) =>
+{
+    const outputParts: string[] = [];
+    const trimmedPrompt = privatizedPrompt.trim();
+    const includedAttachments = attachments.filter((attachment) =>
+    {
+        return attachment.included && attachment.result != null;
+    });
+
+    if (trimmedPrompt.length > 0)
+    {
+        outputParts.push(privatizedPrompt);
+    }
+
+    includedAttachments.forEach((attachment, index) =>
+    {
+        const sanitizedText = getTextFileAttachmentPreviewText(attachment);
+        const fence = getMarkdownFence(sanitizedText);
+
+        outputParts.push(
+            [
+                `Attached sanitized file: ${getTextFileAttachmentLabel(attachment, index)}`,
+                '',
+                `${fence}${getMarkdownFenceLanguage(attachment.document.format)}`,
+                sanitizedText,
+                fence,
+            ].join('\n'),
+        );
+    });
+
+    return outputParts.join('\n\n');
+};
+
+const getMarkdownFence = (text: string) =>
+{
+    const longestFence = Math.max(
+        2,
+        ...Array.from(text.matchAll(/`+/g), (match) => match[0].length),
+    );
+
+    return '`'.repeat(longestFence + 1);
+};
+
+const getMarkdownFenceLanguage = (format: FileTextDocument['format']) =>
+{
+    if (format === 'md')
+    {
+        return 'markdown';
+    }
+
+    if (format === 'yaml')
+    {
+        return 'yaml';
+    }
+
+    return format;
+};
+
+const createPrivatizedFileName = (fileName: string) =>
+{
+    const extensionStart = fileName.lastIndexOf('.');
+
+    if (extensionStart <= 0)
+    {
+        return `${fileName}.privatized.txt`;
+    }
+
+    return `${fileName.slice(0, extensionStart)}.privatized${fileName.slice(extensionStart)}`;
+};
+
+const combinePrivacyBenchmarks = (
+    benchmarks: readonly PrivacyBenchmark[],
+): PrivacyBenchmark | null =>
+{
+    if (benchmarks.length === 0)
+    {
+        return null;
+    }
+
+    const stagesByName = new Map<string, PrivacyBenchmarkStageTiming>();
+
+    for (const benchmark of benchmarks)
+    {
+        for (const stage of benchmark.stages)
+        {
+            const currentStage = stagesByName.get(stage.stage);
+
+            if (currentStage == null)
+            {
+                stagesByName.set(stage.stage, { ...stage });
+                continue;
+            }
+
+            currentStage.durationMs += stage.durationMs;
+
+            if (stage.itemCount != null)
+            {
+                currentStage.itemCount = (currentStage.itemCount ?? 0) + stage.itemCount;
+            }
+        }
+    }
+
+    return {
+        startedAt: Math.min(...benchmarks.map((benchmark) => benchmark.startedAt)),
+        completedAt: Math.max(...benchmarks.map((benchmark) => benchmark.completedAt)),
+        totalDurationMs: benchmarks.reduce((durationMs, benchmark) =>
+        {
+            return durationMs + benchmark.totalDurationMs;
+        }, 0),
+        inputCharacters: benchmarks.reduce((characters, benchmark) =>
+        {
+            return characters + benchmark.inputCharacters;
+        }, 0),
+        inputLines: benchmarks.reduce((lines, benchmark) =>
+        {
+            return lines + benchmark.inputLines;
+        }, 0),
+        rulesEnabled: benchmarks.some((benchmark) => benchmark.rulesEnabled),
+        localModelEnabled: benchmarks.some((benchmark) => benchmark.localModelEnabled),
+        safeToInject: benchmarks.every((benchmark) => benchmark.safeToInject),
+        itemCount: benchmarks.reduce((count, benchmark) =>
+        {
+            return count + benchmark.itemCount;
+        }, 0),
+        hardeningItemCount: benchmarks.reduce((count, benchmark) =>
+        {
+            return count + benchmark.hardeningItemCount;
+        }, 0),
+        stages: [...stagesByName.values()],
+    };
+};
+
 export function App()
 {
     const [appView, setAppView] = useState<AppView>('main');
     const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('prompt');
+    const [fileReaderTab, setFileReaderTab] =
+        useState<FileReaderTab>('privatized');
+    const [selectedFileAttachmentId, setSelectedFileAttachmentId] =
+        useState<string | null>(null);
     const [settings, setSettings] = useState<ExtensionSettings>(
         DEFAULT_EXTENSION_SETTINGS,
     );
@@ -1176,6 +1550,12 @@ export function App()
     const [privatizedInputText, setPrivatizedInputText] = useState('');
     const [privatizedResult, setPrivatizedResult] =
         useState<PrivatizedPromptResult | null>(null);
+    const [textFileAttachments, setTextFileAttachments] = useState<
+        TextFileAttachment[]
+    >([]);
+    const [bundleMaskingMappings, setBundleMaskingMappings] = useState<
+        MaskingMapping[]
+    >([]);
     const [previewSegments, setPreviewSegments] = useState<PrivatizedPromptSegment[]>([]);
     const [canUsePrivatizedPrompt, setCanUsePrivatizedPrompt] = useState(false);
     const [ignoredMappingIds, setIgnoredMappingIds] = useState<string[]>([]);
@@ -1211,6 +1591,7 @@ export function App()
     const previewRef = useRef<HTMLDivElement | null>(null);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
     const previewSelectionPopoverRef = useRef<HTMLDivElement | null>(null);
+    const textFileInputRef = useRef<HTMLInputElement | null>(null);
     const privatizationRunIdRef = useRef(0);
     const settingsRef = useRef(settings);
     const settingsSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -1258,6 +1639,7 @@ export function App()
         }, PREVIEW_TOOLTIP_HIDE_DELAY_MS);
     };
     const showPreviewTooltip = (
+        target: PreviewTarget,
         event: PreviewTooltipEvent,
         text: string,
         mappingId: string,
@@ -1267,11 +1649,35 @@ export function App()
         clearPreviewTooltipHideTimer();
         hidePreviewSelectionPopover();
         setPreviewTooltip({
+            target,
             text,
             mappingId,
             mask,
             ...getPreviewTooltipPosition(event.currentTarget),
         });
+    };
+    const getActivePreviewContext = () =>
+    {
+        if (
+            appView === 'fileReader' &&
+            selectedTextFileAttachment != null &&
+            selectedFilePreviewTarget != null
+        )
+        {
+            return {
+                target: selectedFilePreviewTarget,
+                inputText: selectedTextFileAttachment.document.text,
+                result: selectedTextFileAttachment.result,
+                ignoredMappingIds: selectedTextFileAttachment.ignoredMappingIds,
+            };
+        }
+
+        return {
+            target: PROMPT_PREVIEW_TARGET,
+            inputText: privatizedInputText,
+            result: privatizedResult,
+            ignoredMappingIds,
+        };
     };
     const updatePreviewSelectionPopover = () =>
     {
@@ -1281,10 +1687,19 @@ export function App()
             return;
         }
 
+        const previewContext = getActivePreviewContext();
+
+        if (previewContext.result == null)
+        {
+            hidePreviewSelectionPopover();
+            return;
+        }
+
         const selectionPopover = getPreviewSelectionPopover(
             window.getSelection(),
             previewRef.current,
-            privatizedInputText,
+            previewContext.inputText,
+            previewContext.target,
         );
 
         if (selectionPopover == null)
@@ -1374,6 +1789,69 @@ export function App()
     const hasEnabledDetectionSources =
         settings.rulesDetectionEnabled || settings.localModelDetectionEnabled;
     const hasPreview = privatizedPrompt.length > 0;
+    const readyTextFileAttachments = textFileAttachments.filter((attachment) =>
+    {
+        return attachment.error == null;
+    });
+    const privatizableTextFileAttachments = readyTextFileAttachments.filter(
+        (attachment) =>
+        {
+            return attachment.document.text.trim().length > 0;
+        },
+    );
+    const privatizedTextFileAttachments = readyTextFileAttachments.filter(
+        (attachment) =>
+        {
+            return attachment.result != null;
+        },
+    );
+    const selectedTextFileAttachment =
+        selectedFileAttachmentId == null
+            ? null
+            : textFileAttachments.find((attachment) =>
+              {
+                  return attachment.document.id === selectedFileAttachmentId;
+              }) ?? null;
+    const selectedTextFilePreview =
+        selectedTextFileAttachment == null
+            ? null
+            : getTextFileAttachmentPreview(selectedTextFileAttachment);
+    const selectedFilePreviewTarget =
+        selectedTextFileAttachment == null
+            ? null
+            : {
+                  kind: 'file',
+                  attachmentId: selectedTextFileAttachment.document.id,
+              } satisfies PreviewTarget;
+    const hasPrivatizedTextFileAttachments =
+        privatizedTextFileAttachments.length > 0;
+    const hasPrivatizedOutput = hasPreview || hasPrivatizedTextFileAttachments;
+    const hasClearableInput =
+        prompt.length > 0 ||
+        privatizedPrompt.length > 0 ||
+        textFileAttachments.length > 0;
+    const hasPrivatizableInput =
+        prompt.trim().length > 0 ||
+        privatizableTextFileAttachments.length > 0;
+    const textFileAttachmentsReadyToSend =
+        privatizableTextFileAttachments.every((attachment) =>
+        {
+            return attachment.result != null;
+        }) &&
+        privatizableTextFileAttachments.every((attachment) =>
+        {
+            return (
+                (attachment.result?.safeToInject ?? false) &&
+                attachment.ignoredMappingIds.length === 0
+            );
+        });
+    const canUsePrivatizedOutput =
+        (hasPreview ? canUsePrivatizedPrompt : true) &&
+        textFileAttachmentsReadyToSend;
+    const composedPrivatizedOutput = composePrivatizedOutput(
+        privatizedPrompt,
+        textFileAttachments,
+    );
     const hasCategorySettingChanges =
         isPreviewStale &&
         resultEnabledCategories != null &&
@@ -1391,6 +1869,7 @@ export function App()
               after: ' again before copying or sending the output.',
           };
     const previewContent = getPreviewContent(
+        PROMPT_PREVIEW_TARGET,
         privatizedPrompt,
         previewSegments,
         activeScanCategory,
@@ -1398,16 +1877,43 @@ export function App()
         queueHidePreviewTooltip,
         hidePreviewTooltip,
     );
+    const selectedTextFilePreviewContent =
+        selectedTextFileAttachment == null ||
+        selectedFilePreviewTarget == null ||
+        selectedTextFilePreview == null
+            ? EMPTY_PREVIEW_TEXT
+            : getPreviewContent(
+                  selectedFilePreviewTarget,
+                  selectedTextFilePreview.privatizedPrompt,
+                  selectedTextFilePreview.segments,
+                  activeScanCategory,
+                  showPreviewTooltip,
+                  queueHidePreviewTooltip,
+                  hidePreviewTooltip,
+              );
+    const previewTooltipTarget = previewTooltip?.target;
+    const previewTooltipAttachment =
+        previewTooltipTarget?.kind === 'file'
+            ? textFileAttachments.find((attachment) =>
+              {
+                  return attachment.document.id === previewTooltipTarget.attachmentId;
+              }) ?? null
+            : null;
+    const previewTooltipResult =
+        previewTooltipTarget?.kind === 'file'
+            ? previewTooltipAttachment?.result ?? null
+            : privatizedResult;
     const previewTooltipMapping =
-        previewTooltip == null || privatizedResult == null
+        previewTooltip == null || previewTooltipResult == null
             ? null
             : getMaskingMappingById(
-                  privatizedResult.maskingMappings,
+                  previewTooltipResult.maskingMappings,
                   previewTooltip.mappingId,
               );
-    const activeMaskingMappings = getActiveMaskingMappings(
-        privatizedResult?.maskingMappings ?? [],
+    const activeMaskingMappings = getBundleActiveMaskingMappings(
+        privatizedResult,
         ignoredMappingIds,
+        textFileAttachments,
     );
     const visibleMaskingMappings = activeMaskingMappings.filter((maskingMapping) =>
     {
@@ -1524,7 +2030,7 @@ export function App()
           ? undefined
           : 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.';
     const privatizePromptDisabled =
-        prompt.trim().length === 0 ||
+        !hasPrivatizableInput ||
         isPrivatizing ||
         !hasEnabledDetectionSources ||
         !hasEnabledDetectionCategories;
@@ -1533,10 +2039,10 @@ export function App()
         : hasEnabledDetectionSources
           ? undefined
           : 'Enable rules or local model detection in settings.';
-    const copyPrivatizedPromptDisabled = !privatizedPrompt || isPreviewStale;
+    const copyPrivatizedPromptDisabled = !hasPrivatizedOutput || isPreviewStale;
     const copyButtonTitle = isPreviewStale
         ? 'Run Privatize again before copying.'
-        : 'Copy privatized prompt';
+        : 'Copy privatized output';
     const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
     const localModelProgressLabel =
         visibleLocalModelProgress == null
@@ -1583,8 +2089,145 @@ export function App()
         setLocalModelProgress(null);
         setCanUsePrivatizedPrompt(false);
         setSendStatus('');
-        setIsPreviewStale(hasPreview);
+        setIsPreviewStale(hasPreview || hasPrivatizedTextFileAttachments);
         hidePreviewSelectionPopover();
+    };
+    const openTextFileInput = () =>
+    {
+        textFileInputRef.current?.click();
+    };
+    const handleTextFileInputChange = async (
+        event: ReactChangeEvent<HTMLInputElement>,
+    ) =>
+    {
+        const files = Array.from(event.target.files ?? []);
+
+        event.target.value = '';
+
+        if (files.length === 0)
+        {
+            return;
+        }
+
+        const nextAttachments: TextFileAttachment[] = [];
+
+        for (const file of files)
+        {
+            try
+            {
+                nextAttachments.push({
+                    document: await extractTextFile(file),
+                    result: null,
+                    ignoredMappingIds: [],
+                    error: null,
+                    included: true,
+                });
+            }
+            catch (error)
+            {
+                const message =
+                    error instanceof Error
+                        ? error.message
+                        : 'Could not read file as text.';
+
+                nextAttachments.push({
+                    document: {
+                        id: `text-document-error-${Date.now()}-${nextAttachments.length}`,
+                        kind: 'file',
+                        name: file.name,
+                        fileName: file.name,
+                        extension: '',
+                        format: 'txt',
+                        mimeType: file.type,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        text: '',
+                        warnings: [],
+                    },
+                    result: null,
+                    ignoredMappingIds: [],
+                    error: message,
+                    included: false,
+                });
+            }
+        }
+
+        privatizationRunIdRef.current += 1;
+        setTextFileAttachments((currentAttachments) => [
+            ...currentAttachments,
+            ...nextAttachments,
+        ]);
+        setIsPrivatizing(false);
+        setLocalModelProgress(null);
+        setCanUsePrivatizedPrompt(false);
+        setSendStatus('');
+        setIsPreviewStale(hasPreview || hasPrivatizedTextFileAttachments);
+        setClipboardStatus(
+            `${nextAttachments.length} ${nextAttachments.length === 1 ? 'file' : 'files'} attached.`,
+        );
+        hidePreviewSelectionPopover();
+    };
+    const removeTextFileAttachment = (attachmentId: string) =>
+    {
+        privatizationRunIdRef.current += 1;
+        setTextFileAttachments((currentAttachments) =>
+        {
+            return currentAttachments.filter((attachment) =>
+            {
+                return attachment.document.id !== attachmentId;
+            });
+        });
+        setIsPrivatizing(false);
+        setLocalModelProgress(null);
+        setCanUsePrivatizedPrompt(false);
+        setSendStatus('');
+        setIsPreviewStale(hasPreview || hasPrivatizedTextFileAttachments);
+        if (selectedFileAttachmentId === attachmentId)
+        {
+            setSelectedFileAttachmentId(null);
+            setAppView('main');
+        }
+        hidePreviewSelectionPopover();
+    };
+    const copyTextFileAttachment = async (attachment: TextFileAttachment) =>
+    {
+        if (attachment.result == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await navigator.clipboard.writeText(
+                getTextFileAttachmentPreviewText(attachment),
+            );
+            setClipboardStatus(`Copied sanitized ${attachment.document.fileName}.`);
+            setSendStatus('');
+        }
+        catch
+        {
+            setClipboardStatus('Could not copy sanitized file text.');
+        }
+    };
+    const downloadTextFileAttachment = (attachment: TextFileAttachment) =>
+    {
+        if (attachment.result == null)
+        {
+            return;
+        }
+
+        const blob = new Blob([getTextFileAttachmentPreviewText(attachment)], {
+            type: attachment.document.mimeType || 'text/plain',
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+
+        link.href = url;
+        link.download = createPrivatizedFileName(attachment.document.fileName);
+        link.click();
+        URL.revokeObjectURL(url);
+        setClipboardStatus(`Downloaded sanitized ${attachment.document.fileName}.`);
+        setSendStatus('');
     };
     const clearScanDetailSearch = () =>
     {
@@ -1641,11 +2284,11 @@ export function App()
             setAppView('main');
         }
     };
-    const restoreMaskingMapping = (maskingMapping: MaskingMapping) =>
+    const restorePromptMaskingMapping = (maskingMapping: MaskingMapping) =>
     {
         if (privatizedResult == null || ignoredMappingIds.includes(maskingMapping.id))
         {
-            return;
+            return false;
         }
 
         const nextIgnoredMappingIds = [...ignoredMappingIds, maskingMapping.id];
@@ -1664,24 +2307,162 @@ export function App()
         catch
         {
             setClipboardStatus(`Could not restore ${maskingMapping.mask}.`);
+            return false;
+        }
+
+        setIgnoredMappingIds(nextIgnoredMappingIds);
+        setPrivatizedPrompt(preview.privatizedPrompt);
+        setPreviewSegments(preview.segments);
+        setCanUsePrivatizedPrompt(false);
+        return true;
+    };
+    const restoreTextFileMaskingMapping = (
+        attachmentId: string,
+        maskingMapping: MaskingMapping,
+    ) =>
+    {
+        const attachment = textFileAttachments.find((currentAttachment) =>
+        {
+            return currentAttachment.document.id === attachmentId;
+        });
+        const attachmentMapping = attachment?.result?.maskingMappings.find((mapping) =>
+        {
+            return mapping.id === maskingMapping.id;
+        });
+
+        if (
+            attachment == null ||
+            attachmentMapping == null ||
+            attachment.ignoredMappingIds.includes(attachmentMapping.id)
+        )
+        {
+            return false;
+        }
+
+        setTextFileAttachments((currentAttachments) =>
+        {
+            return currentAttachments.map((currentAttachment) =>
+            {
+                if (currentAttachment.document.id !== attachmentId)
+                {
+                    return currentAttachment;
+                }
+
+                return {
+                    ...currentAttachment,
+                    ignoredMappingIds: [
+                        ...currentAttachment.ignoredMappingIds,
+                        attachmentMapping.id,
+                    ],
+                };
+            });
+        });
+
+        return true;
+    };
+    const restoreBundleMaskingMapping = (maskingMapping: MaskingMapping) =>
+    {
+        let promptRestored = false;
+
+        if (privatizedResult != null)
+        {
+            const promptMapping = privatizedResult.maskingMappings.find((mapping) =>
+            {
+                return isSameMaskingMapping(mapping, maskingMapping);
+            });
+
+            if (promptMapping != null)
+            {
+                promptRestored = restorePromptMaskingMapping(promptMapping);
+            }
+        }
+
+        const fileRestores = textFileAttachments.flatMap((attachment) =>
+        {
+            const attachmentMapping = attachment.result?.maskingMappings.find((mapping) =>
+            {
+                return isSameMaskingMapping(mapping, maskingMapping);
+            });
+
+            if (
+                attachmentMapping == null ||
+                attachment.ignoredMappingIds.includes(attachmentMapping.id)
+            )
+            {
+                return [];
+            }
+
+            return [
+                {
+                    attachmentId: attachment.document.id,
+                    mappingId: attachmentMapping.id,
+                },
+            ];
+        });
+
+        if (fileRestores.length > 0)
+        {
+            setTextFileAttachments((currentAttachments) =>
+            {
+                return currentAttachments.map((attachment) =>
+                {
+                    const restoreIds = fileRestores
+                        .filter((fileRestore) =>
+                        {
+                            return fileRestore.attachmentId === attachment.document.id;
+                        })
+                        .map((fileRestore) =>
+                        {
+                            return fileRestore.mappingId;
+                        });
+
+                    if (restoreIds.length === 0)
+                    {
+                        return attachment;
+                    }
+
+                    return {
+                        ...attachment,
+                        ignoredMappingIds: [
+                            ...attachment.ignoredMappingIds,
+                            ...restoreIds,
+                        ],
+                    };
+                });
+            });
+        }
+
+        if (!promptRestored && fileRestores.length === 0)
+        {
+            setClipboardStatus(`Could not restore ${maskingMapping.mask}.`);
             return;
         }
 
         hidePreviewTooltip();
         hidePreviewSelectionPopover();
-        setIgnoredMappingIds(nextIgnoredMappingIds);
-        setPrivatizedPrompt(preview.privatizedPrompt);
-        setPreviewSegments(preview.segments);
-        setCanUsePrivatizedPrompt(false);
         setSendStatus('');
         setClipboardStatus(`${maskingMapping.mask} restored in preview.`);
     };
     const restoreMaskingMappingById = (mappingId: string) =>
     {
-        const maskingMapping = privatizedResult?.maskingMappings.find((mapping) =>
-        {
-            return mapping.id === mappingId;
-        });
+        const target = previewTooltip?.target ?? PROMPT_PREVIEW_TARGET;
+        const targetAttachment =
+            target.kind === 'file'
+                ? textFileAttachments.find((attachment) =>
+                  {
+                      return attachment.document.id === target.attachmentId;
+                  }) ?? null
+                : null;
+        const maskingMapping =
+            target.kind === 'file'
+                ? targetAttachment?.result?.maskingMappings.find((mapping) =>
+                  {
+                      return mapping.id === mappingId;
+                  }) ?? null
+                : privatizedResult?.maskingMappings.find((mapping) =>
+                  {
+                      return mapping.id === mappingId;
+                  }) ?? null;
 
         if (maskingMapping == null)
         {
@@ -1689,18 +2470,33 @@ export function App()
             return;
         }
 
-        restoreMaskingMapping(maskingMapping);
+        const restored =
+            target.kind === 'file'
+                ? restoreTextFileMaskingMapping(target.attachmentId, maskingMapping)
+                : restorePromptMaskingMapping(maskingMapping);
+
+        if (!restored)
+        {
+            setClipboardStatus(`Could not restore ${maskingMapping.mask}.`);
+            return;
+        }
+
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setSendStatus('');
+        setClipboardStatus(`${maskingMapping.mask} restored in preview.`);
     };
     const preserveIgnoredMappingIds = (
         currentResult: PrivatizedPromptResult,
         nextResult: PrivatizedPromptResult,
         manualCategory: SensitiveItemCategory,
         manualOriginals: readonly string[],
+        currentIgnoredMappingIds: readonly string[] = ignoredMappingIds,
     ) =>
     {
         const ignoredMappings = currentResult.maskingMappings.filter((maskingMapping) =>
         {
-            return ignoredMappingIds.includes(maskingMapping.id);
+            return currentIgnoredMappingIds.includes(maskingMapping.id);
         });
         const ignoredItemIds = new Set(
             ignoredMappings.flatMap((maskingMapping) => maskingMapping.itemIds),
@@ -1769,13 +2565,114 @@ export function App()
                 return item.value;
             });
     };
+    const manuallyPrivatizeFileSelection = (
+        category: SensitiveItemCategory,
+        selection: PreviewSelectionPopover,
+    ) =>
+    {
+        if (selection.target.kind !== 'file')
+        {
+            return;
+        }
+
+        const attachmentId = selection.target.attachmentId;
+        const attachment = textFileAttachments.find((currentAttachment) =>
+        {
+            return currentAttachment.document.id === attachmentId;
+        });
+
+        if (attachment?.result == null)
+        {
+            return;
+        }
+
+        try
+        {
+            const nextResult = createPrivatizedPromptWithManualItem(
+                attachment.document.text,
+                attachment.result,
+                {
+                    category,
+                    start: selection.start,
+                    end: selection.end,
+                },
+                {
+                    enabledCategories: settings.enabledCategories,
+                    preferredMaskingMappings:
+                        bundleMaskingMappings.length > 0
+                            ? bundleMaskingMappings
+                            : attachment.result.maskingMappings,
+                },
+            );
+            const manualOriginals = getManualSelectionOriginals(
+                nextResult,
+                category,
+                selection,
+            );
+            const nextIgnoredMappingIds = preserveIgnoredMappingIds(
+                attachment.result,
+                nextResult,
+                category,
+                manualOriginals,
+                attachment.ignoredMappingIds,
+            );
+            const scanCategory = getPrivacyScanCategory(category);
+
+            createPrivatizedPromptPreview(attachment.document.text, nextResult, {
+                ignoredMappingIds: nextIgnoredMappingIds,
+            });
+            window.getSelection()?.removeAllRanges();
+            hidePreviewTooltip();
+            hidePreviewSelectionPopover();
+            setTextFileAttachments((currentAttachments) =>
+            {
+                return currentAttachments.map((currentAttachment) =>
+                {
+                    if (currentAttachment.document.id !== attachment.document.id)
+                    {
+                        return currentAttachment;
+                    }
+
+                    return {
+                        ...currentAttachment,
+                        result: nextResult,
+                        ignoredMappingIds: nextIgnoredMappingIds,
+                    };
+                });
+            });
+            setBundleMaskingMappings(
+                mergePreferredMaskingMappings(
+                    bundleMaskingMappings,
+                    nextResult.maskingMappings,
+                ),
+            );
+            setSendStatus('');
+            setClipboardStatus(
+                `Selected text privatized as ${scanCategory?.label ?? category}.`,
+            );
+        }
+        catch
+        {
+            setClipboardStatus('Could not privatize selected text.');
+        }
+    };
     const manuallyPrivatizeSelection = (category: SensitiveItemCategory) =>
     {
         if (
-            privatizedResult == null ||
             previewSelectionPopover == null ||
             !isSensitiveItemCategoryEnabled(settings.enabledCategories, category)
         )
+        {
+            return;
+        }
+
+        if (previewSelectionPopover.target.kind === 'file')
+        {
+            manuallyPrivatizeFileSelection(category, previewSelectionPopover);
+            return;
+        }
+
+        if (privatizedResult == null)
         {
             return;
         }
@@ -1792,6 +2689,10 @@ export function App()
                 },
                 {
                     enabledCategories: settings.enabledCategories,
+                    preferredMaskingMappings:
+                        bundleMaskingMappings.length > 0
+                            ? bundleMaskingMappings
+                            : privatizedResult.maskingMappings,
                 },
             );
             const manualOriginals = getManualSelectionOriginals(
@@ -1821,6 +2722,12 @@ export function App()
             setIgnoredMappingIds(nextIgnoredMappingIds);
             setPrivatizedPrompt(preview.privatizedPrompt);
             setPreviewSegments(preview.segments);
+            setBundleMaskingMappings(
+                mergePreferredMaskingMappings(
+                    bundleMaskingMappings,
+                    nextResult.maskingMappings,
+                ),
+            );
             setCanUsePrivatizedPrompt(
                 nextResult.safeToInject && nextIgnoredMappingIds.length === 0,
             );
@@ -1852,7 +2759,7 @@ export function App()
                     type="button"
                     title="Restore original text"
                     aria-label={`Restore ${maskingMapping.mask} original text`}
-                    onClick={() => restoreMaskingMapping(maskingMapping)}
+                    onClick={() => restoreBundleMaskingMapping(maskingMapping)}
                 >
                     <RotateCcw size={15} aria-hidden="true" />
                 </button>
@@ -1933,7 +2840,7 @@ export function App()
         setCanUsePrivatizedPrompt(false);
         setSendStatus('');
 
-        if (hasPreview)
+        if (hasPreview || hasPrivatizedTextFileAttachments)
         {
             setIsPreviewStale(true);
             hidePreviewSelectionPopover();
@@ -1954,6 +2861,23 @@ export function App()
         setActiveScanCategory(null);
         setScanDetailSearchText('');
     }, [activeScanCategoryIsDisplayed]);
+
+    useEffect(() =>
+    {
+        if (
+            appView !== 'fileReader' ||
+            selectedFileAttachmentId == null ||
+            selectedTextFileAttachment != null
+        )
+        {
+            return;
+        }
+
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setSelectedFileAttachmentId(null);
+        setAppView('main');
+    }, [appView, selectedFileAttachmentId, selectedTextFileAttachment]);
 
     useEffect(() =>
     {
@@ -2148,12 +3072,14 @@ export function App()
             selectionFrame = window.requestAnimationFrame(() =>
             {
                 selectionFrame = undefined;
+                const previewContext = getActivePreviewContext();
 
                 if (
                     getPreviewSelectionPopover(
                         window.getSelection(),
                         previewRef.current,
-                        privatizedInputText,
+                        previewContext.inputText,
+                        previewContext.target,
                     ) == null
                 )
                 {
@@ -2204,7 +3130,7 @@ export function App()
                 window.cancelAnimationFrame(selectionFrame);
             }
         };
-    }, [previewSelectionPopover, privatizedInputText]);
+    }, [previewSelectionPopover, privatizedInputText, selectedTextFileAttachment]);
 
     useLayoutEffect(() =>
     {
@@ -2286,8 +3212,149 @@ export function App()
         });
     }, [previewSelectionPopover]);
 
+    const createPrivatizedBundle = async (
+        inputText: string,
+        attachments: readonly TextFileAttachment[],
+        useLocalModelDetection: boolean,
+        onLocalModelProgress?: (progress: LocalModelProgress) => void,
+    ) =>
+    {
+        let preferredMaskingMappings: MaskingMapping[] = [];
+        const benchmarks: PrivacyBenchmark[] = [];
+        const collectBenchmark = (benchmark: PrivacyBenchmark) =>
+        {
+            benchmarks.push(benchmark);
+        };
+        let promptResult: PrivatizedPromptResult | null = null;
+
+        if (inputText.trim().length > 0)
+        {
+            promptResult = await createPrivatizedPromptAsync(inputText, {
+                useLocalModelDetection,
+                useRulesDetection: settings.rulesDetectionEnabled,
+                enabledCategories: settings.enabledCategories,
+                preferredMaskingMappings,
+                onLocalModelProgress,
+                onBenchmark: collectBenchmark,
+            });
+            preferredMaskingMappings = mergePreferredMaskingMappings(
+                preferredMaskingMappings,
+                promptResult.maskingMappings,
+            );
+        }
+
+        const nextAttachments: TextFileAttachment[] = [];
+
+        for (const attachment of attachments)
+        {
+            if (attachment.error != null || attachment.document.text.trim().length === 0)
+            {
+                nextAttachments.push({
+                    ...attachment,
+                    result: null,
+                    ignoredMappingIds: [],
+                });
+                continue;
+            }
+
+            const attachmentResult = await createPrivatizedPromptAsync(
+                attachment.document.text,
+                {
+                    useLocalModelDetection,
+                    useRulesDetection: settings.rulesDetectionEnabled,
+                    enabledCategories: settings.enabledCategories,
+                    preferredMaskingMappings,
+                    onLocalModelProgress,
+                    onBenchmark: collectBenchmark,
+                },
+            );
+
+            preferredMaskingMappings = mergePreferredMaskingMappings(
+                preferredMaskingMappings,
+                attachmentResult.maskingMappings,
+            );
+            nextAttachments.push({
+                ...attachment,
+                result: attachmentResult,
+                ignoredMappingIds: [],
+            });
+        }
+
+        return {
+            promptResult,
+            attachments: nextAttachments,
+            maskingMappings: preferredMaskingMappings,
+            benchmark: combinePrivacyBenchmarks(benchmarks),
+        };
+    };
+
+    const makeBundleUnsafe = (
+        promptResult: PrivatizedPromptResult | null,
+        attachments: readonly TextFileAttachment[],
+    ) =>
+    {
+        return {
+            promptResult:
+                promptResult == null
+                    ? null
+                    : {
+                          ...promptResult,
+                          safeToInject: false,
+                      },
+            attachments: attachments.map((attachment) =>
+            {
+                return {
+                    ...attachment,
+                    result:
+                        attachment.result == null
+                            ? null
+                            : {
+                                  ...attachment.result,
+                                  safeToInject: false,
+                              },
+                };
+            }),
+        };
+    };
+
+    const applyPrivatizedBundle = (
+        inputText: string,
+        promptResult: PrivatizedPromptResult | null,
+        attachments: readonly TextFileAttachment[],
+    ) =>
+    {
+        setTextFileAttachments([...attachments]);
+
+        if (promptResult == null)
+        {
+            setPreviewTooltip(null);
+            hidePreviewSelectionPopover();
+            setIgnoredMappingIds([]);
+            setScanDetailSortDirection('neutral');
+            setScanDetailSearchText('');
+            setPrivatizedInputText(inputText);
+            setPrivatizedResult(null);
+            setResultEnabledCategories({ ...settingsRef.current.enabledCategories });
+            setPrivatizedPrompt('');
+            setPreviewSegments([]);
+            setCanUsePrivatizedPrompt(true);
+            setIsPreviewStale(false);
+            setWorkspaceTab('privatized');
+
+            if (appView === 'promptReader')
+            {
+                setAppView('main');
+            }
+
+            return;
+        }
+
+        applyPrivatizedResult(inputText, promptResult);
+    };
+
     const applyUnsafeRulesOnlyFallback = async (
         inputText: string,
+        attachments: readonly TextFileAttachment[],
         runId: number,
         error: unknown,
     ): Promise<UnsafeRulesOnlyFallbackOutcome> =>
@@ -2315,28 +3382,29 @@ export function App()
 
         try
         {
-            const fallbackResult = await createPrivatizedPromptAsync(inputText, {
-                useLocalModelDetection: false,
-                useRulesDetection: settings.rulesDetectionEnabled,
-                enabledCategories: settings.enabledCategories,
-                onBenchmark: (benchmark) =>
-                {
-                    if (privatizationRunIdRef.current === runId)
-                    {
-                        setLatestBenchmark(benchmark);
-                    }
-                },
-            });
+            const fallbackBundle = await createPrivatizedBundle(
+                inputText,
+                attachments,
+                false,
+            );
 
             if (privatizationRunIdRef.current !== runId)
             {
                 return 'stale';
             }
 
-            applyPrivatizedResult(inputText, {
-                ...fallbackResult,
-                safeToInject: false,
-            });
+            const unsafeBundle = makeBundleUnsafe(
+                fallbackBundle.promptResult,
+                fallbackBundle.attachments,
+            );
+
+            applyPrivatizedBundle(
+                inputText,
+                unsafeBundle.promptResult,
+                unsafeBundle.attachments,
+            );
+            setBundleMaskingMappings(fallbackBundle.maskingMappings);
+            setLatestBenchmark(fallbackBundle.benchmark);
             setLocalModelProgress(null);
             setClipboardStatus(failureStatus);
             return 'applied';
@@ -2360,7 +3428,7 @@ export function App()
     const privatizePrompt = async () =>
     {
         if (
-            !prompt ||
+            !hasPrivatizableInput ||
             isPrivatizing ||
             !hasEnabledDetectionSources ||
             !hasEnabledDetectionCategories
@@ -2370,19 +3438,13 @@ export function App()
         }
 
         const inputText = prompt;
+        const inputAttachments = textFileAttachments;
         const runId = privatizationRunIdRef.current + 1;
         const updateRunLocalModelProgress = (progress: LocalModelProgress) =>
         {
             if (privatizationRunIdRef.current === runId)
             {
                 setLocalModelProgress(progress);
-            }
-        };
-        const updateRunBenchmark = (benchmark: PrivacyBenchmark) =>
-        {
-            if (privatizationRunIdRef.current === runId)
-            {
-                setLatestBenchmark(benchmark);
             }
         };
 
@@ -2416,33 +3478,45 @@ export function App()
                 }
             }
 
-            const result = await createPrivatizedPromptAsync(inputText, {
-                useLocalModelDetection: settings.localModelDetectionEnabled,
-                useRulesDetection: settings.rulesDetectionEnabled,
-                enabledCategories: settings.enabledCategories,
-                onLocalModelProgress: settings.localModelDetectionEnabled
+            const bundle = await createPrivatizedBundle(
+                inputText,
+                inputAttachments,
+                settings.localModelDetectionEnabled,
+                settings.localModelDetectionEnabled
                     ? updateRunLocalModelProgress
                     : undefined,
-                onBenchmark: updateRunBenchmark,
-            });
+            );
 
             if (privatizationRunIdRef.current !== runId)
             {
                 return;
             }
 
-            applyPrivatizedResult(inputText, result);
+            applyPrivatizedBundle(
+                inputText,
+                bundle.promptResult,
+                bundle.attachments,
+            );
+            setBundleMaskingMappings(bundle.maskingMappings);
+            setLatestBenchmark(bundle.benchmark);
 
             if (settings.localModelDetectionEnabled)
             {
                 setLocalModelProgress({
                     phase: 'done',
-                    label: 'Privatized prompt ready.',
+                    label: 'Privatized output ready.',
                     progress: 100,
                 });
             }
 
-            if (!result.safeToInject)
+            const safeToInject =
+                (bundle.promptResult?.safeToInject ?? true) &&
+                bundle.attachments.every((attachment) =>
+                {
+                    return attachment.result?.safeToInject ?? true;
+                });
+
+            if (!safeToInject)
             {
                 setClipboardStatus('Preview only. Sending is disabled.');
                 return;
@@ -2461,6 +3535,7 @@ export function App()
             {
                 const fallbackOutcome = await applyUnsafeRulesOnlyFallback(
                     inputText,
+                    inputAttachments,
                     runId,
                     error,
                 );
@@ -2492,6 +3567,8 @@ export function App()
         setPrivatizedInputText('');
         setPrivatizedResult(null);
         setResultEnabledCategories(null);
+        setTextFileAttachments([]);
+        setBundleMaskingMappings([]);
         setPreviewSegments([]);
         setPreviewTooltip(null);
         setPreviewSelectionPopover(null);
@@ -2538,7 +3615,7 @@ export function App()
 
         try
         {
-            await navigator.clipboard.writeText(privatizedPrompt);
+            await navigator.clipboard.writeText(composedPrivatizedOutput);
             setCopied(true);
             setClipboardStatus('');
             setSendStatus('');
@@ -2563,8 +3640,8 @@ export function App()
     const sendToAiChat = async () =>
     {
         if (
-            !privatizedPrompt ||
-            !canUsePrivatizedPrompt ||
+            !hasPrivatizedOutput ||
+            !canUsePrivatizedOutput ||
             isPreviewStale ||
             !hasChatTarget
         )
@@ -2575,7 +3652,10 @@ export function App()
         try
         {
             setClipboardStatus('');
-            const promptText = prependPromptHeader(privatizedPrompt, settingsRef.current);
+            const promptText = prependPromptHeader(
+                composedPrivatizedOutput,
+                settingsRef.current,
+            );
             const response = (await browser.runtime.sendMessage({
                 type: INJECT_PROMPT_MESSAGE,
                 text: promptText,
@@ -2626,6 +3706,175 @@ export function App()
         hidePreviewSelectionPopover();
         setAppView('main');
     };
+    const openFileReaderView = (attachment: TextFileAttachment) =>
+    {
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setSelectedFileAttachmentId(attachment.document.id);
+        setFileReaderTab(attachment.result == null ? 'original' : 'privatized');
+        setAppView('fileReader');
+    };
+    const closeFileReaderView = () =>
+    {
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setSelectedFileAttachmentId(null);
+        setAppView('main');
+    };
+    const selectFileReaderTab = (tab: FileReaderTab) =>
+    {
+        if (tab === fileReaderTab)
+        {
+            return;
+        }
+
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setFileReaderTab(tab);
+    };
+    const renderTextFileAttachment = (
+        attachment: TextFileAttachment,
+        index: number,
+    ) =>
+    {
+        const itemCount = getTextFileAttachmentItemCount(attachment);
+        const lineCount = getTextFileAttachmentLineCount(attachment);
+        const statusText =
+            attachment.error ??
+            (attachment.result == null
+                ? 'Ready for next scan'
+                : `${formatCount(itemCount)} ${itemCount === 1 ? 'item' : 'items'} masked`);
+
+        return (
+            <li
+                key={attachment.document.id}
+                className={`text-file-card${attachment.error != null ? ' is-error' : ''}${attachment.result != null ? ' is-processed' : ''}`}
+            >
+                <div className="text-file-card-main">
+                    <FileText size={16} aria-hidden="true" />
+                    <div className="text-file-card-copy">
+                        <span
+                            className="text-file-card-name"
+                            title={attachment.document.fileName}
+                        >
+                            {attachment.document.fileName}
+                        </span>
+                        <span className="text-file-card-meta">
+                            {getTextFileAttachmentLabel(attachment, index)} /{' '}
+                            {formatTextFileSize(attachment.document.size)} /{' '}
+                            {formatCount(lineCount)}{' '}
+                            {lineCount === 1 ? 'line' : 'lines'}
+                        </span>
+                    </div>
+                </div>
+                <div className="text-file-card-actions">
+                    <span className="text-file-card-status">{statusText}</span>
+                    {attachment.error == null ? (
+                        <button
+                            className="ghost-button text-file-review-button"
+                            type="button"
+                            title={`Review ${attachment.document.fileName}`}
+                            aria-label={`Review ${attachment.document.fileName}`}
+                            onClick={() => openFileReaderView(attachment)}
+                        >
+                            Review
+                        </button>
+                    ) : null}
+                    {attachment.result != null ? (
+                        <>
+                            <button
+                                className="subtle-icon-button"
+                                type="button"
+                                title="Copy sanitized file text"
+                                aria-label={`Copy sanitized ${attachment.document.fileName}`}
+                                onClick={() => copyTextFileAttachment(attachment)}
+                                disabled={isPreviewStale}
+                            >
+                                <Copy size={14} aria-hidden="true" />
+                            </button>
+                            <button
+                                className="subtle-icon-button"
+                                type="button"
+                                title="Download sanitized file"
+                                aria-label={`Download sanitized ${attachment.document.fileName}`}
+                                onClick={() => downloadTextFileAttachment(attachment)}
+                                disabled={isPreviewStale}
+                            >
+                                <Download size={14} aria-hidden="true" />
+                            </button>
+                        </>
+                    ) : null}
+                    <button
+                        className="subtle-icon-button"
+                        type="button"
+                        title="Remove file"
+                        aria-label={`Remove ${attachment.document.fileName}`}
+                        onClick={() =>
+                            removeTextFileAttachment(attachment.document.id)
+                        }
+                        disabled={isPrivatizing}
+                    >
+                        <X size={14} aria-hidden="true" />
+                    </button>
+                </div>
+                {attachment.document.warnings.length > 0 ? (
+                    <ul className="text-file-card-warnings">
+                        {attachment.document.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                        ))}
+                    </ul>
+                ) : null}
+            </li>
+        );
+    };
+    const renderTextFileAttachments = (showAttachButton: boolean) =>
+    {
+        if (!showAttachButton && textFileAttachments.length === 0)
+        {
+            return null;
+        }
+
+        return (
+            <div className="text-file-attachments">
+                <div className="text-file-attachments-header">
+                    <span className="label-with-icon text-file-attachments-title">
+                        <Paperclip size={15} aria-hidden="true" />
+                        <span>Attached files</span>
+                    </span>
+                    {showAttachButton ? (
+                        <>
+                            <input
+                                ref={textFileInputRef}
+                                type="file"
+                                multiple
+                                hidden
+                                accept={SUPPORTED_TEXT_FILE_ACCEPT}
+                                onChange={handleTextFileInputChange}
+                            />
+                            <button
+                                className="ghost-button text-file-attach-button"
+                                type="button"
+                                onClick={openTextFileInput}
+                                disabled={isPrivatizing}
+                            >
+                                <Upload size={15} aria-hidden="true" />
+                                Attach file
+                            </button>
+                        </>
+                    ) : null}
+                </div>
+                {textFileAttachments.length > 0 ? (
+                    <ul className="text-file-list">
+                        {textFileAttachments.map(renderTextFileAttachment)}
+                    </ul>
+                ) : (
+                    <p className="text-file-empty">
+                        Text files are processed separately and share the same aliases.
+                    </p>
+                )}
+            </div>
+        );
+    };
 
     const renderPromptSurface = (variant: 'compact' | 'reader') => (
         <div
@@ -2657,11 +3906,17 @@ export function App()
         </div>
     );
 
-    const renderPreviewSurface = (variant: 'compact' | 'reader') => (
+    const renderPreviewSurface = (
+        variant: 'compact' | 'reader',
+        content = previewContent,
+        hasSurfaceContent = privatizedPrompt.length > 0,
+        isSurfaceStale = isPreviewStale,
+        onExpand: (() => void) | null = openReaderView,
+    ) => (
         <>
             <div
                 className={`preview-shell${
-                    variant === 'compact' && privatizedPrompt
+                    variant === 'compact' && hasSurfaceContent && onExpand != null
                         ? ' has-expand-button'
                         : ''
                 }`}
@@ -2670,20 +3925,20 @@ export function App()
                     ref={previewRef}
                     className={`preview${
                         variant === 'reader' ? ' preview-reader' : ''
-                    }${isPreviewStale ? ' is-stale' : ''}`}
+                    }${isSurfaceStale ? ' is-stale' : ''}`}
                     aria-live="polite"
                     onPointerUp={schedulePreviewSelectionPopover}
                     onKeyUp={schedulePreviewSelectionPopover}
                 >
-                    {previewContent}
+                    {content}
                 </div>
-                {variant === 'compact' && privatizedPrompt ? (
+                {variant === 'compact' && hasSurfaceContent && onExpand != null ? (
                     <button
                         className="preview-expand-button"
                         type="button"
                         title="Open expanded preview"
                         aria-label="Open expanded preview"
-                        onClick={openReaderView}
+                        onClick={onExpand}
                     >
                         <Maximize2 size={15} aria-hidden="true" />
                     </button>
@@ -2837,7 +4092,7 @@ export function App()
                             className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
                             type="button"
                             onClick={clearPrompts}
-                            disabled={!prompt && !privatizedPrompt && !cleared}
+                            disabled={!hasClearableInput && !cleared}
                         >
                             {cleared ? (
                                 <Check size={16} aria-hidden="true" />
@@ -2968,8 +4223,8 @@ export function App()
                         type="button"
                         onClick={sendToAiChat}
                         disabled={
-                            !privatizedPrompt ||
-                            !canUsePrivatizedPrompt ||
+                            !hasPrivatizedOutput ||
+                            !canUsePrivatizedOutput ||
                             isPreviewStale ||
                             !hasChatTarget
                         }
@@ -2978,6 +4233,170 @@ export function App()
                         <Send size={18} aria-hidden="true" />
                         {sendButtonLabel}
                     </button>
+                </section>
+
+                {clipboardStatus || sendStatus ? (
+                    <p className="status-message" role="status">
+                        {sendStatus || clipboardStatus}
+                    </p>
+                ) : null}
+            </main>
+        );
+    }
+
+    if (appView === 'fileReader' && selectedTextFileAttachment != null)
+    {
+        const selectedFileHasResult = selectedTextFileAttachment.result != null;
+        const selectedFileHasPreview =
+            (selectedTextFilePreview?.privatizedPrompt.length ?? 0) > 0;
+
+        return (
+            <main
+                className={`app-shell reader-shell${
+                    settings.darkModeEnabled ? ' is-dark' : ''
+                }`}
+            >
+                <header className="app-header reader-header">
+                    <button
+                        className="icon-button"
+                        type="button"
+                        title="Back"
+                        aria-label="Back"
+                        onClick={closeFileReaderView}
+                    >
+                        <ArrowLeft size={18} aria-hidden="true" />
+                    </button>
+                    <div className="brand-lockup">
+                        <h1>File preview</h1>
+                    </div>
+                </header>
+
+                <section className="panel reader-panel file-reader-panel">
+                    <div className="section-header">
+                        <h2 className="label-with-icon file-reader-title">
+                            <FileText size={18} aria-hidden="true" />
+                            <span>{selectedTextFileAttachment.document.fileName}</span>
+                        </h2>
+                        {selectedFileHasResult ? (
+                            <div className="file-reader-actions">
+                                <button
+                                    className="ghost-button copy-button"
+                                    type="button"
+                                    title="Copy sanitized file text"
+                                    onClick={() =>
+                                        copyTextFileAttachment(selectedTextFileAttachment)
+                                    }
+                                    disabled={isPreviewStale}
+                                >
+                                    <Copy size={16} aria-hidden="true" />
+                                    Copy
+                                </button>
+                                <button
+                                    className="ghost-button"
+                                    type="button"
+                                    title="Download sanitized file"
+                                    onClick={() =>
+                                        downloadTextFileAttachment(
+                                            selectedTextFileAttachment,
+                                        )
+                                    }
+                                    disabled={isPreviewStale}
+                                >
+                                    <Download size={16} aria-hidden="true" />
+                                    Download
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+                    <p className="file-reader-meta">
+                        {selectedTextFileAttachment.document.format.toUpperCase()} /{' '}
+                        {formatTextFileSize(selectedTextFileAttachment.document.size)} /{' '}
+                        {formatCount(
+                            getTextFileAttachmentLineCount(selectedTextFileAttachment),
+                        )}{' '}
+                        {getTextFileAttachmentLineCount(selectedTextFileAttachment) === 1
+                            ? 'line'
+                            : 'lines'}
+                    </p>
+                    <div
+                        className="workspace-tabs file-reader-tabs"
+                        role="tablist"
+                        aria-label="File preview"
+                    >
+                        <button
+                            id="file-reader-tab-original"
+                            className={`workspace-tab${
+                                fileReaderTab === 'original' ? ' is-active' : ''
+                            }`}
+                            type="button"
+                            role="tab"
+                            aria-selected={fileReaderTab === 'original'}
+                            aria-controls="file-reader-panel-original"
+                            onClick={() => selectFileReaderTab('original')}
+                        >
+                            <FileText size={16} aria-hidden="true" />
+                            Original
+                        </button>
+                        <button
+                            id="file-reader-tab-privatized"
+                            className={`workspace-tab${
+                                fileReaderTab === 'privatized' ? ' is-active' : ''
+                            }${isPreviewStale ? ' is-stale' : ''}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={fileReaderTab === 'privatized'}
+                            aria-controls="file-reader-panel-privatized"
+                            onClick={() => selectFileReaderTab('privatized')}
+                            disabled={!selectedFileHasResult}
+                        >
+                            <ShieldCheck size={16} aria-hidden="true" />
+                            Privatized
+                        </button>
+                    </div>
+                    {fileReaderTab === 'original' ? (
+                        <div
+                            id="file-reader-panel-original"
+                            className="workspace-tab-panel file-reader-tab-panel"
+                            role="tabpanel"
+                            aria-labelledby="file-reader-tab-original"
+                        >
+                            <pre className="preview preview-reader file-original-preview">{selectedTextFileAttachment.document.text || 'No text extracted.'}</pre>
+                        </div>
+                    ) : (
+                        <div
+                            id="file-reader-panel-privatized"
+                            className="workspace-tab-panel file-reader-tab-panel"
+                            role="tabpanel"
+                            aria-labelledby="file-reader-tab-privatized"
+                        >
+                            {isPreviewStale ? (
+                                <p className="stale-preview-notice">
+                                    Does not match the updated settings. Run{' '}
+                                    <button
+                                        className="stale-preview-action"
+                                        type="button"
+                                        onClick={showPromptWorkspace}
+                                    >
+                                        Privatize
+                                    </button>{' '}
+                                    again before copying or sending the output.
+                                </p>
+                            ) : null}
+                            {selectedFileHasResult ? (
+                                renderPreviewSurface(
+                                    'reader',
+                                    selectedTextFilePreviewContent,
+                                    selectedFileHasPreview,
+                                    isPreviewStale,
+                                    null,
+                                )
+                            ) : (
+                                <p className="scan-detail-empty">
+                                    Run Privatize to create a sanitized file preview.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 {clipboardStatus || sendStatus ? (
@@ -3046,7 +4465,7 @@ export function App()
                             className={`ghost-button clear-button${cleared ? ' is-cleared' : ''}`}
                             type="button"
                             onClick={clearPrompts}
-                            disabled={!prompt && !privatizedPrompt && !cleared}
+                            disabled={!hasClearableInput && !cleared}
                         >
                             {cleared ? (
                                 <Check size={16} aria-hidden="true" />
@@ -3111,6 +4530,7 @@ export function App()
                         aria-labelledby="workspace-tab-prompt"
                     >
                         {renderPromptSurface('compact')}
+                        {renderTextFileAttachments(true)}
                         <div className="action-grid">
                             <button
                                 className="primary-button"
@@ -3145,13 +4565,14 @@ export function App()
                             </p>
                         ) : null}
                         {renderPreviewSurface('compact')}
+                        {renderTextFileAttachments(false)}
                         <button
                             className="primary-button panel-action"
                             type="button"
                             onClick={sendToAiChat}
                             disabled={
-                                !privatizedPrompt ||
-                                !canUsePrivatizedPrompt ||
+                                !hasPrivatizedOutput ||
+                                !canUsePrivatizedOutput ||
                                 isPreviewStale ||
                                 !hasChatTarget
                             }

@@ -267,6 +267,17 @@ h2 {
     background: #fefce8;
 }
 
+.workspace-tab:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.workspace-tab:disabled:hover {
+    border-color: #dbe4ec;
+    color: #475569;
+    background: #ffffff;
+}
+
 .workspace-tab svg {
     flex: 0 0 auto;
 }
@@ -914,6 +925,205 @@ h2 {
     width: 100%;
 }
 
+.text-file-attachments {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    background: #f8fbff;
+}
+
+.text-file-attachments-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.text-file-attachments-title {
+    min-width: 0;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.text-file-attach-button {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+.text-file-review-button {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 11px;
+}
+
+.text-file-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.text-file-card {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    border: 1px solid #dbe4ec;
+    border-radius: 8px;
+    padding: 8px;
+    background: #ffffff;
+}
+
+.text-file-card.is-error {
+    border-color: #fecaca;
+    background: #fff7f7;
+}
+
+.text-file-card-main,
+.text-file-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.text-file-card-main {
+    color: #475569;
+}
+
+.text-file-card-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.text-file-card-name,
+.text-file-card-meta,
+.text-file-card-status {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.text-file-card-name {
+    color: #334155;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.text-file-card-meta,
+.text-file-empty,
+.text-file-card-warnings {
+    color: #64748b;
+    font-size: 11px;
+}
+
+.text-file-card-actions {
+    justify-content: flex-end;
+}
+
+.text-file-card-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 650;
+    text-align: right;
+}
+
+.text-file-card.is-error .text-file-card-status {
+    color: #b91c1c;
+}
+
+.text-file-card-warnings {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.text-file-empty {
+    margin: 0;
+}
+
+.file-reader-panel {
+    gap: 10px;
+}
+
+.file-reader-title {
+    min-width: 0;
+}
+
+.file-reader-title span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-reader-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-reader-meta {
+    margin: -4px 0 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.file-reader-tabs {
+    margin-top: 0;
+}
+
+.file-reader-tab-panel {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.file-original-preview {
+    width: 100%;
+    margin: 0;
+    font-family: inherit;
+    white-space: pre-wrap;
+}
+
+.subtle-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    border: 1px solid #dbe4ec;
+    border-radius: 6px;
+    padding: 0;
+    color: #64748b;
+    background: #ffffff;
+    cursor: pointer;
+    transition:
+        background-color 150ms ease,
+        border-color 150ms ease,
+        color 150ms ease;
+}
+
+.subtle-icon-button:not(:disabled):hover {
+    border-color: var(--subtle-button-hover-border);
+    background: var(--subtle-button-hover-background);
+    color: var(--subtle-button-hover-color);
+}
+
+.subtle-icon-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
 .local-model-progress {
     display: grid;
     gap: 7px;
@@ -1035,6 +1245,7 @@ h2 {
 .secondary-button:focus-visible,
 .ghost-button:focus-visible,
 .icon-button:focus-visible,
+.subtle-icon-button:focus-visible,
 .workspace-tab:focus-visible,
 .prompt-header-option:focus-visible,
 .prompt-header-preview:focus-visible,
@@ -1528,6 +1739,12 @@ h2 {
     color: var(--subtle-button-hover-color);
 }
 
+.app-shell.is-dark .workspace-tab:disabled:hover {
+    border-color: #334155;
+    color: #cbd5e1;
+    background: #111827;
+}
+
 .app-shell.is-dark .workspace-tab.is-active {
     border-color: var(--brand-blue-border);
     background: var(--brand-blue-soft);
@@ -1548,6 +1765,50 @@ h2 {
 .app-shell.is-dark .prompt-input:focus {
     border-color: #2dd4bf;
     box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14);
+}
+
+.app-shell.is-dark .text-file-attachments,
+.app-shell.is-dark .text-file-card {
+    border-color: #334155;
+    background: #020617;
+}
+
+.app-shell.is-dark .text-file-card.is-error {
+    border-color: #7f1d1d;
+    background: #1f0b0b;
+}
+
+.app-shell.is-dark .text-file-attachments-title,
+.app-shell.is-dark .text-file-card-name {
+    color: #e2e8f0;
+}
+
+.app-shell.is-dark .text-file-card-main,
+.app-shell.is-dark .text-file-card-status,
+.app-shell.is-dark .subtle-icon-button {
+    color: #94a3b8;
+}
+
+.app-shell.is-dark .text-file-card-meta,
+.app-shell.is-dark .text-file-empty,
+.app-shell.is-dark .text-file-card-warnings,
+.app-shell.is-dark .file-reader-meta {
+    color: #64748b;
+}
+
+.app-shell.is-dark .text-file-card.is-error .text-file-card-status {
+    color: #fca5a5;
+}
+
+.app-shell.is-dark .subtle-icon-button {
+    border-color: #334155;
+    background: #111827;
+}
+
+.app-shell.is-dark .subtle-icon-button:not(:disabled):hover {
+    border-color: var(--subtle-button-hover-border);
+    background: var(--subtle-button-hover-background);
+    color: var(--subtle-button-hover-color);
 }
 
 .app-shell.is-dark .scan-detail-search {
