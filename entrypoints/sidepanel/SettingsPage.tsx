@@ -13,6 +13,7 @@ import {
     type PromptHeaderMode,
 } from '../../source/settings/types';
 import { PRIVACY_SCAN_CATEGORIES } from './privacy-categories';
+import { PrivacyFootnote } from './PrivacyFootnote';
 import { getCategoryColorStyle } from './theme';
 
 type SettingsPageProps = {
@@ -285,7 +286,7 @@ export const SettingsPage = ({
                 </p>
             ) : null}
 
-            <footer className="footer">Stored locally</footer>
+            <PrivacyFootnote />
         </main>
     );
 };

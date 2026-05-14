@@ -25,6 +25,7 @@ import {
     FileQuestion,
     FileText,
     Maximize2,
+    MoreHorizontal,
     Paperclip,
     RotateCcw,
     ScanSearch,
@@ -77,6 +78,7 @@ import {
     PRIVACY_SCAN_CATEGORIES,
     type PrivacyScanCategory,
 } from './privacy-categories';
+import { PrivacyFootnote } from './PrivacyFootnote';
 import { SettingsPage } from './SettingsPage';
 import {
     getCategoryColorStyle,
@@ -1239,12 +1241,25 @@ const formatBytes = (bytes: number) =>
     return `${bytes.toFixed(0)} B`;
 };
 
+const hasScrollableOverflow = (element: HTMLElement | null) =>
+{
+    if (element == null)
+    {
+        return false;
+    }
+
+    return (
+        element.scrollHeight > element.clientHeight + 1 ||
+        element.scrollWidth > element.clientWidth + 1
+    );
+};
+
 const getTextFileAttachmentLabel = (
     attachment: TextFileAttachment,
     index: number,
 ) =>
 {
-    return `Attachment ${index + 1} (.${attachment.document.format})`;
+    return `File ${index + 1} (.${attachment.document.format})`;
 };
 
 const getTextFileAttachmentLineCount = (attachment: TextFileAttachment) =>
@@ -1467,14 +1482,14 @@ const composePrivatizedOutput = (
         outputParts.push(privatizedPrompt);
     }
 
-    includedAttachments.forEach((attachment, index) =>
+    includedAttachments.forEach((attachment) =>
     {
         const sanitizedText = getTextFileAttachmentPreviewText(attachment);
         const fence = getMarkdownFence(sanitizedText);
 
         outputParts.push(
             [
-                `Attached sanitized file: ${getTextFileAttachmentLabel(attachment, index)}`,
+                `Sanitized file content from ${attachment.document.fileName}:`,
                 '',
                 `${fence}${getMarkdownFenceLanguage(attachment.document.format)}`,
                 sanitizedText,
@@ -1606,6 +1621,9 @@ export function App()
     const [textFileAttachments, setTextFileAttachments] = useState<
         TextFileAttachment[]
     >([]);
+    const [openTextFileActionMenuId, setOpenTextFileActionMenuId] = useState<
+        string | null
+    >(null);
     const [bundleMaskingMappings, setBundleMaskingMappings] = useState<
         MaskingMapping[]
     >([]);
@@ -1634,6 +1652,10 @@ export function App()
     const [isPrivatizing, setIsPrivatizing] = useState(false);
     const [copied, setCopied] = useState(false);
     const [cleared, setCleared] = useState(false);
+    const [promptSurfaceHasOverflow, setPromptSurfaceHasOverflow] =
+        useState(false);
+    const [previewSurfaceHasOverflow, setPreviewSurfaceHasOverflow] =
+        useState(false);
     const [previewTooltip, setPreviewTooltip] = useState<PreviewTooltip | null>(null);
     const [previewSelectionPopover, setPreviewSelectionPopover] =
         useState<PreviewSelectionPopover | null>(null);
@@ -1641,10 +1663,13 @@ export function App()
     const clearResetTimerRef = useRef<number | undefined>(undefined);
     const previewTooltipHideTimerRef = useRef<number | undefined>(undefined);
     const previewSelectionFrameRef = useRef<number | undefined>(undefined);
+    const promptSurfaceRef = useRef<HTMLTextAreaElement | null>(null);
+    const previewSurfaceRef = useRef<HTMLDivElement | null>(null);
     const previewRef = useRef<HTMLDivElement | null>(null);
     const previewTooltipRef = useRef<HTMLDivElement | null>(null);
     const previewSelectionPopoverRef = useRef<HTMLDivElement | null>(null);
     const textFileInputRef = useRef<HTMLInputElement | null>(null);
+    const textFileActionMenuRef = useRef<HTMLDivElement | null>(null);
     const privatizationRunIdRef = useRef(0);
     const settingsRef = useRef(settings);
     const settingsSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -1665,6 +1690,28 @@ export function App()
     const hidePreviewSelectionPopover = () =>
     {
         setPreviewSelectionPopover(null);
+    };
+    const syncSurfaceOverflowState = () =>
+    {
+        const nextPromptSurfaceHasOverflow = hasScrollableOverflow(
+            promptSurfaceRef.current,
+        );
+        const nextPreviewSurfaceHasOverflow = hasScrollableOverflow(
+            previewSurfaceRef.current,
+        );
+
+        setPromptSurfaceHasOverflow((currentValue) =>
+        {
+            return currentValue === nextPromptSurfaceHasOverflow
+                ? currentValue
+                : nextPromptSurfaceHasOverflow;
+        });
+        setPreviewSurfaceHasOverflow((currentValue) =>
+        {
+            return currentValue === nextPreviewSurfaceHasOverflow
+                ? currentValue
+                : nextPreviewSurfaceHasOverflow;
+        });
     };
     const updateChatTargetState = (response: RuntimeResponse | undefined) =>
     {
@@ -2236,6 +2283,7 @@ export function App()
     const removeTextFileAttachment = (attachmentId: string) =>
     {
         privatizationRunIdRef.current += 1;
+        setOpenTextFileActionMenuId(null);
         setTextFileAttachments((currentAttachments) =>
         {
             return currentAttachments.filter((attachment) =>
@@ -2332,6 +2380,25 @@ export function App()
         URL.revokeObjectURL(url);
         setClipboardStatus(`Downloaded sanitized ${attachment.document.fileName}.`);
         setSendStatus('');
+    };
+    const copyTextFileAttachmentFromMenu = async (
+        attachment: TextFileAttachment,
+    ) =>
+    {
+        setOpenTextFileActionMenuId(null);
+        await copyTextFileAttachment(attachment);
+    };
+    const downloadTextFileAttachmentFromMenu = (
+        attachment: TextFileAttachment,
+    ) =>
+    {
+        setOpenTextFileActionMenuId(null);
+        downloadTextFileAttachment(attachment);
+    };
+    const removeTextFileAttachmentFromMenu = (attachmentId: string) =>
+    {
+        setOpenTextFileActionMenuId(null);
+        removeTextFileAttachment(attachmentId);
     };
     const clearScanDetailSearch = () =>
     {
@@ -2921,6 +2988,42 @@ export function App()
         }
     };
 
+    useLayoutEffect(() =>
+    {
+        syncSurfaceOverflowState();
+    });
+
+    useEffect(() =>
+    {
+        const promptSurface = promptSurfaceRef.current;
+        const previewSurface = previewSurfaceRef.current;
+        let resizeObserver: ResizeObserver | null = null;
+
+        if (typeof ResizeObserver !== 'undefined')
+        {
+            resizeObserver = new ResizeObserver(syncSurfaceOverflowState);
+
+            if (promptSurface != null)
+            {
+                resizeObserver.observe(promptSurface);
+            }
+
+            if (previewSurface != null)
+            {
+                resizeObserver.observe(previewSurface);
+            }
+        }
+
+        window.addEventListener('resize', syncSurfaceOverflowState);
+        syncSurfaceOverflowState();
+
+        return () =>
+        {
+            resizeObserver?.disconnect();
+            window.removeEventListener('resize', syncSurfaceOverflowState);
+        };
+    }, [appView, workspaceTab]);
+
     useEffect(() =>
     {
         settingsRef.current = settings;
@@ -2982,6 +3085,24 @@ export function App()
         setSelectedFileAttachmentId(null);
         setAppView('main');
     }, [appView, selectedFileAttachmentId, selectedTextFileAttachment]);
+
+    useEffect(() =>
+    {
+        if (openTextFileActionMenuId == null)
+        {
+            return;
+        }
+
+        const menuAttachmentExists = textFileAttachments.some((attachment) =>
+        {
+            return attachment.document.id === openTextFileActionMenuId;
+        });
+
+        if (!menuAttachmentExists)
+        {
+            setOpenTextFileActionMenuId(null);
+        }
+    }, [openTextFileActionMenuId, textFileAttachments]);
 
     useEffect(() =>
     {
@@ -3134,6 +3255,51 @@ export function App()
             window.removeEventListener('keydown', closeScanDetailOnEscape);
         };
     }, [activeScanCategory]);
+
+    useEffect(() =>
+    {
+        if (openTextFileActionMenuId == null)
+        {
+            return;
+        }
+
+        const closeFileActionMenuOnEscape = (event: KeyboardEvent) =>
+        {
+            if (event.key === 'Escape')
+            {
+                setOpenTextFileActionMenuId(null);
+            }
+        };
+        const closeFileActionMenuOnOutsidePointerDown = (event: PointerEvent) =>
+        {
+            if (!(event.target instanceof Node))
+            {
+                return;
+            }
+
+            if (textFileActionMenuRef.current?.contains(event.target))
+            {
+                return;
+            }
+
+            setOpenTextFileActionMenuId(null);
+        };
+
+        window.addEventListener('keydown', closeFileActionMenuOnEscape);
+        document.addEventListener(
+            'pointerdown',
+            closeFileActionMenuOnOutsidePointerDown,
+        );
+
+        return () =>
+        {
+            window.removeEventListener('keydown', closeFileActionMenuOnEscape);
+            document.removeEventListener(
+                'pointerdown',
+                closeFileActionMenuOnOutsidePointerDown,
+            );
+        };
+    }, [openTextFileActionMenuId]);
 
     useEffect(() =>
     {
@@ -3828,6 +3994,7 @@ export function App()
     {
         hidePreviewTooltip();
         hidePreviewSelectionPopover();
+        setOpenTextFileActionMenuId(null);
         setSelectedFileAttachmentId(attachment.document.id);
         setFileReaderTab(attachment.result == null ? 'original' : 'privatized');
         setAppView('fileReader');
@@ -3897,17 +4064,37 @@ export function App()
 
         return (
             <div className={className} aria-label="Masked file item summary">
-                {visibleSummaries.map((summary) => (
-                    <span
-                        key={summary.category}
-                        className="text-file-category-chip"
-                        style={getCategoryColorStyle(summary.category)}
-                    >
-                        {summary.label} {formatCount(summary.count)}
-                    </span>
-                ))}
+                {visibleSummaries.map((summary) =>
+                {
+                    const categoryInfo = PRIVACY_SCAN_CATEGORIES.find(
+                        ({ category }) =>
+                        {
+                            return category === summary.category;
+                        },
+                    );
+                    const Icon = categoryInfo?.Icon;
+
+                    return (
+                        <span
+                            key={summary.category}
+                            className="text-file-category-chip"
+                            style={getCategoryColorStyle(summary.category)}
+                            title={`${summary.label}: ${formatCount(summary.count)}`}
+                            aria-label={`${summary.label}: ${formatCount(summary.count)}`}
+                        >
+                            {Icon != null ? (
+                                <Icon size={12} aria-hidden="true" />
+                            ) : null}
+                            <span>{formatCount(summary.count)}</span>
+                        </span>
+                    );
+                })}
                 {remainingCount > 0 ? (
-                    <span className="text-file-category-chip is-muted">
+                    <span
+                        className="text-file-category-chip is-muted"
+                        title={`${formatCount(remainingCount)} more categories`}
+                        aria-label={`${formatCount(remainingCount)} more categories`}
+                    >
                         +{remainingCount}
                     </span>
                 ) : null}
@@ -3921,6 +4108,11 @@ export function App()
     {
         const lineCount = getTextFileAttachmentLineCount(attachment);
         const statusText = getTextFileAttachmentStatusText(attachment);
+        const actionMenuId =
+            `text-file-action-menu-${attachment.document.id}`;
+        const isActionMenuOpen =
+            openTextFileActionMenuId === attachment.document.id;
+        const resultActionDisabled = attachment.result == null || isPreviewStale;
 
         return (
             <li
@@ -3951,7 +4143,7 @@ export function App()
                                 {attachment.included ? (
                                     <Check size={10} aria-hidden="true" />
                                 ) : (
-                                    <CircleMinus size={10} aria-hidden="true" />
+                                    <X size={10} aria-hidden="true" />
                                 )}
                             </span>
                         </button>
@@ -3974,56 +4166,125 @@ export function App()
                             {lineCount === 1 ? 'line' : 'lines'}
                         </span>
                     </div>
-                    {attachment.result != null ? (
-                        <div className="text-file-card-result-actions">
+                    <div className="text-file-card-result-actions">
+                        <div
+                            className="text-file-action-menu"
+                            ref={
+                                isActionMenuOpen
+                                    ? textFileActionMenuRef
+                                    : undefined
+                            }
+                        >
                             <button
-                                className="subtle-icon-button"
+                                className={`subtle-icon-button text-file-more-button${isActionMenuOpen ? ' is-active' : ''}`}
                                 type="button"
-                                title="Copy sanitized file text"
-                                aria-label={`Copy sanitized ${attachment.document.fileName}`}
-                                onClick={() => copyTextFileAttachment(attachment)}
-                                disabled={isPreviewStale}
+                                title="More file actions"
+                                aria-label={`More actions for ${attachment.document.fileName}`}
+                                aria-haspopup="menu"
+                                aria-expanded={isActionMenuOpen}
+                                aria-controls={
+                                    isActionMenuOpen ? actionMenuId : undefined
+                                }
+                                onClick={() =>
+                                    setOpenTextFileActionMenuId(
+                                        isActionMenuOpen
+                                            ? null
+                                            : attachment.document.id,
+                                    )
+                                }
                             >
-                                <Copy size={15} aria-hidden="true" />
+                                <MoreHorizontal size={15} aria-hidden="true" />
                             </button>
-                            <button
-                                className="subtle-icon-button"
-                                type="button"
-                                title="Download sanitized file"
-                                aria-label={`Download sanitized ${attachment.document.fileName}`}
-                                onClick={() => downloadTextFileAttachment(attachment)}
-                                disabled={isPreviewStale}
-                            >
-                                <Download size={15} aria-hidden="true" />
-                            </button>
+                            {isActionMenuOpen ? (
+                                <div
+                                    id={actionMenuId}
+                                    className="text-file-action-menu-popover"
+                                    role="menu"
+                                >
+                                    <button
+                                        className="text-file-action-menu-item"
+                                        type="button"
+                                        role="menuitem"
+                                        title={
+                                            attachment.error == null
+                                                ? 'Review file'
+                                                : 'File could not be reviewed'
+                                        }
+                                        disabled={attachment.error != null}
+                                        onClick={() => openFileReaderView(attachment)}
+                                    >
+                                        <Eye size={15} aria-hidden="true" />
+                                        <span>Review</span>
+                                    </button>
+                                    <button
+                                        className="text-file-action-menu-item"
+                                        type="button"
+                                        role="menuitem"
+                                        title={
+                                            resultActionDisabled
+                                                ? 'Run Privatize before copying this file'
+                                                : 'Copy sanitized file text'
+                                        }
+                                        disabled={resultActionDisabled}
+                                        onClick={() =>
+                                        {
+                                            void copyTextFileAttachmentFromMenu(
+                                                attachment,
+                                            );
+                                        }}
+                                    >
+                                        <Copy size={15} aria-hidden="true" />
+                                        <span>Copy</span>
+                                    </button>
+                                    <button
+                                        className="text-file-action-menu-item"
+                                        type="button"
+                                        role="menuitem"
+                                        title={
+                                            resultActionDisabled
+                                                ? 'Run Privatize before downloading this file'
+                                                : 'Download sanitized file'
+                                        }
+                                        disabled={resultActionDisabled}
+                                        onClick={() =>
+                                            downloadTextFileAttachmentFromMenu(
+                                                attachment,
+                                            )
+                                        }
+                                    >
+                                        <Download size={15} aria-hidden="true" />
+                                        <span>Download</span>
+                                    </button>
+                                    <span
+                                        className="text-file-action-menu-divider"
+                                        aria-hidden="true"
+                                    />
+                                    <button
+                                        className="text-file-action-menu-item is-danger"
+                                        type="button"
+                                        role="menuitem"
+                                        title={
+                                            isPrivatizing
+                                                ? 'Wait until Privatize finishes'
+                                                : 'Remove file'
+                                        }
+                                        disabled={isPrivatizing}
+                                        onClick={() =>
+                                            removeTextFileAttachmentFromMenu(
+                                                attachment.document.id,
+                                            )
+                                        }
+                                    >
+                                        <Trash2 size={15} aria-hidden="true" />
+                                        <span>Remove</span>
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
-                    ) : null}
+                    </div>
                 </div>
                 <div className="text-file-card-actions">
                     <span className="text-file-card-status">{statusText}</span>
-                    {attachment.error == null ? (
-                        <button
-                            className="subtle-icon-button text-file-review-button"
-                            type="button"
-                            title={`Review ${attachment.document.fileName}`}
-                            aria-label={`Review ${attachment.document.fileName}`}
-                            onClick={() => openFileReaderView(attachment)}
-                        >
-                            <Eye size={15} aria-hidden="true" />
-                        </button>
-                    ) : null}
-                    <button
-                        className="subtle-icon-button text-file-remove-button"
-                        type="button"
-                        title="Remove file"
-                        aria-label={`Remove ${attachment.document.fileName}`}
-                        onClick={() =>
-                            removeTextFileAttachment(attachment.document.id)
-                        }
-                        disabled={isPrivatizing}
-                    >
-                        <Trash2 size={15} aria-hidden="true" />
-                    </button>
                 </div>
                 {renderTextFileCategorySummaries(
                     attachment,
@@ -4245,35 +4506,42 @@ export function App()
         );
     };
 
-    const renderPromptSurface = (variant: 'compact' | 'reader') => (
-        <div
-            className={`prompt-input-shell${
-                variant === 'compact' ? ' has-expand-button' : ''
-            }`}
-        >
-            <textarea
-                id={variant === 'compact' ? 'original-prompt' : 'original-prompt-reader'}
-                className={`prompt-input${
-                    variant === 'reader' ? ' prompt-input-reader' : ''
+    const renderPromptSurface = (variant: 'compact' | 'reader') =>
+    {
+        const hasExpandableOverflow =
+            variant === 'compact' && promptSurfaceHasOverflow;
+
+        return (
+            <div
+                className={`prompt-input-shell${
+                    hasExpandableOverflow ? ' has-expand-button' : ''
                 }`}
-                value={prompt}
-                onChange={updatePrompt}
-                placeholder="Type or paste your prompt here..."
-                spellCheck="true"
-            />
-            {variant === 'compact' ? (
-                <button
-                    className="preview-expand-button"
-                    type="button"
-                    title="Open expanded prompt"
-                    aria-label="Open expanded prompt"
-                    onClick={openPromptReaderView}
-                >
-                    <Maximize2 size={15} aria-hidden="true" />
-                </button>
-            ) : null}
-        </div>
-    );
+            >
+                <textarea
+                    id={variant === 'compact' ? 'original-prompt' : 'original-prompt-reader'}
+                    ref={variant === 'compact' ? promptSurfaceRef : undefined}
+                    className={`prompt-input${
+                        variant === 'reader' ? ' prompt-input-reader' : ''
+                    }`}
+                    value={prompt}
+                    onChange={updatePrompt}
+                    placeholder="Type or paste your prompt here..."
+                    spellCheck="true"
+                />
+                {hasExpandableOverflow ? (
+                    <button
+                        className="preview-expand-button"
+                        type="button"
+                        title="Open expanded prompt"
+                        aria-label="Open expanded prompt"
+                        onClick={openPromptReaderView}
+                    >
+                        <Maximize2 size={15} aria-hidden="true" />
+                    </button>
+                ) : null}
+            </div>
+        );
+    };
 
     const renderPreviewSurface = (
         variant: 'compact' | 'reader',
@@ -4281,149 +4549,168 @@ export function App()
         hasSurfaceContent = privatizedPrompt.length > 0,
         isSurfaceStale = isPreviewStale,
         onExpand: (() => void) | null = openReaderView,
-    ) => (
-        <>
-            <div
-                className={`preview-shell${
-                    variant === 'compact' && hasSurfaceContent && onExpand != null
-                        ? ' has-expand-button'
-                        : ''
-                }`}
-            >
+    ) =>
+    {
+        const hasExpandableOverflow =
+            variant === 'compact' &&
+            hasSurfaceContent &&
+            onExpand != null &&
+            previewSurfaceHasOverflow;
+
+        return (
+            <>
                 <div
-                    ref={previewRef}
-                    className={`preview${
-                        variant === 'reader' ? ' preview-reader' : ''
-                    }${isSurfaceStale ? ' is-stale' : ''}`}
-                    aria-live="polite"
-                    onPointerUp={schedulePreviewSelectionPopover}
-                    onKeyUp={schedulePreviewSelectionPopover}
+                    className={`preview-shell${
+                        hasExpandableOverflow ? ' has-expand-button' : ''
+                    }`}
                 >
-                    {content}
-                </div>
-                {variant === 'compact' && hasSurfaceContent && onExpand != null ? (
-                    <button
-                        className="preview-expand-button"
-                        type="button"
-                        title="Open expanded preview"
-                        aria-label="Open expanded preview"
-                        onClick={onExpand}
-                    >
-                        <Maximize2 size={15} aria-hidden="true" />
-                    </button>
-                ) : null}
-            </div>
-            {previewTooltip != null ? (
-                <>
-                    {previewTooltip.bridge != null ? (
-                        <div
-                            className="preview-tooltip-bridge"
-                            style={{
-                                left: previewTooltip.bridge.left,
-                                top: previewTooltip.bridge.top,
-                                width: previewTooltip.bridge.width,
-                                height: previewTooltip.bridge.height,
-                            }}
-                            aria-hidden="true"
-                            onPointerEnter={clearPreviewTooltipHideTimer}
-                            onPointerLeave={queueHidePreviewTooltip}
-                        />
-                    ) : null}
                     <div
-                        ref={previewTooltipRef}
-                        className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
-                        style={{
-                            left: previewTooltip.left,
-                            top: previewTooltip.top,
-                            '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
-                        } as CSSProperties}
-                        role="dialog"
-                        aria-label={`${previewTooltip.mask} original text`}
-                        onPointerEnter={clearPreviewTooltipHideTimer}
-                        onPointerLeave={queueHidePreviewTooltip}
-                        onFocus={clearPreviewTooltipHideTimer}
-                        onBlur={queueHidePreviewTooltip}
-                        onKeyDown={(event) =>
+                        ref={(element) =>
                         {
-                            if (event.key === 'Escape')
+                            previewRef.current = element;
+
+                            if (variant === 'compact')
                             {
-                                event.preventDefault();
-                                hidePreviewTooltip();
+                                previewSurfaceRef.current = element;
                             }
                         }}
+                        className={`preview${
+                            variant === 'reader' ? ' preview-reader' : ''
+                        }${isSurfaceStale ? ' is-stale' : ''}`}
+                        aria-live="polite"
+                        onPointerUp={schedulePreviewSelectionPopover}
+                        onKeyUp={schedulePreviewSelectionPopover}
                     >
-                        <div className="preview-tooltip-content">
-                            <div className="preview-tooltip-row">
-                                <div className="preview-tooltip-text">
-                                    {previewTooltip.text}
-                                </div>
-                                {previewTooltipMapping != null ? (
-                                    <div className="preview-tooltip-meta">
-                                        <span className="preview-tooltip-count">
-                                            {formatCount(
-                                                previewTooltipMapping.itemIds.length,
-                                            )}
-                                            x
-                                        </span>
+                        {content}
+                    </div>
+                    {hasExpandableOverflow ? (
+                        <button
+                            className="preview-expand-button"
+                            type="button"
+                            title="Open expanded preview"
+                            aria-label="Open expanded preview"
+                            onClick={onExpand}
+                        >
+                            <Maximize2 size={15} aria-hidden="true" />
+                        </button>
+                    ) : null}
+                </div>
+                {previewTooltip != null ? (
+                    <>
+                        {previewTooltip.bridge != null ? (
+                            <div
+                                className="preview-tooltip-bridge"
+                                style={{
+                                    left: previewTooltip.bridge.left,
+                                    top: previewTooltip.bridge.top,
+                                    width: previewTooltip.bridge.width,
+                                    height: previewTooltip.bridge.height,
+                                }}
+                                aria-hidden="true"
+                                onPointerEnter={clearPreviewTooltipHideTimer}
+                                onPointerLeave={queueHidePreviewTooltip}
+                            />
+                        ) : null}
+                        <div
+                            ref={previewTooltipRef}
+                            className={`preview-tooltip preview-tooltip-${previewTooltip.placement}`}
+                            style={{
+                                left: previewTooltip.left,
+                                top: previewTooltip.top,
+                                '--preview-tooltip-arrow-left': `${previewTooltip.arrowLeft}px`,
+                            } as CSSProperties}
+                            role="dialog"
+                            aria-label={`${previewTooltip.mask} original text`}
+                            onPointerEnter={clearPreviewTooltipHideTimer}
+                            onPointerLeave={queueHidePreviewTooltip}
+                            onFocus={clearPreviewTooltipHideTimer}
+                            onBlur={queueHidePreviewTooltip}
+                            onKeyDown={(event) =>
+                            {
+                                if (event.key === 'Escape')
+                                {
+                                    event.preventDefault();
+                                    hidePreviewTooltip();
+                                }
+                            }}
+                        >
+                            <div className="preview-tooltip-content">
+                                <div className="preview-tooltip-row">
+                                    <div className="preview-tooltip-text">
+                                        {previewTooltip.text}
                                     </div>
-                                ) : null}
-                                <button
-                                    className="preview-tooltip-restore-button"
-                                    type="button"
-                                    title="Restore original text"
-                                    aria-label={`Restore ${previewTooltip.mask} original text`}
-                                    onClick={() =>
-                                        restoreMaskingMappingById(previewTooltip.mappingId)
-                                    }
-                                >
-                                    <RotateCcw size={15} aria-hidden="true" />
-                                </button>
+                                    {previewTooltipMapping != null ? (
+                                        <div className="preview-tooltip-meta">
+                                            <span className="preview-tooltip-count">
+                                                {formatCount(
+                                                    previewTooltipMapping.itemIds.length,
+                                                )}
+                                                x
+                                            </span>
+                                        </div>
+                                    ) : null}
+                                    <button
+                                        className="preview-tooltip-restore-button"
+                                        type="button"
+                                        title="Restore original text"
+                                        aria-label={`Restore ${previewTooltip.mask} original text`}
+                                        onClick={() =>
+                                            restoreMaskingMappingById(
+                                                previewTooltip.mappingId,
+                                            )
+                                        }
+                                    >
+                                        <RotateCcw size={15} aria-hidden="true" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                ) : null}
+                {previewSelectionPopover != null ? (
+                    <div
+                        ref={previewSelectionPopoverRef}
+                        className={`preview-tooltip preview-selection-popover preview-tooltip-${previewSelectionPopover.placement}`}
+                        style={{
+                            left: previewSelectionPopover.left,
+                            top: previewSelectionPopover.top,
+                            '--preview-tooltip-arrow-left': `${previewSelectionPopover.arrowLeft}px`,
+                        } as CSSProperties}
+                        role="dialog"
+                        aria-label="Privatize selected text"
+                    >
+                        <div className="preview-tooltip-content preview-selection-content">
+                            <div className="preview-selection-title">
+                                Privatize as...
+                            </div>
+                            <div className="preview-selection-grid">
+                                {enabledPrivacyScanCategories.map(
+                                    ({ category, label, Icon }) => (
+                                        <button
+                                            key={category}
+                                            className="preview-selection-category-button"
+                                            style={getCategoryColorStyle(category)}
+                                            type="button"
+                                            title={`Privatize as ${label.toLowerCase()}`}
+                                            aria-label={`Privatize selected text as ${label.toLowerCase()}`}
+                                            onMouseDown={(event) =>
+                                                event.preventDefault()
+                                            }
+                                            onClick={() =>
+                                                manuallyPrivatizeSelection(category)
+                                            }
+                                        >
+                                            <Icon size={15} aria-hidden="true" />
+                                        </button>
+                                    ),
+                                )}
                             </div>
                         </div>
                     </div>
-                </>
-            ) : null}
-            {previewSelectionPopover != null ? (
-                <div
-                    ref={previewSelectionPopoverRef}
-                    className={`preview-tooltip preview-selection-popover preview-tooltip-${previewSelectionPopover.placement}`}
-                    style={{
-                        left: previewSelectionPopover.left,
-                        top: previewSelectionPopover.top,
-                        '--preview-tooltip-arrow-left': `${previewSelectionPopover.arrowLeft}px`,
-                    } as CSSProperties}
-                    role="dialog"
-                    aria-label="Privatize selected text"
-                >
-                    <div className="preview-tooltip-content preview-selection-content">
-                        <div className="preview-selection-title">
-                            Privatize as...
-                        </div>
-                        <div className="preview-selection-grid">
-                            {enabledPrivacyScanCategories.map(
-                                ({ category, label, Icon }) => (
-                                    <button
-                                        key={category}
-                                        className="preview-selection-category-button"
-                                        style={getCategoryColorStyle(category)}
-                                        type="button"
-                                        title={`Privatize as ${label.toLowerCase()}`}
-                                        aria-label={`Privatize selected text as ${label.toLowerCase()}`}
-                                        onMouseDown={(event) => event.preventDefault()}
-                                        onClick={() =>
-                                            manuallyPrivatizeSelection(category)
-                                        }
-                                    >
-                                        <Icon size={15} aria-hidden="true" />
-                                    </button>
-                                ),
-                            )}
-                        </div>
-                    </div>
-                </div>
-            ) : null}
-        </>
-    );
+                ) : null}
+            </>
+        );
+    };
 
     if (appView === 'promptReader')
     {
@@ -5127,7 +5414,7 @@ export function App()
                 </p>
             ) : null}
 
-            <footer className="footer">Local memory only</footer>
+            <PrivacyFootnote />
         </main>
     );
 }
