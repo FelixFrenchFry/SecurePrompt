@@ -3,7 +3,7 @@ import type {
     TextDocumentFormat,
 } from './types';
 
-export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
+export const MAX_TEXT_FILE_BYTES = 5 * 1024 * 1024;
 
 export const SUPPORTED_TEXT_FILE_FORMATS: readonly TextDocumentFormat[] = [
     'txt',

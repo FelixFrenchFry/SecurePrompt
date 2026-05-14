@@ -8,6 +8,7 @@ build
 *.zip
 *.crx
 *.xpi
+test-files
 entrypoints/**/*.ts
 entrypoints/**/*.tsx
 source/**/*.ts

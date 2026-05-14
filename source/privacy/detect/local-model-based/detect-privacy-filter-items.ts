@@ -79,12 +79,34 @@ export const detectPrivacyFilterItems = async (
         reportPrivacyFilterInferenceProgress(onProgress, chunkIndex + 1, chunks.length);
     }
 
-    onProgress?.({
-        phase: 'postprocess',
-        label: 'Post-processing model detections.',
-    });
+    await reportPrivacyFilterPostprocessProgress(onProgress);
 
     return postProcessPrivacyFilterItems(inputText, detectedItems);
+};
+
+const reportPrivacyFilterPostprocessProgress = async (
+    onProgress: LocalModelProgressCallback | undefined,
+) =>
+{
+    if (onProgress == null)
+    {
+        return;
+    }
+
+    onProgress({
+        phase: 'postprocess',
+        label: 'Reviewing model detections...',
+    });
+
+    await yieldToBrowser();
+};
+
+const yieldToBrowser = () =>
+{
+    return new Promise<void>((resolve) =>
+    {
+        setTimeout(resolve, 0);
+    });
 };
 
 const reportPrivacyFilterInferenceProgress = (

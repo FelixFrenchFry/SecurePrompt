@@ -419,6 +419,14 @@ export const createPrivatizedPromptAsync = async (
         detectedItems.push(...modelItems);
     }
 
+    if (useLocalModelDetection)
+    {
+        await reportPipelinePostprocessProgress(
+            options.onLocalModelProgress,
+            'Creating masked output...',
+        );
+    }
+
     const filteredItems = filterInvalidModelDateItems(
         inputText,
         filterProtectedPlaceholderItems(inputText, detectedItems),
@@ -465,6 +473,11 @@ export const createPrivatizedPromptAsync = async (
                   options.onLocalModelProgress,
                   options.enabledCategories,
               ));
+
+        await reportPipelinePostprocessProgress(
+            options.onLocalModelProgress,
+            'Finalizing output...',
+        );
 
         const hardenedResult = benchmark
             ? benchmark.measure(
@@ -760,8 +773,9 @@ const detectResidualSensitiveItemsWithLocalModel = async (
 
     onProgress?.({
         phase: 'postprocess',
-        label: 'Checking remaining unmasked text.',
+        label: 'Checking for missed values...',
     });
+    await yieldToBrowser();
 
     const detectedItems = await detectSensitiveItemsWithLocalModel(
         residualInput.text,
@@ -775,6 +789,32 @@ const detectResidualSensitiveItemsWithLocalModel = async (
         detectedItems,
         getEnabledCategorySet(RESIDUAL_MODEL_CATEGORIES, enabledCategories),
     );
+};
+
+const reportPipelinePostprocessProgress = async (
+    onProgress: LocalModelProgressCallback | undefined,
+    label: string,
+) =>
+{
+    if (onProgress == null)
+    {
+        return;
+    }
+
+    onProgress({
+        phase: 'postprocess',
+        label,
+    });
+
+    await yieldToBrowser();
+};
+
+const yieldToBrowser = () =>
+{
+    return new Promise<void>((resolve) =>
+    {
+        setTimeout(resolve, 0);
+    });
 };
 
 const createResidualDetectionInput = (

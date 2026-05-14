@@ -21,6 +21,8 @@ import {
     Cpu,
     Download,
     Eraser,
+    Eye,
+    FileQuestion,
     FileText,
     Maximize2,
     Paperclip,
@@ -31,6 +33,7 @@ import {
     Settings as SettingsIcon,
     ShieldCheck,
     StepForward,
+    Trash2,
     Upload,
     X,
 } from 'lucide-react';
@@ -38,6 +41,7 @@ import { browser } from 'wxt/browser';
 import {
     extractTextFile,
     formatTextFileSize,
+    MAX_TEXT_FILE_BYTES,
     SUPPORTED_TEXT_FILE_ACCEPT,
 } from '../../source/documents/extract-text-file';
 import type { FileTextDocument } from '../../source/documents/types';
@@ -82,6 +86,11 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
+const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 4;
+const TEXT_FILE_HELP_ID = 'text-file-help-tooltip';
+const SUPPORTED_TEXT_FILE_EXTENSION_LABEL = SUPPORTED_TEXT_FILE_ACCEPT.split(
+    ',',
+).join(', ');
 const PREVIEW_TOOLTIP_MARGIN = 12;
 const PREVIEW_TOOLTIP_MAX_WIDTH = 260;
 const PREVIEW_TOOLTIP_GAP = 3;
@@ -196,6 +205,12 @@ type TextFileAttachment = {
     included: boolean;
 };
 
+type TextFileCategorySummary = {
+    category: SensitiveItemCategory;
+    label: string;
+    count: number;
+};
+
 type ScanDetailSearchTarget = {
     normalized: string;
     compact: string;
@@ -207,6 +222,11 @@ type ScanDetailSearchTarget = {
 const formatCount = (count: number) =>
 {
     return count > MAX_VISIBLE_COUNT ? `${MAX_VISIBLE_COUNT}+` : String(count);
+};
+
+const formatOccurrenceCount = (count: number) =>
+{
+    return count > MAX_VISIBLE_COUNT ? `${MAX_VISIBLE_COUNT}+` : `${count}x`;
 };
 
 const getPrivacyScanCategoryColorStyle = (
@@ -1153,7 +1173,12 @@ const getLocalModelProgressLabel = (progress: LocalModelProgress) =>
         return 'Scanning input...';
     }
 
-    if (progress.phase === 'postprocess' || progress.phase === 'done')
+    if (progress.phase === 'postprocess')
+    {
+        return progress.label;
+    }
+
+    if (progress.phase === 'done')
     {
         return 'Finishing scan...';
     }
@@ -1237,6 +1262,34 @@ const getTextFileAttachmentItemCount = (attachment: TextFileAttachment) =>
     return getMaskingMappingItemCount(
         getActiveTextFileAttachmentMappings(attachment),
     );
+};
+
+const getTextFileAttachmentCategorySummaries = (
+    attachment: TextFileAttachment,
+) =>
+{
+    const activeMappings = getActiveTextFileAttachmentMappings(attachment);
+
+    return PRIVACY_SCAN_CATEGORIES.map(({ category, label }) =>
+    {
+        return {
+            category,
+            label,
+            count: getMaskingMappingItemCount(
+                getMaskingMappingsByCategory(activeMappings, category),
+            ),
+        };
+    }).filter((summary) =>
+    {
+        return summary.count > 0;
+    });
+};
+
+const getVisibleTextFileCategorySummaries = (
+    summaries: readonly TextFileCategorySummary[],
+) =>
+{
+    return summaries.slice(0, MAX_TEXT_FILE_CATEGORY_SUMMARIES);
 };
 
 const getActiveTextFileAttachmentMappings = (attachment: TextFileAttachment) =>
@@ -1793,16 +1846,27 @@ export function App()
     {
         return attachment.error == null;
     });
+    const includedTextFileAttachments = readyTextFileAttachments.filter(
+        (attachment) =>
+        {
+            return attachment.included;
+        },
+    );
     const privatizableTextFileAttachments = readyTextFileAttachments.filter(
         (attachment) =>
         {
             return attachment.document.text.trim().length > 0;
         },
     );
+    const includedPrivatizableTextFileAttachments =
+        privatizableTextFileAttachments.filter((attachment) =>
+        {
+            return attachment.included;
+        });
     const privatizedTextFileAttachments = readyTextFileAttachments.filter(
         (attachment) =>
         {
-            return attachment.result != null;
+            return attachment.included && attachment.result != null;
         },
     );
     const selectedTextFileAttachment =
@@ -1832,13 +1896,13 @@ export function App()
         textFileAttachments.length > 0;
     const hasPrivatizableInput =
         prompt.trim().length > 0 ||
-        privatizableTextFileAttachments.length > 0;
+        includedPrivatizableTextFileAttachments.length > 0;
     const textFileAttachmentsReadyToSend =
-        privatizableTextFileAttachments.every((attachment) =>
+        includedPrivatizableTextFileAttachments.every((attachment) =>
         {
             return attachment.result != null;
         }) &&
-        privatizableTextFileAttachments.every((attachment) =>
+        includedPrivatizableTextFileAttachments.every((attachment) =>
         {
             return (
                 (attachment.result?.safeToInject ?? false) &&
@@ -1852,6 +1916,8 @@ export function App()
         privatizedPrompt,
         textFileAttachments,
     );
+    const hasOutgoingContentSummary =
+        hasPrivatizedOutput || textFileAttachments.length > 0;
     const hasCategorySettingChanges =
         isPreviewStale &&
         resultEnabledCategories != null &&
@@ -1913,7 +1979,7 @@ export function App()
     const activeMaskingMappings = getBundleActiveMaskingMappings(
         privatizedResult,
         ignoredMappingIds,
-        textFileAttachments,
+        includedTextFileAttachments,
     );
     const visibleMaskingMappings = activeMaskingMappings.filter((maskingMapping) =>
     {
@@ -2188,6 +2254,44 @@ export function App()
             setAppView('main');
         }
         hidePreviewSelectionPopover();
+    };
+    const toggleTextFileAttachmentIncluded = (attachmentId: string) =>
+    {
+        const attachment = textFileAttachments.find((currentAttachment) =>
+        {
+            return currentAttachment.document.id === attachmentId;
+        });
+        const isReinsertingProcessedContent =
+            attachment != null &&
+            attachment.error == null &&
+            !attachment.included &&
+            (hasPreview || hasPrivatizedTextFileAttachments);
+
+        hidePreviewTooltip();
+        hidePreviewSelectionPopover();
+        setTextFileAttachments((currentAttachments) =>
+        {
+            return currentAttachments.map((attachment) =>
+            {
+                if (attachment.document.id !== attachmentId || attachment.error != null)
+                {
+                    return attachment;
+                }
+
+                return {
+                    ...attachment,
+                    included: !attachment.included,
+                };
+            });
+        });
+        setClipboardStatus('');
+        setSendStatus('');
+
+        if (isReinsertingProcessedContent)
+        {
+            setCanUsePrivatizedPrompt(false);
+            setIsPreviewStale(true);
+        }
     };
     const copyTextFileAttachment = async (attachment: TextFileAttachment) =>
     {
@@ -2752,7 +2856,7 @@ export function App()
                     {maskingMapping.original}
                 </span>
                 <span className="scan-detail-count">
-                    {formatCount(maskingMapping.itemIds.length)}x
+                    {formatOccurrenceCount(maskingMapping.itemIds.length)}
                 </span>
                 <button
                     className="scan-detail-restore-button"
@@ -3247,6 +3351,12 @@ export function App()
 
         for (const attachment of attachments)
         {
+            if (!attachment.included)
+            {
+                nextAttachments.push(attachment);
+                continue;
+            }
+
             if (attachment.error != null || attachment.document.text.trim().length === 0)
             {
                 nextAttachments.push({
@@ -3303,6 +3413,11 @@ export function App()
                       },
             attachments: attachments.map((attachment) =>
             {
+                if (!attachment.included)
+                {
+                    return attachment;
+                }
+
                 return {
                     ...attachment,
                     result:
@@ -3513,7 +3628,10 @@ export function App()
                 (bundle.promptResult?.safeToInject ?? true) &&
                 bundle.attachments.every((attachment) =>
                 {
-                    return attachment.result?.safeToInject ?? true;
+                    return (
+                        !attachment.included ||
+                        (attachment.result?.safeToInject ?? true)
+                    );
                 });
 
             if (!safeToInject)
@@ -3732,26 +3850,116 @@ export function App()
         hidePreviewSelectionPopover();
         setFileReaderTab(tab);
     };
+    const getTextFileAttachmentStatusText = (attachment: TextFileAttachment) =>
+    {
+        if (attachment.error != null)
+        {
+            return attachment.error;
+        }
+
+        if (!attachment.included)
+        {
+            return 'Excluded';
+        }
+
+        if (attachment.result == null)
+        {
+            return 'Ready for Privatize';
+        }
+
+        if (isPreviewStale)
+        {
+            return 'Needs refresh';
+        }
+
+        const itemCount = getTextFileAttachmentItemCount(attachment);
+        const itemLabel = itemCount === 1 ? 'item' : 'items';
+        const previewOnlyLabel =
+            attachment.result.safeToInject && attachment.ignoredMappingIds.length === 0
+                ? ''
+                : ' / preview only';
+
+        return `${formatCount(itemCount)} ${itemLabel} masked${previewOnlyLabel}`;
+    };
+    const renderTextFileCategorySummaries = (
+        attachment: TextFileAttachment,
+        className: string,
+    ) =>
+    {
+        const summaries = getTextFileAttachmentCategorySummaries(attachment);
+        const visibleSummaries = getVisibleTextFileCategorySummaries(summaries);
+        const remainingCount = summaries.length - visibleSummaries.length;
+
+        if (visibleSummaries.length === 0)
+        {
+            return null;
+        }
+
+        return (
+            <div className={className} aria-label="Masked file item summary">
+                {visibleSummaries.map((summary) => (
+                    <span
+                        key={summary.category}
+                        className="text-file-category-chip"
+                        style={getCategoryColorStyle(summary.category)}
+                    >
+                        {summary.label} {formatCount(summary.count)}
+                    </span>
+                ))}
+                {remainingCount > 0 ? (
+                    <span className="text-file-category-chip is-muted">
+                        +{remainingCount}
+                    </span>
+                ) : null}
+            </div>
+        );
+    };
     const renderTextFileAttachment = (
         attachment: TextFileAttachment,
         index: number,
     ) =>
     {
-        const itemCount = getTextFileAttachmentItemCount(attachment);
         const lineCount = getTextFileAttachmentLineCount(attachment);
-        const statusText =
-            attachment.error ??
-            (attachment.result == null
-                ? 'Ready for next scan'
-                : `${formatCount(itemCount)} ${itemCount === 1 ? 'item' : 'items'} masked`);
+        const statusText = getTextFileAttachmentStatusText(attachment);
 
         return (
             <li
                 key={attachment.document.id}
-                className={`text-file-card${attachment.error != null ? ' is-error' : ''}${attachment.result != null ? ' is-processed' : ''}`}
+                className={`text-file-card${attachment.error != null ? ' is-error' : ''}${attachment.result != null ? ' is-processed' : ''}${!attachment.included ? ' is-excluded' : ''}`}
             >
                 <div className="text-file-card-main">
-                    <FileText size={16} aria-hidden="true" />
+                    {attachment.error == null ? (
+                        <button
+                            className="text-file-toggle-button"
+                            type="button"
+                            role="switch"
+                            aria-checked={attachment.included}
+                            title={
+                                attachment.included
+                                    ? 'Included in copied and sent output'
+                                    : 'Excluded from copied and sent output'
+                            }
+                            aria-label={`Include ${attachment.document.fileName} in copied and sent output`}
+                            onClick={() =>
+                                toggleTextFileAttachmentIncluded(
+                                    attachment.document.id,
+                                )
+                            }
+                        >
+                            <FileText size={16} aria-hidden="true" />
+                            <span className="text-file-toggle-badge">
+                                {attachment.included ? (
+                                    <Check size={10} aria-hidden="true" />
+                                ) : (
+                                    <CircleMinus size={10} aria-hidden="true" />
+                                )}
+                            </span>
+                        </button>
+                    ) : (
+                        <span className="text-file-static-icon">
+                            <FileText size={16} aria-hidden="true" />
+                        </span>
+                    )}
                     <div className="text-file-card-copy">
                         <span
                             className="text-file-card-name"
@@ -3766,22 +3974,8 @@ export function App()
                             {lineCount === 1 ? 'line' : 'lines'}
                         </span>
                     </div>
-                </div>
-                <div className="text-file-card-actions">
-                    <span className="text-file-card-status">{statusText}</span>
-                    {attachment.error == null ? (
-                        <button
-                            className="ghost-button text-file-review-button"
-                            type="button"
-                            title={`Review ${attachment.document.fileName}`}
-                            aria-label={`Review ${attachment.document.fileName}`}
-                            onClick={() => openFileReaderView(attachment)}
-                        >
-                            Review
-                        </button>
-                    ) : null}
                     {attachment.result != null ? (
-                        <>
+                        <div className="text-file-card-result-actions">
                             <button
                                 className="subtle-icon-button"
                                 type="button"
@@ -3790,7 +3984,7 @@ export function App()
                                 onClick={() => copyTextFileAttachment(attachment)}
                                 disabled={isPreviewStale}
                             >
-                                <Copy size={14} aria-hidden="true" />
+                                <Copy size={15} aria-hidden="true" />
                             </button>
                             <button
                                 className="subtle-icon-button"
@@ -3800,12 +3994,26 @@ export function App()
                                 onClick={() => downloadTextFileAttachment(attachment)}
                                 disabled={isPreviewStale}
                             >
-                                <Download size={14} aria-hidden="true" />
+                                <Download size={15} aria-hidden="true" />
                             </button>
-                        </>
+                        </div>
+                    ) : null}
+                </div>
+                <div className="text-file-card-actions">
+                    <span className="text-file-card-status">{statusText}</span>
+                    {attachment.error == null ? (
+                        <button
+                            className="subtle-icon-button text-file-review-button"
+                            type="button"
+                            title={`Review ${attachment.document.fileName}`}
+                            aria-label={`Review ${attachment.document.fileName}`}
+                            onClick={() => openFileReaderView(attachment)}
+                        >
+                            <Eye size={15} aria-hidden="true" />
+                        </button>
                     ) : null}
                     <button
-                        className="subtle-icon-button"
+                        className="subtle-icon-button text-file-remove-button"
                         type="button"
                         title="Remove file"
                         aria-label={`Remove ${attachment.document.fileName}`}
@@ -3814,9 +4022,13 @@ export function App()
                         }
                         disabled={isPrivatizing}
                     >
-                        <X size={14} aria-hidden="true" />
+                        <Trash2 size={15} aria-hidden="true" />
                     </button>
                 </div>
+                {renderTextFileCategorySummaries(
+                    attachment,
+                    'text-file-card-summary',
+                )}
                 {attachment.document.warnings.length > 0 ? (
                     <ul className="text-file-card-warnings">
                         {attachment.document.warnings.map((warning) => (
@@ -3840,6 +4052,39 @@ export function App()
                     <span className="label-with-icon text-file-attachments-title">
                         <Paperclip size={15} aria-hidden="true" />
                         <span>Attached files</span>
+                        {showAttachButton ? (
+                            <span className="text-file-help">
+                                <button
+                                    className="text-file-help-button"
+                                    type="button"
+                                    aria-label="Show supported file types"
+                                    aria-describedby={TEXT_FILE_HELP_ID}
+                                >
+                                    <FileQuestion size={14} aria-hidden="true" />
+                                </button>
+                                <span
+                                    id={TEXT_FILE_HELP_ID}
+                                    className="text-file-help-tooltip"
+                                    role="tooltip"
+                                >
+                                    <span className="text-file-help-title">
+                                        Supported files
+                                    </span>
+                                    <span className="text-file-help-row">
+                                        <span>Extensions</span>
+                                        <span>
+                                            {SUPPORTED_TEXT_FILE_EXTENSION_LABEL}
+                                        </span>
+                                    </span>
+                                    <span className="text-file-help-row">
+                                        <span>Max size</span>
+                                        <span>
+                                            {formatTextFileSize(MAX_TEXT_FILE_BYTES)}
+                                        </span>
+                                    </span>
+                                </span>
+                            </span>
+                        ) : null}
                     </span>
                     {showAttachButton ? (
                         <>
@@ -3858,7 +4103,7 @@ export function App()
                                 disabled={isPrivatizing}
                             >
                                 <Upload size={15} aria-hidden="true" />
-                                Attach file
+                                Add file
                             </button>
                         </>
                     ) : null}
@@ -3872,6 +4117,130 @@ export function App()
                         Text files are processed separately and share the same aliases.
                     </p>
                 )}
+            </div>
+        );
+    };
+    const getOutgoingFileStatus = (attachment: TextFileAttachment) =>
+    {
+        if (attachment.error != null)
+        {
+            return {
+                label: 'Unsupported',
+                className: 'is-error',
+            };
+        }
+
+        if (!attachment.included)
+        {
+            return {
+                label: 'Excluded',
+                className: 'is-excluded',
+            };
+        }
+
+        if (attachment.result == null)
+        {
+            return {
+                label: 'Needs Privatize',
+                className: 'is-warning',
+            };
+        }
+
+        if (isPreviewStale)
+        {
+            return {
+                label: 'Needs refresh',
+                className: 'is-warning',
+            };
+        }
+
+        if (!attachment.result.safeToInject || attachment.ignoredMappingIds.length > 0)
+        {
+            return {
+                label: 'Preview only',
+                className: 'is-warning',
+            };
+        }
+
+        return {
+            label: 'Included',
+            className: 'is-included',
+        };
+    };
+    const renderOutgoingContentSummary = () =>
+    {
+        if (!hasOutgoingContentSummary)
+        {
+            return null;
+        }
+
+        const includedPartCount =
+            (privatizedPrompt.trim().length > 0 ? 1 : 0) +
+            textFileAttachments.filter((attachment) =>
+            {
+                return attachment.included && attachment.result != null;
+            }).length;
+
+        return (
+            <div className="outgoing-summary" aria-label="Outgoing content summary">
+                <div className="outgoing-summary-header">
+                    <span className="label-with-icon">
+                        <Send size={15} aria-hidden="true" />
+                        <span>Outgoing content</span>
+                    </span>
+                    <span>
+                        {formatCount(includedPartCount)}{' '}
+                        {includedPartCount === 1 ? 'part' : 'parts'}
+                    </span>
+                </div>
+                <ul className="outgoing-summary-list">
+                    {prompt.trim().length > 0 || privatizedPrompt.trim().length > 0 ? (
+                        <li className="outgoing-summary-row">
+                            <span className="outgoing-summary-name">Prompt</span>
+                            <span
+                                className={`outgoing-summary-status${
+                                    privatizedPrompt.trim().length > 0 &&
+                                    !isPreviewStale &&
+                                    canUsePrivatizedPrompt
+                                        ? ' is-included'
+                                        : ' is-warning'
+                                }`}
+                            >
+                                {privatizedPrompt.trim().length > 0 &&
+                                !isPreviewStale &&
+                                canUsePrivatizedPrompt
+                                    ? 'Included'
+                                    : privatizedPrompt.trim().length > 0 &&
+                                        !isPreviewStale
+                                      ? 'Preview only'
+                                      : 'Needs Privatize'}
+                            </span>
+                        </li>
+                    ) : null}
+                    {textFileAttachments.map((attachment) =>
+                    {
+                        const status = getOutgoingFileStatus(attachment);
+
+                        return (
+                            <li
+                                key={attachment.document.id}
+                                className="outgoing-summary-row"
+                            >
+                                <span
+                                    className="outgoing-summary-name"
+                                    title={attachment.document.fileName}
+                                >
+                                    {attachment.document.fileName}
+                                </span>
+                                <span
+                                    className={`outgoing-summary-status ${status.className}`}
+                                >
+                                    {status.label}
+                                </span>
+                            </li>
+                        );
+                    })}
+                </ul>
             </div>
         );
     };
@@ -4218,6 +4587,7 @@ export function App()
                         </p>
                     ) : null}
                     {renderPreviewSurface('reader')}
+                    {renderOutgoingContentSummary()}
                     <button
                         className="primary-button panel-action"
                         type="button"
@@ -4277,6 +4647,25 @@ export function App()
                             <FileText size={18} aria-hidden="true" />
                             <span>{selectedTextFileAttachment.document.fileName}</span>
                         </h2>
+                    </div>
+                    <div className="file-reader-meta-row">
+                        <p className="file-reader-meta">
+                            {selectedTextFileAttachment.document.format.toUpperCase()} /{' '}
+                            {formatTextFileSize(
+                                selectedTextFileAttachment.document.size,
+                            )}{' '}
+                            /{' '}
+                            {formatCount(
+                                getTextFileAttachmentLineCount(
+                                    selectedTextFileAttachment,
+                                ),
+                            )}{' '}
+                            {getTextFileAttachmentLineCount(
+                                selectedTextFileAttachment,
+                            ) === 1
+                                ? 'line'
+                                : 'lines'}
+                        </p>
                         {selectedFileHasResult ? (
                             <div className="file-reader-actions">
                                 <button
@@ -4308,16 +4697,10 @@ export function App()
                             </div>
                         ) : null}
                     </div>
-                    <p className="file-reader-meta">
-                        {selectedTextFileAttachment.document.format.toUpperCase()} /{' '}
-                        {formatTextFileSize(selectedTextFileAttachment.document.size)} /{' '}
-                        {formatCount(
-                            getTextFileAttachmentLineCount(selectedTextFileAttachment),
-                        )}{' '}
-                        {getTextFileAttachmentLineCount(selectedTextFileAttachment) === 1
-                            ? 'line'
-                            : 'lines'}
-                    </p>
+                    {renderTextFileCategorySummaries(
+                        selectedTextFileAttachment,
+                        'file-reader-summary',
+                    )}
                     <div
                         className="workspace-tabs file-reader-tabs"
                         role="tablist"
@@ -4424,23 +4807,21 @@ export function App()
     return (
         <main className={`app-shell${settings.darkModeEnabled ? ' is-dark' : ''}`}>
             <header className="app-header">
-                <div className="brand-lockup">
+                <button
+                    className="icon-button"
+                    type="button"
+                    title="Settings"
+                    aria-label="Settings"
+                    onClick={() => setAppView('settings')}
+                >
+                    <SettingsIcon size={17} aria-hidden="true" />
+                </button>
+                <div className="brand-lockup main-brand-lockup">
                     <h1>Privatize Your Prompts</h1>
-                </div>
-                <div className="app-header-actions">
                     <span className="status-pill">
                         <Cpu size={12} aria-hidden="true" />
                         Fully on-device
                     </span>
-                    <button
-                        className="icon-button"
-                        type="button"
-                        title="Settings"
-                        aria-label="Settings"
-                        onClick={() => setAppView('settings')}
-                    >
-                        <SettingsIcon size={17} aria-hidden="true" />
-                    </button>
                 </div>
             </header>
 
@@ -4566,6 +4947,7 @@ export function App()
                         ) : null}
                         {renderPreviewSurface('compact')}
                         {renderTextFileAttachments(false)}
+                        {renderOutgoingContentSummary()}
                         <button
                             className="primary-button panel-action"
                             type="button"

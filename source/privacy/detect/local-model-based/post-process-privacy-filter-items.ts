@@ -166,15 +166,11 @@ const propagateRepeatedModelItems = (
 ): SensitiveItem[] =>
 {
     const propagatedItems: SensitiveItem[] = [];
+    const seedItems = getPropagationSeedItems(cleanItems);
     let propagatedIndex = 1;
 
-    for (const seedItem of cleanItems)
+    for (const seedItem of seedItems)
     {
-        if (!shouldPropagateItem(seedItem))
-        {
-            continue;
-        }
-
         let start = inputText.indexOf(seedItem.value);
 
         while (start !== -1)
@@ -185,8 +181,8 @@ const propagateRepeatedModelItems = (
             };
 
             if (
-                !isExistingItemRange(span, cleanItems) &&
-                !overlapsAnyRange(span, [...cleanItems, ...propagatedItems]) &&
+                !overlapsAnyRange(span, cleanItems) &&
+                !overlapsAnyRange(span, propagatedItems) &&
                 !overlapsAnyRange(span, privatizedMaskRanges) &&
                 hasCleanModelBoundaries(inputText, seedItem.category, span)
             )
@@ -206,6 +202,29 @@ const propagateRepeatedModelItems = (
     }
 
     return propagatedItems;
+};
+
+const getPropagationSeedItems = (items: SensitiveItem[]) =>
+{
+    const seedItems = new Map<string, SensitiveItem>();
+
+    for (const item of items)
+    {
+        if (!shouldPropagateItem(item))
+        {
+            continue;
+        }
+
+        const key = `${item.category}:${item.value}`;
+        const existingItem = seedItems.get(key);
+
+        if (existingItem == null || item.confidence > existingItem.confidence)
+        {
+            seedItems.set(key, item);
+        }
+    }
+
+    return [...seedItems.values()];
 };
 
 const shouldPropagateItem = (item: SensitiveItem) =>
@@ -516,14 +535,6 @@ const dedupeSensitiveItems = (items: SensitiveItem[]) =>
 const compareItemsByPosition = (left: SensitiveItem, right: SensitiveItem) =>
 {
     return left.start - right.start || right.end - left.end;
-};
-
-const isExistingItemRange = (range: TextRange, items: SensitiveItem[]) =>
-{
-    return items.some((item) =>
-    {
-        return item.start === range.start && item.end === range.end;
-    });
 };
 
 const overlapsAnyRange = (range: TextRange, ranges: TextRange[]) =>
