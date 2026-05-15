@@ -15,6 +15,7 @@ import { detectPhoneItems } from './detect/rule-based/detect-phone-items';
 import { detectSecretItems } from './detect/rule-based/detect-secret-items';
 import { detectSensitiveItemsWithRules } from './detect/rule-based/detection-rule-based';
 import type {
+    LocalModelProgress,
     LocalModelProgressCallback,
     MaskingMapping,
     PrivacyBenchmark,
@@ -48,6 +49,9 @@ export type {
 } from './types';
 
 export { DEFAULT_PRIVATIZATION_METHOD } from './config';
+
+export const LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL =
+    'Checking missed values...';
 
 export type PrivatizationPipelineOptions = {
     useLocalModelDetection?: boolean;
@@ -773,13 +777,27 @@ const detectResidualSensitiveItemsWithLocalModel = async (
 
     onProgress?.({
         phase: 'postprocess',
-        label: 'Checking for missed values...',
+        label: LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL,
     });
     await yieldToBrowser();
 
+    const reportResidualModelProgress: LocalModelProgressCallback | undefined =
+        onProgress == null
+            ? undefined
+            : (progress: LocalModelProgress) =>
+              {
+                  onProgress({
+                      ...progress,
+                      label:
+                          progress.phase === 'inference'
+                              ? LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL
+                              : progress.label,
+                  });
+              };
+
     const detectedItems = await detectSensitiveItemsWithLocalModel(
         residualInput.text,
-        onProgress,
+        reportResidualModelProgress,
     );
 
     return mapResidualSensitiveItems(

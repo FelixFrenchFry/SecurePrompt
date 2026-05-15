@@ -55,6 +55,7 @@ import {
     createPrivatizedPromptAsync,
     createPrivatizedPromptPreview,
     createPrivatizedPromptWithManualItem,
+    LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL,
     type LocalModelProgress,
     type MaskingMapping,
     type PrivacyBenchmark,
@@ -94,7 +95,32 @@ const SCAN_DETAIL_MASK_COLUMN_EXTRA_PIXELS = 2;
 type ScanDetailStyle = CategoryColorStyle & {
     '--scan-detail-mask-column-width': string;
 };
-const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 5;
+
+type TextFileCardStyle = CSSProperties & {
+    '--file-processing-progress': string;
+};
+
+type LocalModelProgressTarget =
+    | {
+          kind: 'prompt';
+      }
+    | {
+          kind: 'file';
+          attachmentId: string;
+          fileName: string;
+          fileIndex: number;
+          fileTotal: number;
+      };
+
+type DisplayLocalModelProgress = LocalModelProgress & {
+    target?: LocalModelProgressTarget;
+};
+
+type DisplayLocalModelProgressCallback = (
+    progress: DisplayLocalModelProgress,
+) => void;
+
+const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 3;
 const TEXT_FILE_HELP_ID = 'text-file-help-tooltip';
 const SUPPORTED_TEXT_FILE_EXTENSION_LABEL = SUPPORTED_TEXT_FILE_ACCEPT.split(
     ',',
@@ -1144,8 +1170,17 @@ const requestCurrentChatTarget = async () =>
     })) as RuntimeResponse | undefined;
 };
 
-const getLocalModelProgressPercent = (progress: LocalModelProgress) =>
+const getLocalModelProgressPercent = (progress: DisplayLocalModelProgress) =>
 {
+    if (
+        progress.currentChunk != null &&
+        progress.totalChunks != null &&
+        progress.totalChunks > 0
+    )
+    {
+        return clamp((progress.currentChunk / progress.totalChunks) * 100, 0, 100);
+    }
+
     if (typeof progress.progress !== 'number' || !Number.isFinite(progress.progress))
     {
         return null;
@@ -1154,7 +1189,7 @@ const getLocalModelProgressPercent = (progress: LocalModelProgress) =>
     return clamp(progress.progress, 0, 100);
 };
 
-const getLocalModelProgressLabel = (progress: LocalModelProgress) =>
+const getLocalModelProgressLabel = (progress: DisplayLocalModelProgress) =>
 {
     if (progress.label === LOCAL_MODEL_FALLBACK_PROGRESS_LABEL)
     {
@@ -1188,23 +1223,33 @@ const getLocalModelProgressLabel = (progress: LocalModelProgress) =>
 
     if (progress.phase === 'inference')
     {
+        if (progress.label === LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL)
+        {
+            return progress.label;
+        }
+
         return 'Scanning input...';
     }
 
     if (progress.phase === 'postprocess')
     {
-        return progress.label;
+        if (progress.label === LOCAL_MODEL_MISSED_VALUES_PROGRESS_LABEL)
+        {
+            return progress.label;
+        }
+
+        return 'Checking results...';
     }
 
     if (progress.phase === 'done')
     {
-        return 'Finishing scan...';
+        return 'Finalizing output...';
     }
 
     return progress.label;
 };
 
-const getLocalModelProgressMeta = (progress: LocalModelProgress) =>
+const getLocalModelProgressDetail = (progress: DisplayLocalModelProgress) =>
 {
     if (
         progress.loadedBytes != null &&
@@ -1225,12 +1270,58 @@ const getLocalModelProgressMeta = (progress: LocalModelProgress) =>
     return percent == null ? '' : `${Math.round(percent)}%`;
 };
 
-const isLocalModelProgressIndeterminate = (progress: LocalModelProgress) =>
+const getLocalModelProgressChunkPercent = (progress: DisplayLocalModelProgress) =>
+{
+    if (progress.currentChunk == null || progress.totalChunks == null)
+    {
+        return '';
+    }
+
+    const percent = getLocalModelProgressPercent(progress);
+
+    return percent == null ? '' : `${Math.round(percent)}%`;
+};
+
+const getLocalModelProgressContext = (progress: DisplayLocalModelProgress) =>
+{
+    if (progress.target?.kind === 'prompt')
+    {
+        return 'Prompt';
+    }
+
+    if (progress.target?.kind === 'file')
+    {
+        return `File ${progress.target.fileIndex} of ${progress.target.fileTotal} - ${progress.target.fileName}`;
+    }
+
+    return progress.file ?? '';
+};
+
+const isLocalModelProgressIndeterminate = (progress: DisplayLocalModelProgress) =>
 {
     return (
         getLocalModelProgressPercent(progress) == null ||
         LOCAL_MODEL_PROGRESS_INDETERMINATE_PHASES.has(progress.phase)
     );
+};
+
+const withLocalModelProgressTarget = (
+    onProgress: DisplayLocalModelProgressCallback | undefined,
+    target: LocalModelProgressTarget,
+) =>
+{
+    if (onProgress == null)
+    {
+        return undefined;
+    }
+
+    return (progress: LocalModelProgress) =>
+    {
+        onProgress({
+            ...progress,
+            target,
+        });
+    };
 };
 
 const formatBytes = (bytes: number) =>
@@ -1656,7 +1747,7 @@ export function App()
     const [chatTargetLabel, setChatTargetLabel] = useState(AI_CHAT_FALLBACK_LABEL);
     const [hasChatTarget, setHasChatTarget] = useState(false);
     const [localModelProgress, setLocalModelProgress] =
-        useState<LocalModelProgress | null>(null);
+        useState<DisplayLocalModelProgress | null>(null);
     const [latestBenchmark, setLatestBenchmark] = useState<PrivacyBenchmark | null>(
         null,
     );
@@ -2182,6 +2273,10 @@ export function App()
         ? 'Run Privatize again before copying.'
         : 'Copy privatized output';
     const visibleLocalModelProgress = isPrivatizing ? localModelProgress : null;
+    const currentProcessingAttachmentId =
+        visibleLocalModelProgress?.target?.kind === 'file'
+            ? visibleLocalModelProgress.target.attachmentId
+            : null;
     const localModelProgressLabel =
         visibleLocalModelProgress == null
             ? ''
@@ -2190,10 +2285,18 @@ export function App()
         visibleLocalModelProgress == null
             ? null
             : getLocalModelProgressPercent(visibleLocalModelProgress);
-    const localModelProgressMeta =
+    const localModelProgressDetail =
         visibleLocalModelProgress == null
             ? ''
-            : getLocalModelProgressMeta(visibleLocalModelProgress);
+            : getLocalModelProgressDetail(visibleLocalModelProgress);
+    const localModelProgressContextPercent =
+        visibleLocalModelProgress == null
+            ? ''
+            : getLocalModelProgressChunkPercent(visibleLocalModelProgress);
+    const localModelProgressContext =
+        visibleLocalModelProgress == null
+            ? ''
+            : getLocalModelProgressContext(visibleLocalModelProgress);
     const localModelProgressIsIndeterminate =
         visibleLocalModelProgress != null &&
         isLocalModelProgressIndeterminate(visibleLocalModelProgress);
@@ -3511,7 +3614,7 @@ export function App()
         inputText: string,
         attachments: readonly TextFileAttachment[],
         useLocalModelDetection: boolean,
-        onLocalModelProgress?: (progress: LocalModelProgress) => void,
+        onLocalModelProgress?: DisplayLocalModelProgressCallback,
     ) =>
     {
         let preferredMaskingMappings: MaskingMapping[] = [];
@@ -3529,7 +3632,10 @@ export function App()
                 useRulesDetection: settings.rulesDetectionEnabled,
                 enabledCategories: settings.enabledCategories,
                 preferredMaskingMappings,
-                onLocalModelProgress,
+                onLocalModelProgress: withLocalModelProgressTarget(
+                    onLocalModelProgress,
+                    { kind: 'prompt' },
+                ),
                 onBenchmark: collectBenchmark,
             });
             preferredMaskingMappings = mergePreferredMaskingMappings(
@@ -3539,6 +3645,15 @@ export function App()
         }
 
         const nextAttachments: TextFileAttachment[] = [];
+        const processableAttachments = attachments.filter((attachment) =>
+        {
+            return (
+                attachment.included &&
+                attachment.error == null &&
+                attachment.document.text.trim().length > 0
+            );
+        });
+        let processedAttachmentCount = 0;
 
         for (const attachment of attachments)
         {
@@ -3558,6 +3673,7 @@ export function App()
                 continue;
             }
 
+            processedAttachmentCount += 1;
             const attachmentResult = await createPrivatizedPromptAsync(
                 attachment.document.text,
                 {
@@ -3565,7 +3681,16 @@ export function App()
                     useRulesDetection: settings.rulesDetectionEnabled,
                     enabledCategories: settings.enabledCategories,
                     preferredMaskingMappings,
-                    onLocalModelProgress,
+                    onLocalModelProgress: withLocalModelProgressTarget(
+                        onLocalModelProgress,
+                        {
+                            kind: 'file',
+                            attachmentId: attachment.document.id,
+                            fileName: attachment.document.fileName,
+                            fileIndex: processedAttachmentCount,
+                            fileTotal: processableAttachments.length,
+                        },
+                    ),
                     onBenchmark: collectBenchmark,
                 },
             );
@@ -3746,7 +3871,7 @@ export function App()
         const inputText = prompt;
         const inputAttachments = textFileAttachments;
         const runId = privatizationRunIdRef.current + 1;
-        const updateRunLocalModelProgress = (progress: LocalModelProgress) =>
+        const updateRunLocalModelProgress = (progress: DisplayLocalModelProgress) =>
         {
             if (privatizationRunIdRef.current === runId)
             {
@@ -4054,6 +4179,11 @@ export function App()
             return 'Excluded';
         }
 
+        if (currentProcessingAttachmentId === attachment.document.id)
+        {
+            return 'Processing...';
+        }
+
         if (attachment.result == null)
         {
             return 'Ready for Privatize';
@@ -4138,11 +4268,21 @@ export function App()
         const isActionMenuOpen =
             openTextFileActionMenuId === attachment.document.id;
         const resultActionDisabled = attachment.result == null || isPreviewStale;
+        const isProcessing =
+            currentProcessingAttachmentId === attachment.document.id;
+        const textFileCardStyle: TextFileCardStyle | undefined = isProcessing
+            ? {
+                  '--file-processing-progress': `${
+                      localModelProgressPercent ?? 0
+                  }%`,
+              }
+            : undefined;
 
         return (
             <li
                 key={attachment.document.id}
-                className={`text-file-card${attachment.error != null ? ' is-error' : ''}${attachment.result != null ? ' is-processed' : ''}${!attachment.included ? ' is-excluded' : ''}`}
+                className={`text-file-card${attachment.error != null ? ' is-error' : ''}${attachment.result != null ? ' is-processed' : ''}${!attachment.included ? ' is-excluded' : ''}${isProcessing ? ' is-processing' : ''}${isActionMenuOpen ? ' is-menu-open' : ''}`}
+                style={textFileCardStyle}
             >
                 <div className="text-file-card-main">
                     {attachment.error == null ? (
@@ -4801,13 +4941,25 @@ export function App()
                             aria-live="polite"
                         >
                             <div className="local-model-progress-header">
-                                <span>{localModelProgressLabel}</span>
-                                {localModelProgressMeta.length > 0 ? (
+                                <span className="local-model-progress-label">
+                                    {localModelProgressLabel}
+                                </span>
+                                {localModelProgressDetail.length > 0 ? (
                                     <span className="local-model-progress-meta">
-                                        {localModelProgressMeta}
+                                        {localModelProgressDetail}
                                     </span>
                                 ) : null}
                             </div>
+                            {localModelProgressContext.length > 0 ? (
+                                <div className="local-model-progress-context">
+                                    <span>{localModelProgressContext}</span>
+                                    {localModelProgressContextPercent.length > 0 ? (
+                                        <span className="local-model-progress-context-percent">
+                                            {localModelProgressContextPercent}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            ) : null}
                             <div
                                 className={`local-model-progress-track${
                                     localModelProgressIsIndeterminate
@@ -5284,13 +5436,25 @@ export function App()
                         aria-live="polite"
                     >
                         <div className="local-model-progress-header">
-                            <span>{localModelProgressLabel}</span>
-                            {localModelProgressMeta.length > 0 ? (
+                            <span className="local-model-progress-label">
+                                {localModelProgressLabel}
+                            </span>
+                            {localModelProgressDetail.length > 0 ? (
                                 <span className="local-model-progress-meta">
-                                    {localModelProgressMeta}
+                                    {localModelProgressDetail}
                                 </span>
                             ) : null}
                         </div>
+                        {localModelProgressContext.length > 0 ? (
+                            <div className="local-model-progress-context">
+                                <span>{localModelProgressContext}</span>
+                                {localModelProgressContextPercent.length > 0 ? (
+                                    <span className="local-model-progress-context-percent">
+                                        {localModelProgressContextPercent}
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : null}
                         <div
                             className={`local-model-progress-track${
                                 localModelProgressIsIndeterminate

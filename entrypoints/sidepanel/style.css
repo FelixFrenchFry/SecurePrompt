@@ -8,6 +8,7 @@
     --brand-blue-soft: #f1f3fb;
     --brand-blue-border: #c8cfe8;
     --primary-button-shadow: rgba(36, 49, 114, 0.2);
+    --file-processing-fill: rgba(36, 49, 114, 0.1);
     --secondary-button-hover-background: #dfe5ff;
     --secondary-button-hover-border: #7e8fd2;
     --secondary-button-hover-color: #11194a;
@@ -1145,6 +1146,7 @@ h2 {
 }
 
 .text-file-card {
+    position: relative;
     display: grid;
     gap: 6px;
     min-width: 0;
@@ -1152,6 +1154,43 @@ h2 {
     border-radius: 8px;
     padding: 8px;
     background: #ffffff;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
+}
+
+.text-file-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: inherit;
+    background: var(--file-processing-fill);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        width 180ms ease,
+        opacity 150ms ease;
+}
+
+.text-file-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+.text-file-card.is-processing {
+    z-index: 1;
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 2px var(--brand-blue);
+}
+
+.text-file-card.is-menu-open {
+    z-index: 3;
+}
+
+.text-file-card.is-processing::before {
+    width: var(--file-processing-progress, 0%);
+    opacity: 1;
 }
 
 .text-file-card.is-excluded {
@@ -1225,6 +1264,10 @@ h2 {
 
 .text-file-card.is-error .text-file-card-status {
     color: #b91c1c;
+}
+
+.text-file-card.is-processing .text-file-card-status {
+    color: var(--brand-blue);
 }
 
 .text-file-action-menu {
@@ -1532,12 +1575,46 @@ h2 {
     font-weight: 650;
 }
 
+.local-model-progress-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .local-model-progress-meta {
     flex: 0 0 auto;
+    min-width: 0;
+    overflow: hidden;
     color: #64748b;
     font-size: 11px;
     font-weight: 600;
+    text-align: right;
+    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.local-model-progress-context {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.local-model-progress-context > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.local-model-progress-context-percent {
+    flex: 0 0 auto;
 }
 
 .local-model-progress-track {
@@ -2069,6 +2146,7 @@ h2 {
     --brand-blue-soft: #2a1033;
     --brand-blue-border: #a61cae;
     --primary-button-shadow: rgba(166, 28, 174, 0.24);
+    --file-processing-fill: rgba(166, 28, 174, 0.18);
     --secondary-button-hover-background: #581c63;
     --secondary-button-hover-border: #e879f9;
     --secondary-button-hover-color: #ffffff;
@@ -2321,6 +2399,10 @@ h2 {
     color: #fca5a5;
 }
 
+.app-shell.is-dark .text-file-card.is-processing .text-file-card-status {
+    color: var(--brand-blue);
+}
+
 .app-shell.is-dark .subtle-icon-button {
     border-color: #334155;
     background: #111827;
@@ -2528,7 +2610,8 @@ h2 {
     color: #cbd5e1;
 }
 
-.app-shell.is-dark .local-model-progress-meta {
+.app-shell.is-dark .local-model-progress-meta,
+.app-shell.is-dark .local-model-progress-context {
     color: #94a3b8;
 }
 

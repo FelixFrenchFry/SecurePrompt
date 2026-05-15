@@ -133,7 +133,7 @@ const getBenchmarkSummaryRows = (benchmark: PrivacyBenchmark) =>
         {
             label: 'Input size',
             value: `${benchmark.inputCharacters.toLocaleString()} chars`,
-            title: 'Number of characters processed from the original prompt.',
+            title: 'Number of characters processed from the prompt and included files.',
         },
         {
             label: 'Masked items',
