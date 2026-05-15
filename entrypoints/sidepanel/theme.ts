@@ -25,59 +25,59 @@ export type BenchmarkStageColorStyle = CSSProperties & {
 
 export const CATEGORY_COLORS: Record<SensitiveItemCategory, CategoryColors> = {
     EMAIL: {
-        primary: '#243172',
-        secondary: '#f1f3fb',
-        border: '#c8cfe8',
+        primary: 'rgba(36, 49, 114, 1)',
+        secondary: 'rgba(241, 243, 251, 1)',
+        border: 'rgba(200, 207, 232, 1)',
     },
     PHONE: {
-        primary: '#166534',
-        secondary: '#ecfdf5',
-        border: '#bbf7d0',
+        primary: 'rgba(22, 101, 52, 1)',
+        secondary: 'rgba(236, 253, 245, 1)',
+        border: 'rgba(187, 247, 208, 1)',
     },
     PERSON: {
-        primary: '#2563eb',
-        secondary: '#eff6ff',
-        border: '#bfdbfe',
+        primary: 'rgba(37, 99, 235, 1)',
+        secondary: 'rgba(239, 246, 255, 1)',
+        border: 'rgba(191, 219, 254, 1)',
     },
     ADDRESS: {
-        primary: '#7c2d12',
-        secondary: '#fff7ed',
-        border: '#fdba74',
+        primary: 'rgba(124, 45, 18, 1)',
+        secondary: 'rgba(255, 247, 237, 1)',
+        border: 'rgba(253, 186, 116, 1)',
     },
     ACCOUNT: {
-        primary: '#6d28d9',
-        secondary: '#f5f3ff',
-        border: '#ddd6fe',
+        primary: 'rgba(109, 40, 217, 1)',
+        secondary: 'rgba(245, 243, 255, 1)',
+        border: 'rgba(221, 214, 254, 1)',
     },
     DATE: {
-        primary: '#a16207',
-        secondary: '#fefce8',
-        border: '#fde047',
+        primary: 'rgba(161, 98, 7, 1)',
+        secondary: 'rgba(254, 252, 232, 1)',
+        border: 'rgba(253, 224, 71, 1)',
     },
     NETWORK: {
-        primary: '#0f766e',
-        secondary: '#f0fdfa',
-        border: '#5eead4',
+        primary: 'rgba(15, 118, 110, 1)',
+        secondary: 'rgba(240, 253, 250, 1)',
+        border: 'rgba(94, 234, 212, 1)',
     },
     SECRET: {
-        primary: '#be123c',
-        secondary: '#fff1f2',
-        border: '#fecdd3',
+        primary: 'rgba(190, 18, 60, 1)',
+        secondary: 'rgba(255, 241, 242, 1)',
+        border: 'rgba(254, 205, 211, 1)',
     },
     OTHER: {
-        primary: '#334155',
-        secondary: '#f8fafc',
-        border: '#dbe4ec',
+        primary: 'rgba(51, 65, 85, 1)',
+        secondary: 'rgba(248, 250, 252, 1)',
+        border: 'rgba(219, 228, 236, 1)',
     },
 };
 
 export const BENCHMARK_STAGE_COLORS: Record<PrivacyBenchmarkStage, string> = {
-    rulesDetection: '#0f766e',
-    modelDetection: '#7c3aed',
-    resultAssembly: '#d97706',
-    rulesHardening: '#ea580c',
-    modelHardening: '#db2777',
-    finalization: '#475569',
+    rulesDetection: 'rgba(15, 118, 110, 1)',
+    modelDetection: 'rgba(124, 58, 237, 1)',
+    resultAssembly: 'rgba(217, 119, 6, 1)',
+    rulesHardening: 'rgba(234, 88, 12, 1)',
+    modelHardening: 'rgba(219, 39, 119, 1)',
+    finalization: 'rgba(71, 85, 105, 1)',
 };
 
 export const getCategoryColorStyle = (
