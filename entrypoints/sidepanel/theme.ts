@@ -7,8 +7,6 @@ import type {
 export type CategoryColors = {
     // icon, strong border, and active state color
     primary: string;
-    // readable text color on category-tinted surfaces
-    text: string;
     // soft background tint behind category highlights
     secondary: string;
     // neutral border color for inactive category surfaces
@@ -17,7 +15,6 @@ export type CategoryColors = {
 
 export type CategoryColorStyle = CSSProperties & {
     '--category-primary': string;
-    '--category-text': string;
     '--category-secondary': string;
     '--category-border': string;
 };
@@ -29,55 +26,46 @@ export type BenchmarkStageColorStyle = CSSProperties & {
 export const CATEGORY_COLORS: Record<SensitiveItemCategory, CategoryColors> = {
     EMAIL: {
         primary: 'rgba(220, 30, 40, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(255, 246, 247, 1)',
         border: 'rgba(220, 30, 40, 0.5)',
     },
     PHONE: {
         primary: 'rgba(40, 160, 70, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(247, 252, 248, 1)',
         border: 'rgba(40, 160, 70, 0.5)',
     },
     PERSON: {
         primary: 'rgba(30, 110, 250, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(246, 249, 255, 1)',
         border: 'rgba(30, 110, 250, 0.5)',
     },
     ADDRESS: {
         primary: 'rgba(160, 80, 50, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(251, 248, 247, 1)',
         border: 'rgba(160, 80, 50, 0.5)',
     },
     ACCOUNT: {
         primary: 'rgba(250, 160, 0, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(255, 251, 245, 1)',
         border: 'rgba(250, 160, 0, 0.5)',
     },
     DATE: {
         primary: 'rgba(240, 40, 100, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(254, 246, 249, 1)',
         border: 'rgba(240, 40, 100, 0.5)',
     },
     NETWORK: {
         primary: 'rgba(0, 190, 170, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(245, 252, 252, 1)',
         border: 'rgba(0, 190, 170, 0.5)',
     },
     SECRET: {
         primary: 'rgba(250, 90, 0, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(255, 248, 245, 1)',
         border: 'rgba(250, 90, 0, 0.5)',
     },
     OTHER: {
         primary: 'rgba(50, 60, 70, 1)',
-        text: 'rgba(15, 23, 42, 1)',
         secondary: 'rgba(247, 247, 248, 1)',
         border: 'rgba(50, 60, 70, 0.5)',
     },
@@ -100,7 +88,6 @@ export const getCategoryColorStyle = (
 
     return {
         '--category-primary': colors.primary,
-        '--category-text': colors.text,
         '--category-secondary': colors.secondary,
         '--category-border': colors.border,
     };

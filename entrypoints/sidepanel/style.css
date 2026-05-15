@@ -1,6 +1,8 @@
 :root {
     color: #17202a;
     background: #f7fafc;
+    --app-text-color: #17202a;
+    --category-surface-text-color: #17202a;
     --brand-blue: #243172;
     --brand-blue-hover: #11194a;
     --brand-blue-soft: #f1f3fb;
@@ -323,7 +325,7 @@ h2 {
     gap: 6px;
     justify-content: center;
     min-width: 0;
-    color: var(--category-text, #334155);
+    color: var(--category-surface-text-color);
     background: var(--category-secondary, #f8fafc);
     font-size: 12px;
     font-weight: 700;
@@ -349,7 +351,7 @@ h2 {
 }
 
 .chip-count {
-    color: #000000;
+    color: var(--category-surface-text-color);
 }
 
 .chip.is-setting-added,
@@ -477,7 +479,7 @@ h2 {
 
 .scan-detail-columns {
     display: grid;
-    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 28px 28px;
+    grid-template-columns: minmax(96px, 0.95fr) minmax(0, 1.65fr) 32px 28px;
     align-items: center;
     gap: 8px;
     min-height: 24px;
@@ -497,7 +499,7 @@ h2 {
 
 .scan-detail-row {
     display: grid;
-    grid-template-columns: minmax(72px, 0.85fr) minmax(0, 1.8fr) 28px 28px;
+    grid-template-columns: minmax(96px, 0.95fr) minmax(0, 1.65fr) 32px 28px;
     align-items: center;
     gap: 8px;
     min-height: 32px;
@@ -511,11 +513,19 @@ h2 {
 }
 
 .scan-detail-mask {
+    justify-self: start;
+    box-sizing: border-box;
+    max-width: 100%;
     overflow: hidden;
+    border: 1px solid var(--category-border, #dbe4ec);
+    border-radius: 5px;
+    padding: 0 4px;
     color: var(--category-primary, #334155);
+    background: var(--category-secondary, #f8fafc);
     font-family:
         ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     font-weight: 800;
+    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -746,7 +756,7 @@ h2 {
     border: 1px solid var(--category-border, #dbe4ec);
     border-radius: 5px;
     padding: 0 4px;
-    color: var(--category-text, #334155);
+    color: var(--category-primary, #334155);
     background: var(--category-secondary, #f8fafc);
     cursor: help;
     font-weight: 750;
@@ -1317,7 +1327,7 @@ h2 {
     border: 1px solid var(--category-border, #dbe4ec);
     border-radius: 999px;
     padding: 0 6px;
-    color: var(--category-text, #334155);
+    color: var(--category-surface-text-color);
     background: var(--category-secondary, #f8fafc);
     font-size: 10px;
     font-weight: 750;
@@ -1821,11 +1831,7 @@ h2 {
     min-width: 0;
     color: #334155;
     font-size: 13px;
-    font-weight: 750;
-}
-
-.category-setting-row.is-enabled .category-setting-label {
-    color: var(--category-text, #334155);
+    font-weight: 700;
 }
 
 .category-setting-label svg {
@@ -2061,6 +2067,7 @@ h2 {
 }
 
 .app-shell.is-dark {
+    --app-text-color: #e2e8f0;
     --brand-blue: #a61cae;
     --brand-blue-hover: #c026d3;
     --brand-blue-soft: #2a1033;
