@@ -479,7 +479,9 @@ h2 {
 
 .scan-detail-columns {
     display: grid;
-    grid-template-columns: minmax(96px, 0.95fr) minmax(0, 1.65fr) 32px 28px;
+    grid-template-columns:
+        var(--scan-detail-mask-column-width, calc(11ch + 10px)) minmax(0, 1fr)
+        32px 28px;
     align-items: center;
     gap: 8px;
     min-height: 24px;
@@ -499,7 +501,9 @@ h2 {
 
 .scan-detail-row {
     display: grid;
-    grid-template-columns: minmax(96px, 0.95fr) minmax(0, 1.65fr) 32px 28px;
+    grid-template-columns:
+        var(--scan-detail-mask-column-width, calc(11ch + 10px)) minmax(0, 1fr)
+        32px 28px;
     align-items: center;
     gap: 8px;
     min-height: 32px;
@@ -513,19 +517,11 @@ h2 {
 }
 
 .scan-detail-mask {
-    justify-self: start;
-    box-sizing: border-box;
-    max-width: 100%;
     overflow: hidden;
-    border: 1px solid var(--category-border, #dbe4ec);
-    border-radius: 5px;
-    padding: 0 4px;
     color: var(--category-primary, #334155);
-    background: var(--category-secondary, #f8fafc);
     font-family:
         ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     font-weight: 800;
-    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
 }

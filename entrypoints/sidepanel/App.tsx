@@ -88,6 +88,12 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
+const SCAN_DETAIL_MASK_COLUMN_EXTRA_CHARS = 1;
+const SCAN_DETAIL_MASK_COLUMN_EXTRA_PIXELS = 2;
+
+type ScanDetailStyle = CategoryColorStyle & {
+    '--scan-detail-mask-column-width': string;
+};
 const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 5;
 const TEXT_FILE_HELP_ID = 'text-file-help-tooltip';
 const SUPPORTED_TEXT_FILE_EXTENSION_LABEL = SUPPORTED_TEXT_FILE_ACCEPT.split(
@@ -545,6 +551,16 @@ const getMaskNumber = (mask: string) =>
     }
 
     return Number(match[1]);
+};
+
+const getScanDetailMaskColumnWidth = (maskingMappings: MaskingMapping[]) =>
+{
+    const longestMaskLength = maskingMappings.reduce((longestLength, maskingMapping) =>
+    {
+        return Math.max(longestLength, maskingMapping.mask.length);
+    }, 'MASK'.length);
+
+    return `calc(${longestMaskLength + SCAN_DETAIL_MASK_COLUMN_EXTRA_CHARS}ch + ${SCAN_DETAIL_MASK_COLUMN_EXTRA_PIXELS}px)`;
 };
 
 const getNextScanDetailSortDirection = (
@@ -2117,6 +2133,14 @@ export function App()
                   getMaskingMappingsByCategory(visibleMaskingMappings, activeScanCategory),
                   scanDetailSortDirection,
               );
+    const activeScanDetailStyle: ScanDetailStyle | undefined =
+        activeScanCategoryConfig == null
+            ? undefined
+            : {
+                  ...getCategoryColorStyle(activeScanCategoryConfig.category),
+                  '--scan-detail-mask-column-width':
+                      getScanDetailMaskColumnWidth(activeScanMappings),
+              };
     const filteredActiveScanMappings = getSearchFilteredMaskingMappings(
         activeScanMappings,
         scanDetailSearchText,
@@ -5322,7 +5346,7 @@ export function App()
                 {activeScanCategoryConfig != null ? (
                     <div
                         className="scan-detail"
-                        style={getCategoryColorStyle(activeScanCategoryConfig.category)}
+                        style={activeScanDetailStyle}
                     >
                         <div className="scan-detail-header">
                             <span className="scan-detail-title">

@@ -1483,9 +1483,14 @@ const createNumberedId = (prefix: string, index: number) =>
     return `${prefix}-${String(index).padStart(3, '0')}`;
 };
 
+const formatMaskIndex = (index: number) =>
+{
+    return String(index).padStart(3, '0');
+};
+
 const createMask = (category: SensitiveItemCategory, categoryIndex: number) =>
 {
-    return `${category}_${String(categoryIndex).padStart(3, '0')}`;
+    return `${category}_${formatMaskIndex(categoryIndex)}`;
 };
 
 // TODO: add normalization so that "timo" and "Timo" get the same mask?

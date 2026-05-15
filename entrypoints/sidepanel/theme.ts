@@ -50,9 +50,9 @@ export const CATEGORY_COLORS: Record<SensitiveItemCategory, CategoryColors> = {
         border: 'rgba(250, 160, 0, 0.5)',
     },
     DATE: {
-        primary: 'rgba(240, 40, 100, 1)',
+        primary: 'rgba(240, 40, 140, 1)',
         secondary: 'rgba(254, 246, 249, 1)',
-        border: 'rgba(240, 40, 100, 0.5)',
+        border: 'rgba(240, 40, 140, 0.5)',
     },
     NETWORK: {
         primary: 'rgba(0, 190, 170, 1)',
