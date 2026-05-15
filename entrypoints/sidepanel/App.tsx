@@ -88,7 +88,7 @@ import {
 const EMPTY_PREVIEW_TEXT = 'No privatized prompt yet.';
 const ACTION_FEEDBACK_MS = 1500;
 const MAX_VISIBLE_COUNT = 99;
-const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 4;
+const MAX_TEXT_FILE_CATEGORY_SUMMARIES = 5;
 const TEXT_FILE_HELP_ID = 'text-file-help-tooltip';
 const SUPPORTED_TEXT_FILE_EXTENSION_LABEL = SUPPORTED_TEXT_FILE_ACCEPT.split(
     ',',
@@ -2092,7 +2092,8 @@ export function App()
                     onClick={() => toggleScanCategory(category)}
                 >
                     <Icon size={17} aria-hidden="true" />
-                    {label} {formatCount(count)}
+                    <span className="chip-label">{label}</span>
+                    <span className="chip-count">{formatCount(count)}</span>
                 </button>
                 {staleState != null ? (
                     <StaleIcon

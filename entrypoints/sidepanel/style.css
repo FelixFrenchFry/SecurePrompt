@@ -323,7 +323,7 @@ h2 {
     gap: 6px;
     justify-content: center;
     min-width: 0;
-    color: var(--category-primary, #334155);
+    color: var(--category-text, #334155);
     background: var(--category-secondary, #f8fafc);
     font-size: 12px;
     font-weight: 700;
@@ -338,6 +338,18 @@ h2 {
 
 .chip.is-dimmed {
     opacity: 0.4;
+}
+
+.chip svg {
+    color: var(--category-primary, #334155);
+}
+
+.chip-label {
+    color: var(--category-primary, #334155);
+}
+
+.chip-count {
+    color: #000000;
 }
 
 .chip.is-setting-added,
@@ -734,7 +746,7 @@ h2 {
     border: 1px solid var(--category-border, #dbe4ec);
     border-radius: 5px;
     padding: 0 4px;
-    color: var(--category-primary, #334155);
+    color: var(--category-text, #334155);
     background: var(--category-secondary, #f8fafc);
     cursor: help;
     font-weight: 750;
@@ -1305,7 +1317,7 @@ h2 {
     border: 1px solid var(--category-border, #dbe4ec);
     border-radius: 999px;
     padding: 0 6px;
-    color: var(--category-primary, #334155);
+    color: var(--category-text, #334155);
     background: var(--category-secondary, #f8fafc);
     font-size: 10px;
     font-weight: 750;
@@ -1314,6 +1326,7 @@ h2 {
 
 .text-file-category-chip svg {
     flex: 0 0 auto;
+    color: var(--category-primary, #334155);
 }
 
 .text-file-category-chip.is-muted {
@@ -1812,11 +1825,15 @@ h2 {
 }
 
 .category-setting-row.is-enabled .category-setting-label {
-    color: var(--category-primary, #334155);
+    color: var(--category-text, #334155);
 }
 
 .category-setting-label svg {
     flex: 0 0 auto;
+}
+
+.category-setting-row.is-enabled .category-setting-label svg {
+    color: var(--category-primary, #334155);
 }
 
 .category-setting-main p {
