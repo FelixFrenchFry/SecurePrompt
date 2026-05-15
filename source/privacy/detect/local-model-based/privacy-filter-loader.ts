@@ -23,10 +23,16 @@ export type PrivacyFilterPipelineOptions = {
     aggregation_strategy: typeof PRIVACY_FILTER_AGGREGATION_STRATEGY;
 };
 
-export type PrivacyFilterPipeline = (
-    inputText: string,
-    options: PrivacyFilterPipelineOptions,
-) => Promise<PrivacyFilterOutput[]>;
+export type PrivacyFilterPipeline = {
+    (
+        inputText: string,
+        options: PrivacyFilterPipelineOptions,
+    ): Promise<PrivacyFilterOutput[]>;
+    (
+        inputTexts: string[],
+        options: PrivacyFilterPipelineOptions,
+    ): Promise<PrivacyFilterOutput[][]>;
+};
 
 type TransformersEnvironment = {
     backends: {

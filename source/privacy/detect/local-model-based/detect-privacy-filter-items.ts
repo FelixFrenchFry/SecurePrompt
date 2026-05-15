@@ -5,6 +5,8 @@ import type {
 } from '../../types';
 import {
     PRIVACY_FILTER_AGGREGATION_STRATEGY,
+    PRIVACY_FILTER_CHUNK_BATCH_MIN_LENGTH_RATIO,
+    PRIVACY_FILTER_CHUNK_BATCH_SIZE,
     PRIVACY_FILTER_CHUNK_MAX_LENGTH,
     PRIVACY_FILTER_CHUNK_MIN_LENGTH,
     PRIVACY_FILTER_CHUNK_OVERLAP_LENGTH,
@@ -62,21 +64,31 @@ export const detectPrivacyFilterItems = async (
         inputText.length,
         PRIVACY_FILTER_CHUNK_MAX_LENGTH,
     );
+    let completedChunks = 0;
 
-    for (const [chunkIndex, chunk] of chunks.entries())
+    reportPrivacyFilterInferenceProgress(onProgress, completedChunks, chunks.length);
+
+    detectedItems.push(
+        ...(await detectPrivacyFilterChunks(
+            classifier,
+            inputText,
+            chunks,
+            detectionState,
+            (completedChunkCount) =>
+            {
+                completedChunks += completedChunkCount;
+                reportPrivacyFilterInferenceProgress(
+                    onProgress,
+                    completedChunks,
+                    chunks.length,
+                );
+            },
+        )),
+    );
+
+    if (completedChunks < chunks.length)
     {
-        reportPrivacyFilterInferenceProgress(onProgress, chunkIndex, chunks.length);
-
-        detectedItems.push(
-            ...(await detectPrivacyFilterChunkItems(
-                classifier,
-                inputText,
-                chunk,
-                detectionState,
-            )),
-        );
-
-        reportPrivacyFilterInferenceProgress(onProgress, chunkIndex + 1, chunks.length);
+        reportPrivacyFilterInferenceProgress(onProgress, chunks.length, chunks.length);
     }
 
     await reportPrivacyFilterPostprocessProgress(onProgress);
@@ -120,14 +132,15 @@ const reportPrivacyFilterInferenceProgress = (
         return;
     }
 
-    const currentChunk = Math.min(completedChunks + 1, totalChunks);
+    const currentChunk = Math.min(Math.max(completedChunks, 0), totalChunks);
+    const labelChunk = Math.min(completedChunks + 1, totalChunks);
 
     onProgress?.({
         phase: 'inference',
         label:
             totalChunks === 1
                 ? 'Running local model.'
-                : `Running local model chunk ${currentChunk} of ${totalChunks}.`,
+                : `Running local model chunk ${labelChunk} of ${totalChunks}.`,
         progress: Math.min(100, Math.max(0, (completedChunks / totalChunks) * 100)),
         currentChunk,
         totalChunks,
@@ -176,19 +189,90 @@ const detectPrivacyFilterChunks = async (
     inputText: string,
     chunks: PrivacyFilterChunk[],
     detectionState: PrivacyFilterDetectionState,
+    onChunksComplete?: (completedChunkCount: number) => void,
 ): Promise<SensitiveItem[]> =>
 {
     const detectedItems: SensitiveItem[] = [];
+    const chunkBatches = createPrivacyFilterChunkBatches(chunks);
 
-    for (const chunk of chunks)
+    for (const chunkBatch of chunkBatches)
+    {
+        if (chunkBatch.length === 1)
+        {
+            detectedItems.push(
+                ...(await detectPrivacyFilterChunkItems(
+                    classifier,
+                    inputText,
+                    chunkBatch[0],
+                    detectionState,
+                )),
+            );
+            onChunksComplete?.(1);
+            continue;
+        }
+
+        try
+        {
+            detectedItems.push(
+                ...(await runPrivacyFilterChunkBatch(
+                    classifier,
+                    inputText,
+                    chunkBatch,
+                    detectionState,
+                )),
+            );
+            onChunksComplete?.(chunkBatch.length);
+        }
+        catch
+        {
+            for (const chunk of chunkBatch)
+            {
+                detectedItems.push(
+                    ...(await detectPrivacyFilterChunkItems(
+                        classifier,
+                        inputText,
+                        chunk,
+                        detectionState,
+                    )),
+                );
+                onChunksComplete?.(1);
+            }
+        }
+    }
+
+    return detectedItems;
+};
+
+const runPrivacyFilterChunkBatch = async (
+    classifier: PrivacyFilterPipeline,
+    inputText: string,
+    chunks: PrivacyFilterChunk[],
+    detectionState: PrivacyFilterDetectionState,
+): Promise<SensitiveItem[]> =>
+{
+    const output = await classifier(
+        chunks.map((chunk) => chunk.text),
+        {
+            aggregation_strategy: PRIVACY_FILTER_AGGREGATION_STRATEGY,
+        },
+    );
+
+    if (!isPrivacyFilterBatchOutput(output, chunks.length))
+    {
+        throw new Error('Unexpected privacy filter batch output.');
+    }
+
+    const detectedItems: SensitiveItem[] = [];
+
+    for (let index = 0; index < chunks.length; index += 1)
     {
         detectedItems.push(
-            ...(await detectPrivacyFilterChunkItems(
-                classifier,
+            ...createPrivacyFilterItemsFromOutput(
                 inputText,
-                chunk,
+                chunks[index],
+                output[index],
                 detectionState,
-            )),
+            ),
         );
     }
 
@@ -205,6 +289,22 @@ const runPrivacyFilterChunk = async (
     const output = await classifier(chunk.text, {
         aggregation_strategy: PRIVACY_FILTER_AGGREGATION_STRATEGY,
     });
+
+    return createPrivacyFilterItemsFromOutput(
+        inputText,
+        chunk,
+        output,
+        detectionState,
+    );
+};
+
+const createPrivacyFilterItemsFromOutput = (
+    inputText: string,
+    chunk: PrivacyFilterChunk,
+    output: PrivacyFilterOutput[],
+    detectionState: PrivacyFilterDetectionState,
+): SensitiveItem[] =>
+{
     const detectedItems: SensitiveItem[] = [];
     let fallbackSearchStart = chunk.start;
 
@@ -416,6 +516,106 @@ const getPrivacyFilterConfidence = (match: PrivacyFilterOutput) =>
     }
 
     return Math.min(1, Math.max(0, match.score));
+};
+
+const isPrivacyFilterBatchOutput = (
+    output: unknown,
+    expectedLength: number,
+): output is PrivacyFilterOutput[][] =>
+{
+    return (
+        Array.isArray(output) &&
+        output.length === expectedLength &&
+        output.every(Array.isArray)
+    );
+};
+
+const createPrivacyFilterChunkBatches = (
+    chunks: PrivacyFilterChunk[],
+): PrivacyFilterChunk[][] =>
+{
+    const batchSize = getPrivacyFilterChunkBatchSize();
+
+    if (batchSize <= 1)
+    {
+        return chunks.map((chunk) => [chunk]);
+    }
+
+    const batches: PrivacyFilterChunk[][] = [];
+    let currentBatch: PrivacyFilterChunk[] = [];
+
+    for (const chunk of chunks)
+    {
+        if (
+            currentBatch.length > 0 &&
+            (currentBatch.length >= batchSize ||
+                !canAddPrivacyFilterChunkToBatch(currentBatch, chunk))
+        )
+        {
+            batches.push(currentBatch);
+            currentBatch = [];
+        }
+
+        currentBatch.push(chunk);
+    }
+
+    if (currentBatch.length > 0)
+    {
+        batches.push(currentBatch);
+    }
+
+    return batches;
+};
+
+const getPrivacyFilterChunkBatchSize = () =>
+{
+    if (
+        !Number.isFinite(PRIVACY_FILTER_CHUNK_BATCH_SIZE) ||
+        PRIVACY_FILTER_CHUNK_BATCH_SIZE <= 1
+    )
+    {
+        return 1;
+    }
+
+    return Math.floor(PRIVACY_FILTER_CHUNK_BATCH_SIZE);
+};
+
+const getPrivacyFilterChunkBatchMinLengthRatio = () =>
+{
+    if (!Number.isFinite(PRIVACY_FILTER_CHUNK_BATCH_MIN_LENGTH_RATIO))
+    {
+        return 1;
+    }
+
+    return Math.min(
+        1,
+        Math.max(0, PRIVACY_FILTER_CHUNK_BATCH_MIN_LENGTH_RATIO),
+    );
+};
+
+const canAddPrivacyFilterChunkToBatch = (
+    chunks: PrivacyFilterChunk[],
+    nextChunk: PrivacyFilterChunk,
+) =>
+{
+    let shortestLength = nextChunk.text.length;
+    let longestLength = nextChunk.text.length;
+
+    for (const chunk of chunks)
+    {
+        shortestLength = Math.min(shortestLength, chunk.text.length);
+        longestLength = Math.max(longestLength, chunk.text.length);
+    }
+
+    if (longestLength <= 0)
+    {
+        return true;
+    }
+
+    return (
+        shortestLength / longestLength >=
+        getPrivacyFilterChunkBatchMinLengthRatio()
+    );
 };
 
 const createPrivacyFilterChunks = (

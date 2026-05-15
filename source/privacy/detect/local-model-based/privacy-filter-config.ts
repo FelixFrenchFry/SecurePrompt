@@ -3,6 +3,8 @@ export const PRIVACY_FILTER_TASK = 'token-classification';
 export const PRIVACY_FILTER_DEVICE = 'webgpu';
 export const PRIVACY_FILTER_DTYPE = 'q4';
 export const PRIVACY_FILTER_AGGREGATION_STRATEGY = 'simple';
+export const PRIVACY_FILTER_CHUNK_BATCH_SIZE = 2;
+export const PRIVACY_FILTER_CHUNK_BATCH_MIN_LENGTH_RATIO = 0.75;
 export const PRIVACY_FILTER_WEBGPU_FORCE_CPU_NODE_NAMES = [
     '/model/layers.0/attn/sinks/expand',
     '/model/layers.1/attn/sinks/expand',
