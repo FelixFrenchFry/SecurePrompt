@@ -1,0 +1,9 @@
+{
+    "extends": "../tsconfig.base.json",
+    "compilerOptions": {
+        // tests run in Node and may use its globals
+        "lib": ["ES2023"],
+        "types": ["node"]
+    },
+    "include": [".", "../vitest.config.ts"]
+}

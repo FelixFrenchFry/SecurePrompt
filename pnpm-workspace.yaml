@@ -1,9 +1,10 @@
 packages:
-    - apps/*
+  - apps/*
+  - packages/*
 
 allowBuilds:
-    esbuild: true
-    onnxruntime-node: false
-    protobufjs: false
-    sharp: false
-    spawn-sync: true
+  esbuild: true
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
+  spawn-sync: true

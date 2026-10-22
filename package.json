@@ -8,7 +8,11 @@
         "dev": "pnpm --filter @secureprompt/extension dev",
         "build": "pnpm --filter @secureprompt/extension build",
         "zip": "pnpm --filter @secureprompt/extension zip",
-        "typecheck": "pnpm -r --parallel typecheck",
+        "typecheck": "pnpm -r --parallel typecheck && tsc -p tests/tsconfig.json",
+        "test": "vitest run",
+        "test:unit": "vitest run --project unit",
+        "test:integration": "vitest run --project integration",
+        "test:coverage": "vitest run --coverage",
         "check:secrets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-secrets.ps1",
         "format": "prettier --write .",
         "format:check": "prettier --check ."
@@ -21,6 +25,11 @@
         }
     },
     "devDependencies": {
-        "prettier": "^3.8.3"
+        "@types/node": "^24.19.2",
+        "@vitest/coverage-v8": "^5.0.5",
+        "fast-check": "^4.10.2",
+        "prettier": "^3.8.3",
+        "typescript": "^7.0.2",
+        "vitest": "^5.0.5"
     }
 }

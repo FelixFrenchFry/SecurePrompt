@@ -4,5 +4,14 @@
     "useTabs": false,
     "singleQuote": true,
     "semi": true,
-    "trailingComma": "all"
+    "trailingComma": "all",
+    "endOfLine": "auto",
+    "overrides": [
+        {
+            "files": ["*.yml", "*.yaml"],
+            "options": {
+                "tabWidth": 2
+            }
+        }
+    ]
 }
