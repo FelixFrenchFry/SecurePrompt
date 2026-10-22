@@ -7,12 +7,16 @@ node_modules/
 dist/
 build/
 
+# downloaded model files
+.models/
+
 # caches
 *.tsbuildinfo
 .vite/
 
-# test input/output
+# test and benchmark input/output
 .datasets/
+.bench/
 coverage/
 test-results/
 playwright-report/

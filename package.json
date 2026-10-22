@@ -1,19 +1,18 @@
 {
     "name": "secureprompt",
-    "version": "0.1.0",
-    "description": "Censor private information in your prompts before sending them to AI chatbots. Sensitive text is detected and replaced locally on your device.",
+    "version": "0.0.0",
     "private": true,
+    "type": "module",
+    "license": "UNLICENSED",
     "scripts": {
-        "dev": "wxt",
-        "build": "tsc --noEmit && wxt build",
+        "dev": "pnpm --filter @secureprompt/extension dev",
+        "build": "pnpm --filter @secureprompt/extension build",
+        "zip": "pnpm --filter @secureprompt/extension zip",
+        "typecheck": "pnpm -r --parallel typecheck",
         "check:secrets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-secrets.ps1",
         "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "typecheck": "tsc --noEmit",
-        "zip": "wxt zip",
-        "postinstall": "wxt prepare"
+        "format:check": "prettier --check ."
     },
-    "license": "UNLICENSED",
     "devEngines": {
         "packageManager": {
             "name": "pnpm",
@@ -21,31 +20,7 @@
             "onFail": "download"
         }
     },
-    "type": "module",
-    "dependencies": {
-        "@huggingface/transformers": "4.2.0",
-        "awesome-phonenumber": "^7.8.0",
-        "card-validator": "^10.0.4",
-        "chrono-node": "^2.9.1",
-        "german-tax-id-validator": "^1.0.7",
-        "ibantools": "^4.5.4",
-        "ip-regex": "^5.0.0",
-        "ipaddr.js": "^2.4.0",
-        "jsvat": "^2.5.4",
-        "libphonenumber-js": "^1.12.43",
-        "linkifyjs": "^4.3.2",
-        "lucide-react": "^1.14.0",
-        "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
-        "react": "^19.2.6",
-        "react-dom": "^19.2.6",
-        "tldts": "^7.0.30"
-    },
     "devDependencies": {
-        "@types/react": "^19.2.14",
-        "@types/react-dom": "^19.2.3",
-        "@wxt-dev/module-react": "^1.2.2",
-        "prettier": "^3.8.3",
-        "typescript": "^6.0.3",
-        "wxt": "^0.20.25"
+        "prettier": "^3.8.3"
     }
 }

@@ -1160,7 +1160,7 @@ h2 {
 }
 
 .text-file-card::before {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0 auto 0 0;
     width: 0;
