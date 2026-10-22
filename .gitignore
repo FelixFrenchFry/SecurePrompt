@@ -11,7 +11,8 @@ build/
 *.tsbuildinfo
 .vite/
 
-# test output
+# test input/output
+.datasets/
 coverage/
 test-results/
 playwright-report/

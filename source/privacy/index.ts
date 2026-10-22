@@ -3,7 +3,6 @@ import {
     USE_LOCAL_MODEL_DETECTION,
     USE_RULES_DETECTION,
 } from './config';
-import { detectSensitiveItemsWithLocalModel } from './detect/local-model-based/detection-local-model-based';
 import { detectAccountItems } from './detect/rule-based/detect-account-items';
 import {
     detectDateItems,
@@ -196,6 +195,18 @@ const getEnabledCategorySet = (
             return enabledCategories[category] !== false;
         }),
     );
+};
+
+const detectSensitiveItemsWithLocalModelLazy = async (
+    inputText: string,
+    onProgress?: LocalModelProgressCallback,
+) =>
+{
+    const { detectSensitiveItemsWithLocalModel } = await import(
+        './detect/local-model-based/detection-local-model-based'
+    );
+
+    return detectSensitiveItemsWithLocalModel(inputText, onProgress);
 };
 
 const hasEnabledSensitiveItemCategories = (
@@ -404,7 +415,7 @@ export const createPrivatizedPromptAsync = async (
         const detectEnabledModelItems = async () =>
         {
             return filterSensitiveItemsByEnabledCategories(
-                await detectSensitiveItemsWithLocalModel(
+                await detectSensitiveItemsWithLocalModelLazy(
                     inputText,
                     options.onLocalModelProgress,
                 ),
@@ -795,7 +806,7 @@ const detectResidualSensitiveItemsWithLocalModel = async (
                   });
               };
 
-    const detectedItems = await detectSensitiveItemsWithLocalModel(
+    const detectedItems = await detectSensitiveItemsWithLocalModelLazy(
         residualInput.text,
         reportResidualModelProgress,
     );
