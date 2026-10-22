@@ -14,3 +14,4 @@ export {
     type PipelineTiming,
 } from './pipeline/run';
 export { restorePlaceholders } from './pipeline/restore';
+export { RULE_NAMES, RULES, type RuleName } from './detect/rules';

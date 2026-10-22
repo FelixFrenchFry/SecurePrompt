@@ -54,6 +54,9 @@ credentials.*
 *credentials*.json
 service-account*.json
 firebase-adminsdk*.json
+# the secret detector and its tests, not secrets themselves
+!packages/core/src/detect/rules/secret.ts
+!tests/unit/rules/secret.test.ts
 
 # local configs
 *.local
