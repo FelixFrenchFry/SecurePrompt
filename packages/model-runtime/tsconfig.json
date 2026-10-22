@@ -1,0 +1,9 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        // runs in extension pages and in Node tests, so only standard and DOM APIs
+        "lib": ["ES2023", "DOM"],
+        "types": []
+    },
+    "include": ["src"]
+}
