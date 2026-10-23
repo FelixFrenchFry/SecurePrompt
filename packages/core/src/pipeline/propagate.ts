@@ -24,12 +24,57 @@ type Term = {
     requiresUppercase: boolean;
 };
 
+// name parts matched on their own, without initials ("J.") and particles ("von", "de")
+const nameParts = (value: string): string[] =>
+{
+    return value.split(/[\s,]+/).filter((part) => part.length >= MIN_NAME_PART_LENGTH && STARTS_UPPERCASE.test(part) && !part.endsWith('.'));
+};
+
+// a lone detected part like "Keller" reuses its full name, unless two full names share it
+const linkNameParts = (text: string, detections: readonly Detection[]): Detection[] =>
+{
+    const fullNamesOfPart = new Map<string, Map<string, string>>();
+
+    for (const detection of detections)
+    {
+        const value = detection.aliasOf ?? text.slice(detection.start, detection.end);
+        const parts = nameParts(value);
+
+        if (detection.category !== 'PERSON' || parts.length < 2)
+        {
+            continue;
+        }
+
+        for (const part of parts)
+        {
+            const owners = fullNamesOfPart.get(part.toLowerCase()) ?? new Map<string, string>();
+
+            owners.set(value.toLowerCase(), value);
+            fullNamesOfPart.set(part.toLowerCase(), owners);
+        }
+    }
+
+    return detections.map((detection) =>
+    {
+        const value = text.slice(detection.start, detection.end);
+        const owners = fullNamesOfPart.get(value.toLowerCase());
+
+        if (detection.category !== 'PERSON' || detection.aliasOf != null || owners?.size !== 1 || nameParts(value).length !== 1)
+        {
+            return detection;
+        }
+
+        return { ...detection, aliasOf: [...owners.values()][0]! };
+    });
+};
+
 export const propagateMentions = (
     text: string,
-    detections: readonly Detection[],
+    found: readonly Detection[],
     protectedRanges: readonly Span[] = [],
 ): Detection[] =>
 {
+    const detections = linkNameParts(text, found);
     const terms = collectTerms(text, detections);
 
     if (terms.size === 0)
@@ -170,13 +215,9 @@ const collectTerms = (text: string, detections: readonly Detection[]): Map<strin
             continue;
         }
 
-        for (const part of value.split(/[\s,]+/))
+        for (const part of nameParts(value))
         {
-            // skip initials ("J.") and lowercase particles ("von", "de")
-            if (part.length >= MIN_NAME_PART_LENGTH && STARTS_UPPERCASE.test(part) && !part.endsWith('.'))
-            {
-                addTerm(part, { ...info, value: part, requiresUppercase: true }, true);
-            }
+            addTerm(part, { ...info, value: part, requiresUppercase: true }, true);
         }
     }
 

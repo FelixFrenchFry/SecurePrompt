@@ -1,17 +1,13 @@
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'wxt';
 import { AI_CHAT_MATCHES } from './source/chat-targets';
 import { MODEL_HOST_PERMISSIONS } from './source/model/protocol';
 
-const onnxRuntimeDistDirectory = dirname(fileURLToPath(import.meta.resolve('onnxruntime-web/wasm')));
-const onnxRuntimeAliasDirectory = `${onnxRuntimeDistDirectory.replace(/\\/g, '/')}/`;
-
-// the ONNX runtime build that the model runtime's transformers.js loads, packaged as ort/*
+// the ONNX runtime files of the build the model runtime's transformers.js loads, packaged with the
+// extension, as model-onnx-runtime/* for the offscreen page's imports
 const modelRuntimeRequire = createRequire(resolve(import.meta.dirname, '../../packages/model-runtime/package.json'));
 const modelOnnxDirectory = dirname(createRequire(modelRuntimeRequire.resolve('@huggingface/transformers')).resolve('onnxruntime-web'));
-const MODEL_ONNX_FILES = ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
 
 // browser tests set a local model mirror and build into their own folder
 const testBuild = process.env.WXT_MODEL_HOST != null;
@@ -23,19 +19,10 @@ export default defineConfig({
     vite: () => ({
         resolve: {
             alias: {
-                'secureprompt-onnx-runtime/': onnxRuntimeAliasDirectory,
+                'model-onnx-runtime/': `${modelOnnxDirectory.replace(/\\/g, '/')}/`,
             },
         },
     }),
-    hooks: {
-        'build:publicAssets': (_wxt, files) =>
-        {
-            for (const file of MODEL_ONNX_FILES)
-            {
-                files.push({ absoluteSrc: resolve(modelOnnxDirectory, file), relativeDest: `ort/${file}` });
-            }
-        },
-    },
     manifest: {
         name: 'SecurePrompt',
         description:

@@ -289,3 +289,46 @@ describe('maskDetections', () =>
         expect(masked.maskedText).toBe('Bestellung bei OTHER_001, Mail a@b.de');
     });
 });
+
+describe('name parts the model found on its own', () =>
+{
+    // tags each listed value where it occurs, like a model that also tags a later surname
+    const tagging = (text: string, values: ReadonlyArray<readonly [string, number]>): Detector =>
+    {
+        return { id: 'model', detect: async () => values.map(([value, occurrence]) => detectionOf(text, value, 'PERSON', { source: 'model', occurrence })) };
+    };
+
+    it('masks a surname with the full name\'s placeholder', async () =>
+    {
+        const text = 'Herr Markus Keller hat sich gemeldet. Herr Keller wohnt in Berlin, Markus ruft an.';
+        const result = await runPipeline(text, {
+            detectors: [tagging(text, [['Markus Keller', 0], ['Keller', 1], ['Markus', 1]])],
+            session: createSession(),
+            residualPasses: 0,
+        });
+
+        expect(result.maskedText).toBe('Herr PERSON_001 hat sich gemeldet. Herr PERSON_001 wohnt in Berlin, PERSON_001 ruft an.');
+    });
+
+    it('keeps a surname shared by two people apart from both', async () =>
+    {
+        const text = 'Markus Keller und Anna Keller kamen. Herr Keller blieb.';
+        const result = await runPipeline(text, {
+            detectors: [tagging(text, [['Markus Keller', 0], ['Anna Keller', 0], ['Keller', 2]])],
+            session: createSession(),
+            residualPasses: 0,
+        });
+
+        expect(result.maskedText).toBe('PERSON_001 und PERSON_002 kamen. Herr PERSON_003 blieb.');
+    });
+
+    it('restores the full name for a linked surname', async () =>
+    {
+        const session = createSession();
+        const text = 'Markus Keller schrieb, Keller wartet.';
+        const result = await runPipeline(text, { detectors: [tagging(text, [['Markus Keller', 0], ['Keller', 1]])], session, residualPasses: 0 });
+
+        expect(result.maskedText).toBe('PERSON_001 schrieb, PERSON_001 wartet.');
+        expect(restorePlaceholders(result.maskedText, session)).toBe('Markus Keller schrieb, Markus Keller wartet.');
+    });
+});

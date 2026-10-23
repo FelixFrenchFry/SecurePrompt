@@ -13,24 +13,11 @@
         "postinstall": "wxt prepare"
     },
     "dependencies": {
-        "@huggingface/transformers": "4.2.0",
         "@secureprompt/core": "workspace:*",
         "@secureprompt/model-runtime": "workspace:*",
-        "awesome-phonenumber": "^7.8.0",
-        "card-validator": "^10.0.4",
-        "chrono-node": "^2.9.1",
-        "german-tax-id-validator": "^1.0.7",
-        "ibantools": "^4.5.4",
-        "ip-regex": "^5.0.0",
-        "ipaddr.js": "^2.4.0",
-        "jsvat": "^2.5.4",
-        "libphonenumber-js": "^1.12.43",
-        "linkifyjs": "^4.3.2",
         "lucide-react": "^1.14.0",
-        "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
         "react": "^19.2.6",
-        "react-dom": "^19.2.6",
-        "tldts": "^7.0.30"
+        "react-dom": "^19.2.6"
     },
     "devDependencies": {
         "@types/react": "^19.2.14",

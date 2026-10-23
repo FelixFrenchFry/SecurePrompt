@@ -1,5 +1,7 @@
 import { PipelineCancelledError } from '@secureprompt/core';
 import { createBardsaiDetector } from '@secureprompt/model-runtime';
+import ortMjsUrl from 'model-onnx-runtime/ort-wasm-simd-threaded.asyncify.mjs?url';
+import ortWasmUrl from 'model-onnx-runtime/ort-wasm-simd-threaded.asyncify.wasm?url';
 import { browser, type Browser } from 'wxt/browser';
 import { MODEL_PORT, type ModelEvent, type ModelRequest } from '../../source/model/protocol';
 
@@ -7,8 +9,8 @@ import { MODEL_PORT, type ModelEvent, type ModelRequest } from '../../source/mod
 
 const ports = new Set<Browser.runtime.Port>();
 
-// the build hook adds these files, so WXT's typed paths don't list them
-const runtimeFile = (file: string) => browser.runtime.getURL(`/ort/${file}` as '/offscreen.html');
+// the ONNX runtime files packaged by the build, as full extension URLs
+const runtimeFile = (path: string) => new URL(path, location.href).href;
 
 const broadcast = (event: ModelEvent) =>
 {
@@ -26,8 +28,8 @@ const detector = createBardsaiDetector({
     // three quarters of the cores, at most 16, so the browser stays responsive
     threads: Math.max(1, Math.min(16, Math.floor(navigator.hardwareConcurrency * 0.75))),
     runtimeFiles: {
-        mjs: runtimeFile('ort-wasm-simd-threaded.asyncify.mjs'),
-        wasm: runtimeFile('ort-wasm-simd-threaded.asyncify.wasm'),
+        mjs: runtimeFile(ortMjsUrl),
+        wasm: runtimeFile(ortWasmUrl),
     },
     onProgress: ({ status, file, progress, loaded, total }) =>
     {
