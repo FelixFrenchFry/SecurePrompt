@@ -1,0 +1,44 @@
+/* GitHub's design tokens (Primer Primitives), active on pages whose root element has
+   data-color-mode="auto" data-light-theme="light" data-dark-theme="dark", following the system theme */
+@import '@primer/primitives/dist/css/functional/themes/light.css';
+@import '@primer/primitives/dist/css/functional/themes/dark.css';
+@import '@primer/primitives/dist/css/functional/typography/typography.css';
+@import '@primer/primitives/dist/css/functional/size/size.css';
+@import '@primer/primitives/dist/css/functional/size/radius.css';
+@import '@primer/primitives/dist/css/functional/size/border.css';
+
+/* SecurePrompt's own tokens, all taken from Primer's */
+:root {
+    /* two corner radii only: controls and panels, and placeholder chips */
+    --sp-radius: var(--borderRadius-medium);
+    --sp-radius-chip: var(--borderRadius-small);
+
+    /* one Primer display color per category, for placeholder chips and the category summary */
+    --sp-email-fg: var(--display-blue-fgColor);
+    --sp-email-bg: var(--display-blue-bgColor-muted);
+    --sp-email-border: var(--display-blue-borderColor-muted);
+    --sp-phone-fg: var(--display-green-fgColor);
+    --sp-phone-bg: var(--display-green-bgColor-muted);
+    --sp-phone-border: var(--display-green-borderColor-muted);
+    --sp-person-fg: var(--display-purple-fgColor);
+    --sp-person-bg: var(--display-purple-bgColor-muted);
+    --sp-person-border: var(--display-purple-borderColor-muted);
+    --sp-address-fg: var(--display-brown-fgColor);
+    --sp-address-bg: var(--display-brown-bgColor-muted);
+    --sp-address-border: var(--display-brown-borderColor-muted);
+    --sp-account-fg: var(--display-orange-fgColor);
+    --sp-account-bg: var(--display-orange-bgColor-muted);
+    --sp-account-border: var(--display-orange-borderColor-muted);
+    --sp-date-fg: var(--display-pink-fgColor);
+    --sp-date-bg: var(--display-pink-bgColor-muted);
+    --sp-date-border: var(--display-pink-borderColor-muted);
+    --sp-network-fg: var(--display-cyan-fgColor);
+    --sp-network-bg: var(--display-cyan-bgColor-muted);
+    --sp-network-border: var(--display-cyan-borderColor-muted);
+    --sp-secret-fg: var(--display-red-fgColor);
+    --sp-secret-bg: var(--display-red-bgColor-muted);
+    --sp-secret-border: var(--display-red-borderColor-muted);
+    --sp-other-fg: var(--display-gray-fgColor);
+    --sp-other-bg: var(--display-gray-bgColor-muted);
+    --sp-other-border: var(--display-gray-borderColor-muted);
+}

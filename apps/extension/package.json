@@ -13,6 +13,8 @@
         "postinstall": "wxt prepare"
     },
     "dependencies": {
+        "@primer/octicons-react": "^19.41.0",
+        "@primer/primitives": "^11.10.0",
         "@secureprompt/core": "workspace:*",
         "@secureprompt/model-runtime": "workspace:*",
         "lucide-react": "^1.14.0",

@@ -1,23 +1,46 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_8_191)">
-<rect width="1024" height="1024" rx="175" fill="url(#paint0_linear_8_191)"/>
-<path d="M350 100C480.317 100 587.344 199.71 598.955 327H421.938C413.792 292.043 382.438 266 345 266C301.37 266 266 301.37 266 345C266 388.63 301.37 424 345 424H450C532.843 424 600 491.157 600 574V774C600 856.843 532.843 924 450 924H250C167.157 924 100 856.843 100 774V576H242.989C158.456 535.903 100 449.78 100 350C100 211.929 211.929 100 350 100ZM350 524C348.308 524 346.626 524.042 344.955 524.125C336.364 524.552 328.059 526.063 320.173 528.524C319.476 528.742 318.781 528.967 318.091 529.199C303.704 534.04 290.779 542.064 280.155 552.434C280.11 552.478 280.065 552.522 280.02 552.566C278.175 554.374 276.401 556.254 274.7 558.199C274.491 558.438 274.283 558.677 274.076 558.918C267.979 566.025 262.861 573.996 258.935 582.625C253.197 595.234 250 609.244 250 624C250 658.613 267.586 689.118 294.31 707.069L256.388 820.838C254.229 827.313 259.049 834 265.874 834H438.126C444.951 834 449.771 827.313 447.612 820.838L408.932 704.797C433.827 686.608 450 657.193 450 624C450 609.332 446.841 595.402 441.168 582.852V582.853C439.312 578.747 437.187 574.788 434.815 571C417.139 542.772 385.762 524 350 524Z" fill="white"/>
-<path d="M924 299.487V300H774C746.386 300 724 277.614 724 250V100H724.513L924 299.487Z" fill="#0C660F"/>
-<path d="M924 299.487V874C924 901.614 901.614 924 874 924H582.287C621.479 889.41 647.01 839.702 649.753 784H815C834.33 784 850 768.33 850 749C850 729.67 834.33 714 815 714H650V644H815C834.33 644 850 628.33 850 609C850 589.67 834.33 574 815 574H650V504H815C834.33 504 850 488.33 850 469C850 449.67 834.33 434 815 434H650V338.597L649.147 327.253C642.017 232.365 590.786 149.8 515.892 100H724.513L924 299.487Z" fill="url(#paint1_linear_8_191)"/>
-<path d="M924 299.487V300H774C746.386 300 724 277.614 724 250V100H724.513L924 299.487Z" fill="#891290"/>
-<rect x="100" y="350" width="148" height="300" fill="white"/>
-</g>
-<defs>
-<linearGradient id="paint0_linear_8_191" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
-<stop stop-color="#243172"/>
-<stop offset="1" stop-color="#080D2B"/>
-</linearGradient>
-<linearGradient id="paint1_linear_8_191" x1="719.946" y1="100" x2="719.946" y2="924" gradientUnits="userSpaceOnUse">
-<stop stop-color="#F327FF"/>
-<stop offset="1" stop-color="#A61CAE"/>
-</linearGradient>
-<clipPath id="clip0_8_191">
-<rect width="1024" height="1024" fill="white"/>
-</clipPath>
-</defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+    <defs>
+        <mask id="solid" maskUnits="userSpaceOnUse" x="-10000" y="-10000" width="20000" height="20000">
+        <rect x="-10000" y="-10000" width="20000" height="20000" fill="#fff"/>
+        <rect x="84" y="5" width="48" height="48" fill="#000"/>
+        <rect x="124" y="5" width="48" height="48" fill="#000"/>
+        <rect x="164" y="5" width="48" height="48" fill="#000"/>
+        <rect x="204" y="5" width="48" height="48" fill="#000"/>
+        <rect x="44" y="45" width="48" height="48" fill="#000"/>
+        <rect x="84" y="45" width="48" height="48" fill="#000"/>
+        <rect x="124" y="45" width="48" height="48" fill="#000"/>
+        <rect x="164" y="45" width="48" height="48" fill="#000"/>
+        <rect x="204" y="45" width="48" height="48" fill="#000"/>
+        <rect x="84" y="85" width="48" height="48" fill="#000"/>
+        <rect x="124" y="85" width="48" height="48" fill="#000"/>
+        <rect x="164" y="85" width="48" height="48" fill="#000"/>
+        <rect x="204" y="85" width="48" height="48" fill="#000"/>
+        <rect x="124" y="125" width="48" height="48" fill="#000"/>
+        <rect x="164" y="125" width="48" height="48" fill="#000"/>
+        <rect x="204" y="125" width="48" height="48" fill="#000"/>
+        <rect x="164" y="165" width="48" height="48" fill="#000"/>
+        <rect x="204" y="165" width="48" height="48" fill="#000"/>
+        </mask>
+    </defs>
+    <path mask="url(#solid)" fill="#8b7d72" d="M63.176 13 H192.824 Q244 13 244 64.176 V153.824 Q244 205 192.824 205 H131.412 L63.176 243.382 V205 H63.176 Q12 205 12 153.824 V64.176 Q12 13 63.176 13Z"/>
+    <g>
+        <rect x="92" y="13" width="32" height="32" fill="#95877b"/>
+        <rect x="132" y="13" width="32" height="32" fill="#6b5d52"/>
+        <rect x="172" y="13" width="32" height="32" fill="#483c33"/>
+        <rect x="212" y="13" width="32" height="32" fill="#2b221c"/>
+        <rect x="52" y="53" width="32" height="32" fill="#ece5df"/>
+        <rect x="92" y="53" width="32" height="32" fill="#c3b7ad"/>
+        <rect x="132" y="53" width="32" height="32" fill="#95877b"/>
+        <rect x="172" y="53" width="32" height="32" fill="#6b5d52"/>
+        <rect x="212" y="53" width="32" height="32" fill="#483c33"/>
+        <rect x="92" y="93" width="32" height="32" fill="#ece5df"/>
+        <rect x="132" y="93" width="32" height="32" fill="#c3b7ad"/>
+        <rect x="172" y="93" width="32" height="32" fill="#95877b"/>
+        <rect x="212" y="93" width="32" height="32" fill="#6b5d52"/>
+        <rect x="132" y="133" width="32" height="32" fill="#ece5df"/>
+        <rect x="172" y="133" width="32" height="32" fill="#c3b7ad"/>
+        <rect x="212" y="133" width="32" height="32" fill="#95877b"/>
+        <rect x="172" y="173" width="32" height="32" fill="#ece5df"/>
+        <rect x="212" y="173" width="32" height="32" fill="#c3b7ad"/>
+    </g>
 </svg>

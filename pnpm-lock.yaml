@@ -32,6 +32,12 @@ importers:
 
   apps/extension:
     dependencies:
+      '@primer/octicons-react':
+        specifier: ^19.41.0
+        version: 19.41.0(react@19.2.6)
+      '@primer/primitives':
+        specifier: ^11.10.0
+        version: 11.10.0
       '@secureprompt/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -533,6 +539,14 @@ packages:
   '@pnpm/npm-conf@3.0.2':
     resolution: {integrity: sha512-h104Kh26rR8tm+a3Qkc5S4VLYint3FE48as7+/5oCEcKR2idC/pF1G6AhIXKI+eHPJa/3J9i5z0Al47IeGHPkA==}
     engines: {node: '>=12'}
+
+  '@primer/octicons-react@19.41.0':
+    resolution: {integrity: sha512-xCZBbQLQ84L4VuLJWH3OC52AyJg7gdbkhcfunIv428HpXxwGceU3XvEuCbufsoyXN7p0UI5PU5i3Pttob9284g==}
+    peerDependencies:
+      react: '>=16.3'
+
+  '@primer/primitives@11.10.0':
+    resolution: {integrity: sha512-ihZxIst4Izry284StKFjpbYvX6R/IBFTLu+qiuAmR93PsKF2hdjoabhSYwKI8iCxOUx94jVP55bI3NoY7STjYQ==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -2729,6 +2743,12 @@ snapshots:
       '@pnpm/config.env-replace': 1.1.0
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
+
+  '@primer/octicons-react@19.41.0(react@19.2.6)':
+    dependencies:
+      react: 19.2.6
+
+  '@primer/primitives@11.10.0': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 
