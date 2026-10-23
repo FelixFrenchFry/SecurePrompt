@@ -57,35 +57,49 @@ export type LoadedClassifier = {
     padId: bigint;
 };
 
-export const loadClassifier = async (spec: ClassifierSpec, source: ModelSource): Promise<LoadedClassifier> =>
+// the parts of transformers.js' settings that a model source changes
+export type RuntimeSettings = {
+    localModelPath: string;
+    allowLocalModels: boolean;
+    allowRemoteModels: boolean;
+    remoteHost: string;
+    useWasmCache: boolean;
+    backends: { onnx: { wasm?: { wasmPaths?: unknown; numThreads?: number } } };
+};
+
+// applies a model source to transformers.js' global settings, before loading
+export const configureRuntime = (settings: RuntimeSettings, source: ModelSource) =>
 {
     if (source.localModelPath != null)
     {
-        env.localModelPath = source.localModelPath;
+        settings.localModelPath = source.localModelPath;
     }
 
     // without a local path, browsers would first look for model files on the extension's origin
-    env.allowLocalModels = source.localModelPath != null;
-    env.allowRemoteModels = source.allowRemoteModels ?? false;
+    settings.allowLocalModels = source.localModelPath != null;
+    settings.allowRemoteModels = source.allowRemoteModels ?? false;
 
     if (source.remoteHost != null)
     {
-        env.remoteHost = source.remoteHost;
+        settings.remoteHost = source.remoteHost;
     }
 
     if (source.runtimeFiles != null)
     {
-        const wasm = env.backends.onnx.wasm!;
-
-        wasm.wasmPaths = source.runtimeFiles;
+        settings.backends.onnx.wasm!.wasmPaths = source.runtimeFiles;
         // packaged files load directly and need no extra cache copy
-        env.useWasmCache = false;
+        settings.useWasmCache = false;
     }
 
     if (source.threads != null)
     {
-        env.backends.onnx.wasm!.numThreads = source.threads;
+        settings.backends.onnx.wasm!.numThreads = source.threads;
     }
+};
+
+export const loadClassifier = async (spec: ClassifierSpec, source: ModelSource): Promise<LoadedClassifier> =>
+{
+    configureRuntime(env, source);
 
     const shared = {
         revision: spec.revision,

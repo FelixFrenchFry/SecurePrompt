@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { metaspacePieceBytes } from '../../../packages/model-runtime/src/align';
-import { classifyTokens, type ClassifierSpec, type LoadedClassifier } from '../../../packages/model-runtime/src/classifier';
+import {
+    classifyTokens,
+    configureRuntime,
+    type ClassifierSpec,
+    type LoadedClassifier,
+    type RuntimeSettings,
+} from '../../../packages/model-runtime/src/classifier';
 import { PipelineCancelledError } from '../../../packages/core/src/types';
 
 const SPEC: ClassifierSpec = {
@@ -88,5 +94,57 @@ describe('classifyTokens', () =>
         (classifier.tokenizer as unknown as { tokenize: () => string[] }).tokenize = () => ['▁a'];
 
         await expect(classifyTokens('a b', SPEC, classifier)).rejects.toThrow('inconsistent token counts');
+    });
+});
+
+describe('configureRuntime', () =>
+{
+    // transformers.js' defaults, as far as a model source changes them
+    const defaults = (): RuntimeSettings => ({
+        localModelPath: '/models/',
+        allowLocalModels: true,
+        allowRemoteModels: true,
+        remoteHost: 'https://huggingface.co/',
+        useWasmCache: true,
+        backends: { onnx: { wasm: {} } },
+    });
+
+    it('loads from a local folder only, as in tests', () =>
+    {
+        const settings = defaults();
+
+        configureRuntime(settings, { localModelPath: '.models/' });
+
+        expect(settings).toMatchObject({ localModelPath: '.models/', allowLocalModels: true, allowRemoteModels: false });
+    });
+
+    it('downloads without looking on the extension origin first, as in the browser', () =>
+    {
+        const settings = defaults();
+
+        configureRuntime(settings, { allowRemoteModels: true });
+
+        expect(settings).toMatchObject({ allowLocalModels: false, allowRemoteModels: true, remoteHost: 'https://huggingface.co/' });
+    });
+
+    it('uses a mirror, packaged runtime files and a thread count when given', () =>
+    {
+        const settings = defaults();
+        const runtimeFiles = { mjs: 'ort.mjs', wasm: 'ort.wasm' };
+
+        configureRuntime(settings, { allowRemoteModels: true, remoteHost: 'http://127.0.0.1:1/', runtimeFiles, threads: 6 });
+
+        expect(settings).toMatchObject({ remoteHost: 'http://127.0.0.1:1/', useWasmCache: false });
+        expect(settings.backends.onnx.wasm).toEqual({ wasmPaths: runtimeFiles, numThreads: 6 });
+    });
+
+    it('leaves the runtime files, cache and threads alone otherwise', () =>
+    {
+        const settings = defaults();
+
+        configureRuntime(settings, {});
+
+        expect(settings).toMatchObject({ useWasmCache: true, backends: { onnx: { wasm: {} } } });
+        expect(settings.backends.onnx.wasm).toEqual({});
     });
 });
