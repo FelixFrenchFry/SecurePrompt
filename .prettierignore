@@ -10,6 +10,6 @@ build
 *.crx
 *.xpi
 test-files
-# TypeScript uses Allman braces, which Prettier can't produce
 **/*.ts
 **/*.tsx
+**/*.mjs

@@ -24,6 +24,12 @@ export type ModelSource = {
     localModelPath?: string;
     // download from Hugging Face if not local, fetching only model files, never text
     allowRemoteModels?: boolean;
+    // a mirror with the Hugging Face file layout instead of huggingface.co (browser tests)
+    remoteHost?: string;
+    // ONNX runtime files packaged with the extension, instead of the default CDN
+    runtimeFiles?: { mjs: string; wasm: string };
+    // CPU threads for inference in the browser, the runtime's default otherwise
+    threads?: number;
     onProgress?: (progress: { status: string; file?: string; progress?: number }) => void;
 };
 
@@ -58,7 +64,28 @@ export const loadClassifier = async (spec: ClassifierSpec, source: ModelSource):
         env.localModelPath = source.localModelPath;
     }
 
+    // without a local path, browsers would first look for model files on the extension's origin
+    env.allowLocalModels = source.localModelPath != null;
     env.allowRemoteModels = source.allowRemoteModels ?? false;
+
+    if (source.remoteHost != null)
+    {
+        env.remoteHost = source.remoteHost;
+    }
+
+    if (source.runtimeFiles != null)
+    {
+        const wasm = env.backends.onnx.wasm!;
+
+        wasm.wasmPaths = source.runtimeFiles;
+        // packaged files load directly and need no extra cache copy
+        env.useWasmCache = false;
+    }
+
+    if (source.threads != null)
+    {
+        env.backends.onnx.wasm!.numThreads = source.threads;
+    }
 
     const shared = {
         revision: spec.revision,
@@ -151,7 +178,12 @@ export const classifyTokens = async (
     {
         for (let batchStart = 0; batchStart < windows.length; batchStart += batchSize)
         {
-            // batches are the unit of work, so cancelling takes effect within one batch
+            // a pause between batches lets a cancel message arrive, so it takes effect within one batch
+            if (batchStart > 0)
+            {
+                await new Promise((resume) => setTimeout(resume, 0));
+            }
+
             checkCancelled();
 
             const batch = windows.slice(batchStart, batchStart + batchSize);

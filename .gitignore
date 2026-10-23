@@ -20,6 +20,7 @@ build/
 coverage/
 test-results/
 playwright-report/
+.test-browsers/
 
 # logs
 logs/

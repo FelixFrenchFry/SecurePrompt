@@ -45,6 +45,8 @@ export type Detection = Span & {
 // the part of AbortSignal core needs, so it type-checks without DOM or Node types
 export type CancelSignal = {
     readonly aborted: boolean;
+    // lets work in another context, such as the model's page, stop right away
+    addEventListener?: (type: 'abort', listener: () => void, options?: { once?: boolean }) => void;
 };
 
 export type DetectContext = {

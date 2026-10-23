@@ -10,6 +10,13 @@ import {
     type RuntimeMessage,
     type RuntimeResponse,
 } from '../source/messaging';
+import {
+    ENSURE_MODEL_HOST_MESSAGE,
+    ensureModelHost,
+    ModelPermissionError,
+    type EnsureModelHostResponse,
+} from '../source/model/host';
+import { registerModelTestHook } from '../source/model/test-hook';
 
 type ChromeMessageSender = {
     tab?: {
@@ -258,4 +265,29 @@ export default defineBackground(() =>
 
         return false;
     });
+
+    // extension pages ask for the model host here, content scripts get no answer
+    browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
+    {
+        // content scripts send from the chat site's address, never from the extension's
+        const fromExtensionPage = sender.url?.startsWith(browser.runtime.getURL('/')) === true;
+
+        if ((message as { type?: unknown } | null)?.type !== ENSURE_MODEL_HOST_MESSAGE || !fromExtensionPage)
+        {
+            return undefined;
+        }
+
+        void ensureModelHost()
+            .then(() => sendResponse({ ok: true } satisfies EnsureModelHostResponse))
+            .catch((error: unknown) =>
+            {
+                const reason = error instanceof ModelPermissionError ? 'permission' : 'failed';
+
+                sendResponse({ ok: false, reason } satisfies EnsureModelHostResponse);
+            });
+
+        return true;
+    });
+
+    registerModelTestHook();
 });
