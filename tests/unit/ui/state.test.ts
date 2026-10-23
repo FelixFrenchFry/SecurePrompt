@@ -100,6 +100,59 @@ describe('reviewing', () =>
     });
 });
 
+describe('tabs, answer and session', () =>
+{
+    it('switches between the prompt, its review and the answer', () =>
+    {
+        expect(after({ type: 'tabSelected', tab: 'answer' }).view).toBe('answer');
+        expect(after({ type: 'tabSelected', tab: 'answer' }, { type: 'tabSelected', tab: 'prompt' }).view).toBe('prompt');
+        expect(reviewing({ type: 'tabSelected', tab: 'answer' }, { type: 'tabSelected', tab: 'prompt' }).view).toBe('review');
+    });
+
+    it('returns from settings to the answer', () =>
+    {
+        expect(after({ type: 'tabSelected', tab: 'answer' }, { type: 'settingsOpened' }, { type: 'settingsClosed' }).view).toBe('answer');
+    });
+
+    it('keeps the answer and the session size', () =>
+    {
+        const state = after({ type: 'answerChanged', answer: 'Hallo PERSON_001' }, { type: 'sessionChanged', size: 3 });
+
+        expect(state).toMatchObject({ answer: 'Hallo PERSON_001', sessionSize: 3 });
+    });
+
+    it('drops the review and the answer when the session is forgotten', () =>
+    {
+        const forgotten = reviewing({ type: 'answerChanged', answer: 'x' }, { type: 'settingsOpened' }, { type: 'sessionForgotten' });
+
+        expect(forgotten).toMatchObject({ view: 'settings', previousView: 'prompt', answer: '', sessionSize: 0 });
+        expect(forgotten).not.toHaveProperty('review');
+        expect(reviewing({ type: 'sessionForgotten' }).view).toBe('prompt');
+        expect(after({ type: 'tabSelected', tab: 'answer' }, { type: 'settingsOpened' }, { type: 'sessionForgotten' }).previousView).toBe('answer');
+    });
+});
+
+describe('first run', () =>
+{
+    it('shows the offer, follows the download and closes', () =>
+    {
+        const shown = after({ type: 'setupShown' });
+        const downloading = reducer(shown, { type: 'setupChanged', setup: { step: 'download', scan: { step: 'starting' } } });
+        const progressed = reducer(downloading, { type: 'scanProgressed', scan: { step: 'loading' } });
+
+        expect(shown).toMatchObject({ view: 'setup', setup: { step: 'offer' } });
+        expect(progressed.setup).toEqual({ step: 'download', scan: { step: 'loading' } });
+        expect(reducer(shown, { type: 'scanProgressed', scan: { step: 'loading' } })).toBe(shown);
+        expect(reducer(progressed, { type: 'settingsOpened' })).toBe(progressed);
+
+        const closed = reducer(progressed, { type: 'setupClosed' });
+
+        expect(closed.view).toBe('prompt');
+        expect(closed).not.toHaveProperty('setup');
+        expect(reducer(closed, { type: 'setupChanged', setup: { step: 'ready' } })).toBe(closed);
+    });
+});
+
 describe('files', () =>
 {
     const file = { id: 'a', fileName: 'a.txt', format: 'txt', size: 1, text: 'a' } as const;

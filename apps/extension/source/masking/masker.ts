@@ -1,4 +1,15 @@
-import { createSession, maskDetections, runPipeline, type Category, type CancelSignal, type Detection, type Detector, type PipelineResult } from '@secureprompt/core';
+import {
+    createSession,
+    maskDetections,
+    restoreSession,
+    runPipeline,
+    type Category,
+    type CancelSignal,
+    type Detection,
+    type Detector,
+    type PipelineResult,
+    type SessionSnapshot,
+} from '@secureprompt/core';
 
 export type MaskRun = {
     // the text that was masked: the prompt with its files
@@ -27,7 +38,7 @@ export type MaskerOptions = {
 export const createMasker = (options: MaskerOptions) =>
 {
     const { rules, model, now = () => performance.now() } = options;
-    const session = createSession();
+    let session = createSession();
 
     const mask = async (input: string, { useModel, categories, signal, onModelProgress }: MaskOptions): Promise<MaskRun> =>
     {
@@ -63,7 +74,29 @@ export const createMasker = (options: MaskerOptions) =>
 
     const originalFor = (placeholder: string): string | undefined => session.originalFor(placeholder);
 
-    return { mask, addSelection, originalFor };
+    // the session as plain data, only for memory-only storage (chrome.storage.session)
+    const snapshot = (): SessionSnapshot => session.snapshot();
+
+    // continues a stored session, or keeps the current one if the stored data is broken
+    const load = (stored: unknown): boolean =>
+    {
+        try
+        {
+            session = restoreSession(stored as SessionSnapshot);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    };
+
+    const forget = () =>
+    {
+        session = createSession();
+    };
+
+    return { mask, addSelection, originalFor, snapshot, load, forget, size: () => session.placeholders().length };
 };
 
 export type Masker = ReturnType<typeof createMasker>;

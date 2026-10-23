@@ -77,6 +77,26 @@ describe('createMasker', () =>
         expect(run.milliseconds).toBe(250);
     });
 
+    it('continues a stored session, ignores broken data and forgets on request', async () =>
+    {
+        const first = createMasker({ rules, model });
+
+        await first.mask(TEXT, { useModel: true, categories: ALL });
+
+        const reopened = createMasker({ rules, model });
+
+        expect(reopened.load(JSON.parse(JSON.stringify(first.snapshot())))).toBe(true);
+        expect(reopened.size()).toBe(2);
+        expect((await reopened.mask('tom@example.de, Anna Schmidt', { useModel: true, categories: ALL })).result.maskedText).toBe('EMAIL_002, PERSON_001');
+        expect(reopened.load({ entries: 'broken' })).toBe(false);
+        expect(reopened.originalFor('PERSON_001')).toBe('Anna Schmidt');
+
+        reopened.forget();
+
+        expect(reopened.size()).toBe(0);
+        expect(reopened.originalFor('PERSON_001')).toBeUndefined();
+    });
+
     it('adds a selection that wins over detections and keeps earlier selections', async () =>
     {
         const masker = createMasker({ rules, model });

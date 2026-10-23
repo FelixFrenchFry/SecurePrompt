@@ -1,6 +1,7 @@
 import { CATEGORIES } from '@secureprompt/core';
 import type { ExtensionSettings, PromptHeaderMode, ThemeSetting } from '../../settings/types';
 import { CATEGORY_INFO, categoryClass } from '../categories';
+import { Button } from './Button';
 import { Select } from './Select';
 
 const HEADER_MODES: Array<{ mode: PromptHeaderMode; label: string }> = [
@@ -16,7 +17,14 @@ const THEMES: Array<{ theme: ThemeSetting; label: string }> = [
     { theme: 'dark', label: 'Dark' },
 ];
 
-export const SettingsScreen = ({ settings, onChange }: { settings: ExtensionSettings; onChange: (settings: ExtensionSettings) => void }) =>
+type SettingsScreenProps = {
+    settings: ExtensionSettings;
+    sessionSize: number;
+    onChange: (settings: ExtensionSettings) => void;
+    onForget: () => void;
+};
+
+export const SettingsScreen = ({ settings, sessionSize, onChange, onForget }: SettingsScreenProps) =>
 {
     const change = <K extends keyof ExtensionSettings>(key: K, value: ExtensionSettings[K]) => onChange({ ...settings, [key]: value });
 
@@ -91,6 +99,19 @@ export const SettingsScreen = ({ settings, onChange }: { settings: ExtensionSett
                         </option>
                     ))}
                 </Select>
+            </section>
+            <section>
+                <h2 className="section-title">This browser session</h2>
+                <div className="list list-row">
+                    <span className="small muted grow">
+                        {sessionSize === 0
+                            ? 'No masked values kept.'
+                            : `${sessionSize} masked ${sessionSize === 1 ? 'value is' : 'values are'} kept in memory to restore answers, until the browser closes.`}
+                    </span>
+                    <Button small disabled={sessionSize === 0} onClick={onForget}>
+                        Forget now
+                    </Button>
+                </div>
             </section>
         </main>
     );

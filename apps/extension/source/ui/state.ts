@@ -6,7 +6,7 @@ import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings } from '../settings/
 
 // the side panel's state, changed only through the reducer below
 
-export type View = 'prompt' | 'review' | 'settings';
+export type View = 'prompt' | 'review' | 'answer' | 'settings' | 'setup';
 
 export type ModelStatus = 'off' | 'idle' | 'downloading' | 'loading' | 'ready' | 'failed';
 
@@ -28,16 +28,24 @@ export type Review = {
 
 export type ChatTarget = { id: string; label: string };
 
+// the first-run screen: the offer, the model download, and how it ended
+export type Setup = { step: 'offer' | 'denied' | 'ready' | 'failed' } | { step: 'download'; scan: ScanStep };
+
 export type State = {
     view: View;
     // where settings return to
-    previousView: Exclude<View, 'settings'>;
+    previousView: Exclude<View, 'settings' | 'setup'>;
     prompt: string;
     files: AttachedFile[];
     fileError?: string;
     scan?: ScanStep;
     scanError?: string;
     review?: Review;
+    // the pasted AI answer, restored in the Answer tab
+    answer: string;
+    // how many masked values this browser session keeps for restoring
+    sessionSize: number;
+    setup?: Setup;
     model: ModelStatus;
     target?: ChatTarget;
     settings: ExtensionSettings;
@@ -63,11 +71,18 @@ export type Action =
     | { type: 'selectionMasked'; run: MaskRun }
     | { type: 'insertFinished'; ok: boolean; message: string }
     | { type: 'modelChanged'; model: ModelStatus }
-    | { type: 'targetChanged'; target?: ChatTarget };
+    | { type: 'targetChanged'; target?: ChatTarget }
+    | { type: 'tabSelected'; tab: 'prompt' | 'answer' }
+    | { type: 'answerChanged'; answer: string }
+    | { type: 'sessionChanged'; size: number }
+    | { type: 'sessionForgotten' }
+    | { type: 'setupShown' }
+    | { type: 'setupChanged'; setup: Setup }
+    | { type: 'setupClosed' };
 
 export const createInitialState = (settings: ExtensionSettings = DEFAULT_EXTENSION_SETTINGS): State =>
 {
-    return { view: 'prompt', previousView: 'prompt', prompt: '', files: [], model: settings.localModelDetectionEnabled ? 'idle' : 'off', settings };
+    return { view: 'prompt', previousView: 'prompt', prompt: '', files: [], answer: '', sessionSize: 0, model: settings.localModelDetectionEnabled ? 'idle' : 'off', settings };
 };
 
 // a model switched on stays in its last known state, switched off it's 'off'
@@ -107,9 +122,9 @@ export const reducer = (state: State, action: Action): State =>
         case 'settingsChanged':
             return { ...state, settings: action.settings, model: modelFor(action.settings, state.model) };
         case 'settingsOpened':
-            return state.view === 'settings' ? state : { ...state, view: 'settings', previousView: state.view };
+            return state.view === 'settings' || state.view === 'setup' ? state : { ...state, view: 'settings', previousView: state.view };
         case 'settingsClosed':
-            return { ...state, view: state.review == null ? 'prompt' : state.previousView };
+            return { ...state, view: state.previousView === 'review' && state.review == null ? 'prompt' : state.previousView };
         case 'promptChanged':
             return { ...state, prompt: action.prompt };
         case 'filesAdded':
@@ -121,7 +136,13 @@ export const reducer = (state: State, action: Action): State =>
         case 'scanStarted':
             return { ...without(state, 'scanError'), scan: { step: 'starting' } };
         case 'scanProgressed':
-            return state.scan == null ? state : { ...state, scan: action.scan };
+            if (state.scan != null)
+            {
+                return { ...state, scan: action.scan };
+            }
+
+            // the first-run download reports like a scan
+            return state.setup?.step === 'download' ? { ...state, setup: { step: 'download', scan: action.scan } } : state;
         case 'scanFinished':
             return {
                 ...without(state, 'scan'),
@@ -161,6 +182,27 @@ export const reducer = (state: State, action: Action): State =>
             return { ...state, model: state.settings.localModelDetectionEnabled ? action.model : 'off' };
         case 'targetChanged':
             return action.target == null ? without(state, 'target') : { ...state, target: action.target };
+        case 'tabSelected':
+            return { ...state, view: action.tab === 'answer' ? 'answer' : state.review == null ? 'prompt' : 'review' };
+        case 'answerChanged':
+            return { ...state, answer: action.answer };
+        case 'sessionChanged':
+            return { ...state, sessionSize: action.size };
+        case 'sessionForgotten':
+            // a review without its originals can't be checked anymore
+            return {
+                ...without(state, 'review'),
+                answer: '',
+                sessionSize: 0,
+                view: state.view === 'settings' ? 'settings' : 'prompt',
+                previousView: state.previousView === 'answer' ? 'answer' : 'prompt',
+            };
+        case 'setupShown':
+            return { ...state, view: 'setup', setup: { step: 'offer' } };
+        case 'setupChanged':
+            return state.setup == null ? state : { ...state, setup: action.setup };
+        case 'setupClosed':
+            return { ...without(state, 'setup'), view: 'prompt' };
     }
 };
 

@@ -11,7 +11,7 @@ const MODEL_STATUS: Record<ModelStatus, { text: string; tone: string }> = {
     failed: { text: 'Model failed', tone: 'danger' },
 };
 
-export const Header = ({ model, onOpenSettings }: { model: ModelStatus; onOpenSettings: () => void }) =>
+export const Header = ({ model, onOpenSettings }: { model: ModelStatus; onOpenSettings?: (() => void) | undefined }) =>
 {
     const status = MODEL_STATUS[model];
 
@@ -23,7 +23,7 @@ export const Header = ({ model, onOpenSettings }: { model: ModelStatus; onOpenSe
                 <span className={`status-dot status-${status.tone}`} />
                 {status.text}
             </span>
-            <IconButton icon={GearIcon} label="Settings" onClick={onOpenSettings} />
+            {onOpenSettings == null ? null : <IconButton icon={GearIcon} label="Settings" onClick={onOpenSettings} />}
         </header>
     );
 };

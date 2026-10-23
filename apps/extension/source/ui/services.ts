@@ -37,12 +37,28 @@ export const createServices = (listener: ModelListener) =>
         }
     };
 
-    const masker = createMasker({
-        rules: RULE_NAMES.map((name) => RULES[name]),
-        model: createOffscreenDetector({ ensureHost: requestModelHost, onLoading }),
-    });
+    const model = createOffscreenDetector({ ensureHost: requestModelHost, onLoading });
+    const masker = createMasker({ rules: RULE_NAMES.map((name) => RULES[name]), model });
 
-    return { masker };
+    // downloads and loads the model ahead of the first prompt, on a placeholder text
+    const warmUp = async (signal: AbortSignal) =>
+    {
+        await model.detect('SecurePrompt', { signal });
+    };
+
+    return { masker, warmUp };
+};
+
+export const hasModelPermission = async (): Promise<boolean> =>
+{
+    try
+    {
+        return await browser.permissions.contains({ origins: MODEL_HOST_PERMISSIONS });
+    }
+    catch
+    {
+        return false;
+    }
 };
 
 // asks once for the Hugging Face hosts, must run right after a click for Chrome to show the prompt

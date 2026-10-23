@@ -9,6 +9,8 @@ export type EnabledCategories = Record<Category, boolean>;
 export type ExtensionSettings = {
     theme: ThemeSetting;
     localModelDetectionEnabled: boolean;
+    // the first-run choice between downloading the model and rules only was made
+    modelSetupDone: boolean;
     enabledCategories: EnabledCategories;
     promptHeaderMode: PromptHeaderMode;
     customPromptHeader: string;
@@ -30,6 +32,7 @@ export const DEFAULT_ENABLED_CATEGORIES = Object.fromEntries(
 export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
     theme: 'system',
     localModelDetectionEnabled: true,
+    modelSetupDone: false,
     enabledCategories: DEFAULT_ENABLED_CATEGORIES,
     promptHeaderMode: 'basic',
     customPromptHeader: '',
@@ -55,6 +58,7 @@ export const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
         theme: oneOf(stored.theme, ['system', 'light', 'dark'] as const, defaults.theme),
         localModelDetectionEnabled:
             typeof stored.localModelDetectionEnabled === 'boolean' ? stored.localModelDetectionEnabled : defaults.localModelDetectionEnabled,
+        modelSetupDone: typeof stored.modelSetupDone === 'boolean' ? stored.modelSetupDone : defaults.modelSetupDone,
         enabledCategories: normalizeCategories(stored.enabledCategories, defaults.enabledCategories),
         promptHeaderMode: oneOf(stored.promptHeaderMode, ['none', 'basic', 'detailed', 'custom'] as const, defaults.promptHeaderMode),
         customPromptHeader: typeof stored.customPromptHeader === 'string' ? stored.customPromptHeader : defaults.customPromptHeader,

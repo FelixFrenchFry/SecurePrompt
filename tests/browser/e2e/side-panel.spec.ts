@@ -70,3 +70,36 @@ test('masks a prompt in the side panel without leaking it to the network, storag
         expect(consoleMessages.join('\n'), 'console').not.toContain(value);
     }
 });
+
+test('restores an answer after the side panel was closed and opened again', async () =>
+{
+    const { context, worker } = await launchExtension();
+
+    try
+    {
+        const sidePanel = `chrome-extension://${new URL(worker.url()).host}/sidepanel.html`;
+        const first = await context.newPage();
+
+        await first.goto(sidePanel);
+        await first.getByLabel('Prompt').fill(`Schreib ${CANARY.name} unter ${CANARY.email}.`);
+        await first.getByRole('button', { name: 'Mask prompt', exact: true }).click();
+        await expect(first.getByLabel('Masked prompt')).toContainText('PERSON_001', { timeout: 300_000 });
+        await first.close();
+
+        // a new side panel continues the browser session from chrome.storage.session
+        const reopened = await context.newPage();
+
+        await reopened.goto(sidePanel);
+        await reopened.getByRole('button', { name: 'Answer', exact: true }).click();
+        await reopened.getByLabel('AI answer').fill('Hallo PERSON_001, ich schreibe an EMAIL_001. PERSON_009 hilft.');
+
+        const restored = reopened.getByLabel('Answer with originals');
+
+        await expect(restored).toHaveText(`Hallo ${CANARY.name}, ich schreibe an ${CANARY.email}. PERSON_009 hilft.`);
+        await expect(reopened.getByRole('alert')).toContainText('PERSON_009');
+    }
+    finally
+    {
+        await context.close();
+    }
+});

@@ -45,6 +45,47 @@ body {
     padding: 0 16px 16px;
 }
 
+.footer-stack {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+/* Prompt and Answer tabs, Primer's underline navigation */
+
+.tabs {
+    flex: none;
+    display: flex;
+    gap: 8px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--borderColor-default);
+}
+
+.tab {
+    height: 40px;
+    margin-bottom: -1px;
+    padding: 0 8px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--fgColor-default);
+    font: inherit;
+    cursor: pointer;
+}
+
+.tab:hover {
+    border-bottom-color: var(--borderColor-muted);
+}
+
+.tab.is-active {
+    border-bottom-color: var(--underlineNav-borderColor-active);
+    font-weight: var(--base-text-weight-semibold);
+}
+
+.tab:focus-visible {
+    outline: 2px solid var(--focus-outline-color);
+    outline-offset: -2px;
+}
+
 .privacy-note {
     flex: none;
     display: flex;
@@ -321,6 +362,66 @@ body {
 .prompt-input {
     flex: 1;
     resize: none;
+}
+
+.answer-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.answer-input {
+    min-height: 160px;
+    resize: vertical;
+}
+
+/* restored originals in the answer, tinted by category, and placeholders the session doesn't know */
+.restored {
+    padding: 1px 2px;
+    border-radius: var(--sp-radius-chip);
+}
+
+.unknown-placeholder {
+    padding: 1px 4px;
+    border-radius: var(--sp-radius-chip);
+    background: var(--bgColor-attention-muted);
+    color: var(--fgColor-attention);
+    font-family: var(--fontStack-monospace);
+    font-size: var(--text-body-size-small);
+}
+
+/* first run */
+
+.setup-title {
+    margin: 0 0 8px;
+    font-size: 20px;
+    line-height: 1.4;
+    font-weight: var(--base-text-weight-semibold);
+}
+
+.facts {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.facts li {
+    display: flex;
+    gap: 12px;
+}
+
+.facts li svg {
+    flex: none;
+    margin-top: 2px;
+}
+
+.list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 8px 8px 12px;
 }
 
 .custom-header {

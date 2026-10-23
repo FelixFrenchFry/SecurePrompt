@@ -22,6 +22,7 @@ describe('normalizeExtensionSettings', () =>
             theme: 'dark',
             darkModeEnabled: true,
             localModelDetectionEnabled: false,
+            modelSetupDone: true,
             enabledCategories: { DATE: false, OTHER: true, UNKNOWN: true },
             promptHeaderMode: 'custom',
             customPromptHeader: 'Keep placeholders.',
@@ -31,6 +32,7 @@ describe('normalizeExtensionSettings', () =>
         expect(settings).toEqual({
             theme: 'dark',
             localModelDetectionEnabled: false,
+            modelSetupDone: true,
             enabledCategories: { ...DEFAULT_EXTENSION_SETTINGS.enabledCategories, DATE: false, OTHER: true },
             promptHeaderMode: 'custom',
             customPromptHeader: 'Keep placeholders.',
