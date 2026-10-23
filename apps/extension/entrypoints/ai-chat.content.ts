@@ -10,13 +10,14 @@ import {
     type AiChatProviderId,
     getAiChatProviderByUrl,
 } from '../source/chat-targets';
+import { mountLauncher } from '../source/sites/launcher';
+
 const BUTTON_ID = 'secureprompt-open-sidepanel';
 const INSERTION_VERIFICATION_DELAY_MS = 32;
 
 type ChromeRuntimeApi = {
     runtime: {
         id?: string;
-        getURL: (path: string) => string;
         sendMessage: (message: RuntimeMessage) => Promise<unknown> | undefined;
         onMessage: {
             addListener: (
@@ -516,67 +517,13 @@ export default defineContentScript({
             return;
         }
 
-        document.getElementById(BUTTON_ID)?.remove();
-
-        const button = document.createElement('button');
-        button.id = BUTTON_ID;
-        button.type = 'button';
-        button.setAttribute('aria-label', 'Open SecurePrompt');
-
-        const icon = document.createElement('img');
-        icon.src = extensionRuntime.getURL('/icons/logo-32x32.png');
-        icon.alt = '';
-        icon.width = 20;
-        icon.height = 20;
-
-        const label = document.createElement('span');
-        label.textContent = 'SecurePrompt';
-
-        button.append(icon, label);
-
-        Object.assign(button.style, {
-            position: 'fixed',
-            right: '24px',
-            bottom: '24px',
-            zIndex: '2147483647',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            border: '1px solid #243172',
-            borderRadius: '999px',
-            padding: '9px 15px 9px 10px',
-            background: '#243172',
-            color: '#ffffff',
-            boxShadow: '0 10px 26px rgba(36, 49, 114, 0.28)',
-            cursor: 'pointer',
-            font: '600 14px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        mountLauncher({
+            id: BUTTON_ID,
+            onOpen: () =>
+            {
+                void Promise.resolve(extensionRuntime.sendMessage({ type: OPEN_SIDEPANEL_MESSAGE })).catch(() => undefined);
+            },
         });
-
-        Object.assign(icon.style, {
-            display: 'block',
-            borderRadius: '5px',
-        });
-
-        button.addEventListener('click', () =>
-        {
-            void Promise.resolve(
-                extensionRuntime.sendMessage({ type: OPEN_SIDEPANEL_MESSAGE }),
-            ).catch(() => undefined);
-        });
-
-        button.addEventListener('mouseenter', () =>
-        {
-            button.style.background = '#1b2559';
-            button.style.borderColor = '#1b2559';
-        });
-
-        button.addEventListener('mouseleave', () =>
-        {
-            button.style.background = '#243172';
-            button.style.borderColor = '#243172';
-        });
-
-        document.documentElement.append(button);
 
         if (window.__securepromptMessageListenerRegistered !== true)
         {

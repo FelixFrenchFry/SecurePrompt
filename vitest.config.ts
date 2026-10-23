@@ -10,8 +10,14 @@ export default defineConfig({
         ],
         coverage: {
             provider: 'v8',
-            // the packages, and the extension's engine adapter, which runs without a browser
-            include: ['packages/*/src/**/*.ts', 'apps/extension/source/engine/adapter.ts'],
+            // the packages, and the side panel's logic, which runs without a browser
+            include: [
+                'packages/*/src/**/*.ts',
+                'apps/extension/source/masking/*.ts',
+                'apps/extension/source/ui/state.ts',
+                'apps/extension/source/settings/types.ts',
+                'apps/extension/source/model/download-progress.ts',
+            ],
             reporter: ['text', 'html', 'lcov', 'json-summary'],
             reportsDirectory: 'coverage',
             // fail if coverage drops
@@ -19,7 +25,7 @@ export default defineConfig({
                 'packages/core/**': { statements: 98, branches: 95, functions: 100, lines: 98 },
                 // model loading and the detector need the real model files, which CI doesn't have
                 'packages/model-runtime/**': { statements: 90, branches: 84, functions: 80, lines: 90 },
-                'apps/extension/source/engine/**': { statements: 95, branches: 80, functions: 100, lines: 95 },
+                'apps/extension/source/**': { statements: 95, branches: 90, functions: 100, lines: 95 },
             },
         },
     },

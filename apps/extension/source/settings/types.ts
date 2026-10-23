@@ -1,17 +1,15 @@
-import {
-    SENSITIVE_ITEM_CATEGORIES,
-    type SensitiveItemCategory,
-} from '../engine/types';
+import { CATEGORIES, type Category } from '@secureprompt/core';
 
 export type PromptHeaderMode = 'none' | 'basic' | 'detailed' | 'custom';
 
-export type EnabledSensitiveItemCategories = Record<SensitiveItemCategory, boolean>;
+export type ThemeSetting = 'system' | 'light' | 'dark';
+
+export type EnabledCategories = Record<Category, boolean>;
 
 export type ExtensionSettings = {
-    darkModeEnabled: boolean;
-    rulesDetectionEnabled: boolean;
+    theme: ThemeSetting;
     localModelDetectionEnabled: boolean;
-    enabledCategories: EnabledSensitiveItemCategories;
+    enabledCategories: EnabledCategories;
     promptHeaderMode: PromptHeaderMode;
     customPromptHeader: string;
 };
@@ -24,35 +22,65 @@ export const DETAILED_PROMPT_HEADER =
 
 const PROMPT_HEADER_SEPARATOR = '\n\n';
 
-export const DEFAULT_ENABLED_CATEGORIES = SENSITIVE_ITEM_CATEGORIES.reduce(
-    (enabledCategories, category) =>
-    {
-        enabledCategories[category] = true;
-        return enabledCategories;
-    },
-    {} as EnabledSensitiveItemCategories,
-);
+// age, gender, companies and countries are reported but not masked by default
+export const DEFAULT_ENABLED_CATEGORIES = Object.fromEntries(
+    CATEGORIES.map((category) => [category, category !== 'OTHER']),
+) as EnabledCategories;
 
 export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
-    darkModeEnabled: false,
-    rulesDetectionEnabled: true,
+    theme: 'system',
     localModelDetectionEnabled: true,
     enabledCategories: DEFAULT_ENABLED_CATEGORIES,
     promptHeaderMode: 'basic',
     customPromptHeader: '',
 };
 
-export const isSensitiveItemCategoryEnabled = (
-    enabledCategories: EnabledSensitiveItemCategories,
-    category: SensitiveItemCategory,
-) =>
+export const enabledCategorySet = (enabled: EnabledCategories): ReadonlySet<Category> =>
 {
-    return enabledCategories[category];
+    return new Set(CATEGORIES.filter((category) => enabled[category]));
 };
 
-export const getPromptHeaderText = (
-    settings: Pick<ExtensionSettings, 'promptHeaderMode' | 'customPromptHeader'>,
-) =>
+// stored settings from older versions or with unknown values fall back to the defaults
+export const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
+{
+    if (value == null || typeof value !== 'object')
+    {
+        return DEFAULT_EXTENSION_SETTINGS;
+    }
+
+    const stored = value as Partial<Record<keyof ExtensionSettings, unknown>>;
+    const defaults = DEFAULT_EXTENSION_SETTINGS;
+
+    return {
+        theme: oneOf(stored.theme, ['system', 'light', 'dark'] as const, defaults.theme),
+        localModelDetectionEnabled:
+            typeof stored.localModelDetectionEnabled === 'boolean' ? stored.localModelDetectionEnabled : defaults.localModelDetectionEnabled,
+        enabledCategories: normalizeCategories(stored.enabledCategories, defaults.enabledCategories),
+        promptHeaderMode: oneOf(stored.promptHeaderMode, ['none', 'basic', 'detailed', 'custom'] as const, defaults.promptHeaderMode),
+        customPromptHeader: typeof stored.customPromptHeader === 'string' ? stored.customPromptHeader : defaults.customPromptHeader,
+    };
+};
+
+const oneOf = <T extends string>(value: unknown, options: readonly T[], fallback: T): T =>
+{
+    return options.includes(value as T) ? (value as T) : fallback;
+};
+
+const normalizeCategories = (value: unknown, fallback: EnabledCategories): EnabledCategories =>
+{
+    const stored = value != null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+    return Object.fromEntries(
+        CATEGORIES.map((category) =>
+        {
+            const enabled = stored[category];
+
+            return [category, typeof enabled === 'boolean' ? enabled : fallback[category]];
+        }),
+    ) as EnabledCategories;
+};
+
+export const getPromptHeaderText = (settings: Pick<ExtensionSettings, 'promptHeaderMode' | 'customPromptHeader'>) =>
 {
     if (settings.promptHeaderMode === 'basic')
     {
@@ -79,10 +107,5 @@ export const prependPromptHeader = (
 {
     const promptHeader = getPromptHeaderText(settings);
 
-    if (promptHeader.length === 0)
-    {
-        return promptText;
-    }
-
-    return `${promptHeader}${PROMPT_HEADER_SEPARATOR}${promptText}`;
+    return promptHeader.length === 0 ? promptText : `${promptHeader}${PROMPT_HEADER_SEPARATOR}${promptText}`;
 };

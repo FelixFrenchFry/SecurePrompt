@@ -33,10 +33,10 @@ test('masks a prompt in the side panel without leaking it to the network, storag
         await page.locator('textarea').first().fill(
             `Bitte leite das an ${CANARY.name} weiter, erreichbar unter ${CANARY.email} oder ${CANARY.phone}. Überweisung auf ${CANARY.iban}.`,
         );
-        await page.getByRole('button', { name: 'Privatize', exact: true }).click();
+        await page.getByRole('button', { name: 'Mask prompt', exact: true }).click();
 
-        // the preview shows the masked prompt once the model has run
-        const preview = page.locator('.preview-mask').first().locator('..');
+        // the review shows the masked prompt once the model has run
+        const preview = page.getByLabel('Masked prompt');
 
         await expect(preview).toContainText('PERSON_001', { timeout: 300_000 });
         output = await preview.innerText();

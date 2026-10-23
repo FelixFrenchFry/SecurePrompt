@@ -55,11 +55,6 @@ export default defineConfig({
         cross_origin_embedder_policy: { value: 'require-corp' },
         cross_origin_opener_policy: { value: 'same-origin' },
         optional_host_permissions: MODEL_HOST_PERMISSIONS,
-        web_accessible_resources: [
-            {
-                resources: ['icons/logo-32x32.png'],
-                matches: AI_CHAT_MATCHES,
-            },
-        ],
+        // no web-accessible files, which sites could probe to tell the extension is installed
     },
 });

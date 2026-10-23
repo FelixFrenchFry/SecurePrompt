@@ -1,5 +1,7 @@
 /* GitHub's design tokens (Primer Primitives), active on pages whose root element has
    data-color-mode="auto" data-light-theme="light" data-dark-theme="dark", following the system theme */
+@import '@primer/primitives/dist/css/base/typography/typography.css';
+@import '@primer/primitives/dist/css/base/size/size.css';
 @import '@primer/primitives/dist/css/functional/themes/light.css';
 @import '@primer/primitives/dist/css/functional/themes/dark.css';
 @import '@primer/primitives/dist/css/functional/typography/typography.css';

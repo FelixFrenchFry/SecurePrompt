@@ -58,14 +58,14 @@ describe('manifest', () =>
         expect(JSON.stringify(manifest)).not.toMatch(/<all_urls>|\*:\/\/\*\/|https?:\/\/\*\//);
     });
 
-    it('runs content scripts and shares resources only on the chat sites', () =>
+    it('runs content scripts only on the chat sites and shares no files with web pages', () =>
     {
         for (const script of manifest.content_scripts)
         {
             expect([...script.matches].sort()).toEqual([...CHAT_SITES].sort());
         }
 
-        expect(manifest.web_accessible_resources).toEqual([{ resources: ['icons/logo-32x32.png'], matches: CHAT_SITES }]);
+        expect(manifest).not.toHaveProperty('web_accessible_resources');
         expect(manifest).not.toHaveProperty('externally_connectable');
     });
 
