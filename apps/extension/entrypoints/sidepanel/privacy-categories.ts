@@ -9,7 +9,7 @@ import {
     Phone,
     UserRound,
 } from 'lucide-react';
-import type { SensitiveItemCategory } from '../../source/privacy';
+import type { SensitiveItemCategory } from '../../source/engine';
 
 export type PrivacyScanCategory = {
     category: SensitiveItemCategory;

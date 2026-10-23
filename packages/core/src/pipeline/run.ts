@@ -67,6 +67,42 @@ const extendOverGluedDigits = (text: string, detections: readonly Detection[]): 
     });
 };
 
+// the steps after detection, shared by runPipeline and maskDetections
+const createMasking = (text: string, session: MaskSession, enabledCategories: ReadonlySet<Category>) =>
+{
+    const reserved = findReservedPlaceholders(text);
+    const protectedRanges = findProtectedRanges(text, session);
+
+    // protect, extend over glued digits, resolve overlaps, propagate to other mentions
+    const prepare = (detections: readonly Detection[]) =>
+    {
+        const kept = extendOverGluedDigits(text, excludeProtected(text, detections, protectedRanges));
+
+        return propagateMentions(text, resolveOverlaps(kept), protectedRanges);
+    };
+
+    const merge = (found: ReadonlyArray<readonly Detection[]>) => mergeDetections(text, found, enabledCategories);
+
+    const render = (detections: readonly Detection[], failedDetectors: readonly string[]): PipelineResult =>
+    {
+        const spans = assignPlaceholders(text, detections, session, reserved);
+
+        return { ...renderMaskedText(text, spans), spans, failedDetectors: [...failedDetectors] };
+    };
+
+    return { reserved, prepare, merge, render };
+};
+
+export type MaskOptions = Pick<PipelineOptions, 'session' | 'enabledCategories' | 'manualDetections'>;
+
+// masks detections that are already known, such as an earlier result with a manual selection added
+export const maskDetections = (text: string, detections: readonly Detection[], options: MaskOptions): PipelineResult =>
+{
+    const masking = createMasking(text, options.session, options.enabledCategories ?? ALL_CATEGORIES);
+
+    return masking.render(masking.prepare(masking.merge([detections, options.manualDetections ?? []])), []);
+};
+
 export const runPipeline = async (text: string, options: PipelineOptions): Promise<PipelineResult> =>
 {
     const { detectors, session, timing, signal, onProgress } = options;
@@ -84,8 +120,7 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
 
     checkCancelled();
 
-    const reserved = findReservedPlaceholders(text);
-    const protectedRanges = findProtectedRanges(text, session);
+    const masking = createMasking(text, session, enabledCategories);
 
     const timed = async <T>(stage: PipelineStage, run: () => T | Promise<T>): Promise<T> =>
     {
@@ -145,18 +180,8 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
         return found;
     };
 
-    const prepare = (detections: readonly Detection[]) =>
-    {
-        const kept = extendOverGluedDigits(text, excludeProtected(text, detections, protectedRanges));
-
-        return propagateMentions(text, resolveOverlaps(kept), protectedRanges);
-    };
-
     const found = await timed('detect', () => detectAll(text, 'detect'));
-    let detections = await timed('prepare', () =>
-    {
-        return prepare(mergeDetections(text, [...found, options.manualDetections ?? []], enabledCategories));
-    });
+    let detections = await timed('prepare', () => masking.prepare(masking.merge([...found, options.manualDetections ?? []])));
 
     for (let pass = 0; pass < residualPasses && detections.length > 0; pass += 1)
     {
@@ -164,7 +189,7 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
         const trialSession = session.fork();
         const trial = await timed('residualMap', () =>
         {
-            return renderMaskedText(text, assignPlaceholders(text, detections, trialSession, reserved));
+            return renderMaskedText(text, assignPlaceholders(text, detections, trialSession, masking.reserved));
         });
         const residualFound = await timed('residualDetect', () => detectAll(trial.maskedText, 'residualDetect'));
         const additions = await timed('residualMap', () =>
@@ -192,17 +217,8 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
 
         const current = detections;
 
-        detections = await timed('prepare', () => prepare([...current, ...additions]));
+        detections = await timed('prepare', () => masking.prepare([...current, ...additions]));
     }
 
-    return timed('render', () =>
-    {
-        const spans = assignPlaceholders(text, detections, session, reserved);
-
-        return {
-            ...renderMaskedText(text, spans),
-            spans,
-            failedDetectors: [...failedDetectors],
-        };
-    });
+    return timed('render', () => masking.render(detections, [...failedDetectors]));
 };

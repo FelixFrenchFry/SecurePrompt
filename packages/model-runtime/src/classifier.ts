@@ -30,7 +30,8 @@ export type ModelSource = {
     runtimeFiles?: { mjs: string; wasm: string };
     // CPU threads for inference in the browser, the runtime's default otherwise
     threads?: number;
-    onProgress?: (progress: { status: string; file?: string; progress?: number }) => void;
+    // per file while downloading, with its bytes so far and in total
+    onProgress?: (progress: { status: string; file?: string; progress?: number; loaded?: number; total?: number }) => void;
 };
 
 export type ClassifierSpec = {

@@ -2,7 +2,7 @@ import { browser } from 'wxt/browser';
 import {
     SENSITIVE_ITEM_CATEGORIES,
     type SensitiveItemCategory,
-} from '../privacy/types';
+} from '../engine/types';
 import {
     DEFAULT_EXTENSION_SETTINGS,
     type EnabledSensitiveItemCategories,

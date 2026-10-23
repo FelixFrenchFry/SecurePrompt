@@ -63,7 +63,7 @@ import {
     type PrivatizedPromptSegment,
     type PrivatizedPromptResult,
     type SensitiveItemCategory,
-} from '../../source/privacy';
+} from '../../source/engine';
 import {
     loadExtensionSettings,
     saveExtensionSettings,

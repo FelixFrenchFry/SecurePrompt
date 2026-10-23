@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { restorePlaceholders } from '../../packages/core/src/pipeline/restore';
-import { runPipeline, type PipelineProgress } from '../../packages/core/src/pipeline/run';
+import { maskDetections, runPipeline, type PipelineProgress } from '../../packages/core/src/pipeline/run';
 import { createSession } from '../../packages/core/src/session';
 import { PipelineCancelledError, type Detector } from '../../packages/core/src/types';
 import { detectionOf, fakeDetector } from '../support/detections';
@@ -262,5 +262,30 @@ describe('cancellation', () =>
         await expect(runPipeline('Anna', { detectors: [stopping], session, signal: controller.signal }))
             .rejects.toBeInstanceOf(PipelineCancelledError);
         expect(session.placeholders()).toEqual([]);
+    });
+});
+
+describe('maskDetections', () =>
+{
+    it('masks known detections like the pipeline without a second pass', async () =>
+    {
+        const text = 'Claudia Neumann (claudia@example.de) kündigt. Frau Neumann bleibt, PERSON_001 ist ein Logwert.';
+        const detector = fakeDetector([['Claudia Neumann', 'PERSON'], ['claudia@example.de', 'EMAIL']]);
+        const piped = await runPipeline(text, { detectors: [detector], session: createSession(), residualPasses: 0 });
+        const masked = maskDetections(text, await detector.detect(text), { session: createSession() });
+
+        expect(masked).toEqual(piped);
+    });
+
+    it('lets manual selections win and skips disabled categories', () =>
+    {
+        const text = 'Bestellung bei Bäckerei Hoffmann, Mail a@b.de';
+        const masked = maskDetections(text, [detectionOf(text, 'Hoffmann', 'PERSON'), detectionOf(text, 'a@b.de', 'EMAIL')], {
+            session: createSession(),
+            enabledCategories: new Set(['OTHER', 'PERSON']),
+            manualDetections: [detectionOf(text, 'Bäckerei Hoffmann', 'OTHER', { source: 'manual' })],
+        });
+
+        expect(masked.maskedText).toBe('Bestellung bei OTHER_001, Mail a@b.de');
     });
 });

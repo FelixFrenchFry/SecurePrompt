@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type {
     PrivacyBenchmarkStage,
     SensitiveItemCategory,
-} from '../../source/privacy';
+} from '../../source/engine';
 
 export type CategoryColors = {
     // icon, strong border, and active state color

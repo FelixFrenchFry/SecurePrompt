@@ -5,7 +5,7 @@ import {
     Moon,
     ShieldCheck,
 } from 'lucide-react';
-import type { SensitiveItemCategory } from '../../source/privacy';
+import type { SensitiveItemCategory } from '../../source/engine';
 import {
     getPromptHeaderText,
     isSensitiveItemCategoryEnabled,

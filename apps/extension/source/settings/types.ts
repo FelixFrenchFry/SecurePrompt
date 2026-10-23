@@ -1,7 +1,7 @@
 import {
     SENSITIVE_ITEM_CATEGORIES,
     type SensitiveItemCategory,
-} from '../privacy/types';
+} from '../engine/types';
 
 export type PromptHeaderMode = 'none' | 'basic' | 'detailed' | 'custom';
 

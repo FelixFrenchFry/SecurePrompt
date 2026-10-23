@@ -18,7 +18,7 @@ export type ModelRequest =
 // detections carry positions and categories only, never the text they point to
 export type ModelEvent =
     | { type: 'ready'; crossOriginIsolated: boolean; cores: number }
-    | { type: 'loading'; status: string; file?: string; progress?: number }
+    | { type: 'loading'; status: string; file?: string; progress?: number; loaded?: number; total?: number }
     | { type: 'progress'; id: number; fraction: number }
     | { type: 'result'; id: number; detections: Detection[] }
     | { type: 'failed'; id: number; reason: 'cancelled' | 'error' };

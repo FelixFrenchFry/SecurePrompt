@@ -58,7 +58,8 @@ export default defineConfig({
         },
         // offscreen hosts the model in a hidden extension page
         permissions: ['sidePanel', 'clipboardWrite', 'storage', 'offscreen'],
-        host_permissions: AI_CHAT_MATCHES,
+        // test builds hold the model hosts from the start, as tests can't confirm a permission prompt
+        host_permissions: testBuild ? [...AI_CHAT_MATCHES, ...MODEL_HOST_PERMISSIONS] : AI_CHAT_MATCHES,
         content_security_policy: {
             extension_pages:
                 "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';",

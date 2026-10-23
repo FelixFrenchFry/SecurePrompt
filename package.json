@@ -17,7 +17,8 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "test:install-browser": "node scripts/install-test-browser.mjs",
-        "test:browser": "playwright test"
+        "test:browser": "playwright test",
+        "test:package": "pnpm build && vitest run --project package"
     },
     "devEngines": {
         "packageManager": {

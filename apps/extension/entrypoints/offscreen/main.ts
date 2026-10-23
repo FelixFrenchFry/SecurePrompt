@@ -29,13 +29,15 @@ const detector = createBardsaiDetector({
         mjs: runtimeFile('ort-wasm-simd-threaded.asyncify.mjs'),
         wasm: runtimeFile('ort-wasm-simd-threaded.asyncify.wasm'),
     },
-    onProgress: ({ status, file, progress }) =>
+    onProgress: ({ status, file, progress, loaded, total }) =>
     {
         broadcast({
             type: 'loading',
             status,
             ...(file == null ? {} : { file }),
             ...(progress == null ? {} : { progress }),
+            ...(loaded == null ? {} : { loaded }),
+            ...(total == null ? {} : { total }),
         });
     },
 });

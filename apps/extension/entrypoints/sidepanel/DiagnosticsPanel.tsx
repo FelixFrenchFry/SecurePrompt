@@ -5,7 +5,7 @@ import {
 import type {
     PrivacyBenchmark,
     PrivacyBenchmarkStage,
-} from '../../source/privacy';
+} from '../../source/engine';
 import { getBenchmarkStageColorStyle } from './theme';
 
 type DiagnosticsPanelProps = {
