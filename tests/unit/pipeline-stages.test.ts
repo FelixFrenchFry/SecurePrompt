@@ -357,3 +357,21 @@ describe('propagate: terms starting with an emoji', () =>
         expect(result.length).toBeGreaterThan(0);
     });
 });
+
+describe('propagate: shorter terms where the longest one is rejected', () =>
+{
+    it.each([
+        ['genitive of the full name', 'Claudia Neumann ruft an. Später: Claudia Neumanns Antrag.', ['Claudia']],
+        ['digit glued to the surname', 'Claudia Neumann ruft an. Claudia Neumann2 und Claudia.', ['Claudia', 'Claudia']],
+        ['surname with a suffix after the first name', 'Anna Berg kam. Dann Anna Bergmann.', ['Anna']],
+        ['the detected mention itself stays one span', 'Claudia Neumann ruft an.', []],
+    ])('%s', (_name, text, expected) =>
+    {
+        const detected = text.split(' ').slice(0, 2).join(' ');
+        const masked = propagateMentions(text, [detectionOf(text, detected, 'PERSON', { source: 'model' })])
+            .filter((detection) => detection.source === 'propagated')
+            .map((detection) => text.slice(detection.start, detection.end));
+
+        expect(masked).toEqual(expected);
+    });
+});

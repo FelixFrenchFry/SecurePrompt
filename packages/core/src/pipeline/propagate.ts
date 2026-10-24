@@ -90,73 +90,99 @@ export const propagateMentions = (
             .join('|'),
         'giu',
     );
+    // distinct term lengths, longest first, for retrying shorter terms at a rejected position
+    const lengths = [...new Set([...terms.values()].map((term) => term.value.length))].sort((left, right) => right - left);
     const blocked: Span[] = [...detections, ...protectedRanges];
     const added: Detection[] = [];
     const replaced = new Set<Span>();
 
-    // a skipped match retries one character on, so a shorter term inside it still matches
+    // the pattern finds the longest term at a position; if it's rejected, shorter terms starting
+    // there are tried ("Claudia" in "Claudia Neumanns"), then the search moves one character on,
+    // so a shorter term inside still matches
     for (let match = pattern.exec(text); match != null; match = pattern.exec(text))
     {
         const start = match.index;
-        const end = start + match[0].length;
 
         // skip whole surrogate pairs, the u flag would rewind lastIndex and loop on emoji
         pattern.lastIndex = start + (text.codePointAt(start)! > 0xffff ? 2 : 1);
 
-        const term = terms.get(termKey(match[0], true)) ?? terms.get(termKey(match[0], false));
-
-        if (
-            term == null ||
-            !isWholeWord(text, start, end) ||
-            (term.requiresUppercase && !STARTS_UPPERCASE.test(match[0]))
-        )
+        for (const length of lengths)
         {
-            continue;
+            if (length > match[0].length)
+            {
+                continue;
+            }
+
+            const detection = mentionAt(text, start, start + length, terms, blocked, replaced);
+
+            if (detection != null)
+            {
+                added.push(detection);
+                blocked.push(detection);
+                pattern.lastIndex = detection.end;
+                break;
+            }
         }
-
-        const span = { start, end };
-        const overlapping = blocked.filter((range) => !replaced.has(range) && overlaps(range, span));
-
-        // a partly tagged mention takes the full term, anything else in the way keeps priority
-        const replaceable = overlapping.every((range) =>
-        {
-            return (
-                isDetection(range) &&
-                range.category === term.category &&
-                range.source !== 'manual' &&
-                range.start >= start &&
-                range.end <= end &&
-                range.end - range.start < end - start
-            );
-        });
-
-        if (!replaceable)
-        {
-            continue;
-        }
-
-        for (const range of overlapping)
-        {
-            replaced.add(range);
-        }
-
-        const detection: Detection = {
-            start,
-            end,
-            category: term.category,
-            source: 'propagated',
-            detector: 'propagate',
-            score: term.score,
-            validated: false,
-            ...(term.aliasOf == null ? {} : { aliasOf: term.aliasOf }),
-        };
-
-        added.push(detection);
-        blocked.push(detection);
-        pattern.lastIndex = end;
     }
 
     return [...detections, ...added].filter((detection) => !replaced.has(detection)).sort(compareSpans);
+};
+
+// the propagated detection for text[start, end) if a term fits there, marking the partial
+// detections it replaces; null if no term fits or something else has priority
+const mentionAt = (
+    text: string,
+    start: number,
+    end: number,
+    terms: ReadonlyMap<string, Term>,
+    blocked: readonly Span[],
+    replaced: Set<Span>,
+): Detection | null =>
+{
+    const value = text.slice(start, end);
+    const term = terms.get(termKey(value, true)) ?? terms.get(termKey(value, false));
+
+    if (term == null || !isWholeWord(text, start, end) || (term.requiresUppercase && !STARTS_UPPERCASE.test(value)))
+    {
+        return null;
+    }
+
+    const span = { start, end };
+    const overlapping = blocked.filter((range) => !replaced.has(range) && overlaps(range, span));
+
+    // a partly tagged mention takes the full term, anything else in the way keeps priority
+    const replaceable = overlapping.every((range) =>
+    {
+        return (
+            isDetection(range) &&
+            range.category === term.category &&
+            range.source !== 'manual' &&
+            range.start >= start &&
+            range.end <= end &&
+            range.end - range.start < end - start
+        );
+    });
+
+    if (!replaceable)
+    {
+        return null;
+    }
+
+    for (const range of overlapping)
+    {
+        replaced.add(range);
+    }
+
+    return {
+        start,
+        end,
+        category: term.category,
+        source: 'propagated',
+        detector: 'propagate',
+        score: term.score,
+        validated: false,
+        ...(term.aliasOf == null ? {} : { aliasOf: term.aliasOf }),
+    };
 };
 
 const collectTerms = (text: string, detections: readonly Detection[]): Map<string, Term> =>
