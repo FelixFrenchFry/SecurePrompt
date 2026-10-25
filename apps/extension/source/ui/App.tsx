@@ -1,3 +1,4 @@
+import { ArrowRightIcon } from '@primer/octicons-react';
 import { PipelineCancelledError, type Category, type Span } from '@secureprompt/core';
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { browser } from 'wxt/browser';
@@ -356,6 +357,7 @@ export const App = () =>
                         <span className="grow">When {waitingFor.sentTo} answers, unmask the answer on the Answer page.</span>
                         <Button small onClick={() => dispatch({ type: 'pageSelected', page: 'answer' })}>
                             Go to Answer
+                            <ArrowRightIcon size={16} className="button-icon" />
                         </Button>
                     </div>
                 ) : null}
