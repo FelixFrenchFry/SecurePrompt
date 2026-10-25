@@ -12,6 +12,8 @@ const CHAT_SITES = [
     'https://gemini.google.com/*',
     'https://perplexity.ai/*',
     'https://www.perplexity.ai/*',
+    'https://chat.mistral.ai/*',
+    'https://grok.com/*',
 ];
 
 const read = (file: string) =>
@@ -46,7 +48,7 @@ describe('manifest', () =>
 
     it('asks only for the intended permissions', () =>
     {
-        expect(manifest.permissions).toEqual(['sidePanel', 'clipboardWrite', 'storage', 'offscreen']);
+        expect(manifest.permissions).toEqual(['sidePanel', 'clipboardWrite', 'storage', 'offscreen', 'favicon']);
         expect(manifest.optional_permissions ?? []).toEqual([]);
         expect(manifest.host_permissions).toEqual(CHAT_SITES);
         expect(manifest.optional_host_permissions).toEqual([

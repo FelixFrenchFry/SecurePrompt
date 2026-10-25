@@ -2,8 +2,8 @@ import type { Icon } from '@primer/octicons-react';
 import type { ButtonHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-    // primary is green for Mask, brand taupe for Unmask
-    variant?: 'default' | 'primary' | 'brand' | 'invisible';
+    // primary is the logo's taupe, for the main action of each place
+    variant?: 'default' | 'primary' | 'invisible';
     small?: boolean;
     icon?: Icon;
 };

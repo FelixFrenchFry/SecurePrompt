@@ -146,19 +146,11 @@ body {
     color: var(--fgColor-default);
 }
 
-/* the selected page in its action's color: green like Mask, taupe like Unmask */
+/* the selected page in the logo's taupe, like the main buttons */
 .segment.is-active {
-    color: #ffffff;
-}
-
-.segment-prompt.is-active {
-    border-color: var(--button-primary-borderColor-rest);
-    background: var(--button-primary-bgColor-rest);
-}
-
-.segment-answer.is-active {
     border-color: var(--button-primary-borderColor-rest);
     background: var(--sp-brand);
+    color: #ffffff;
 }
 
 /* Primer's CounterLabel: gray on the plain half, translucent white on the colored one */
@@ -548,11 +540,12 @@ body {
     cursor: pointer;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled, [aria-disabled='true']) {
     background: var(--button-default-bgColor-hover);
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled='true'] {
     cursor: not-allowed;
     color: var(--fgColor-disabled);
     background: var(--button-default-bgColor-disabled);
@@ -562,40 +555,23 @@ body {
     color: var(--fgColor-muted);
 }
 
+/* the main action of each place (Mask, Insert, Unmask, Copy) in the logo's taupe */
 .button-primary {
     border-color: var(--button-primary-borderColor-rest);
-    background: var(--button-primary-bgColor-rest);
-    color: var(--button-primary-fgColor-rest);
+    background: var(--sp-brand);
+    color: #ffffff;
 }
 
 .button-primary .button-icon {
     color: inherit;
 }
 
-.button-primary:hover:not(:disabled) {
-    background: var(--button-primary-bgColor-hover);
-}
-
-.button-primary:disabled {
-    color: var(--button-primary-fgColor-disabled);
-    background: var(--button-primary-bgColor-disabled);
-}
-
-.button-brand {
-    border-color: var(--button-primary-borderColor-rest);
-    background: var(--sp-brand);
-    color: #ffffff;
-}
-
-.button-brand .button-icon {
-    color: inherit;
-}
-
-.button-brand:hover:not(:disabled) {
+.button-primary:hover:not(:disabled, [aria-disabled='true']) {
     background: var(--sp-brand-hover);
 }
 
-.button-brand:disabled {
+.button-primary:disabled,
+.button-primary[aria-disabled='true'] {
     color: #ffffff;
     background: var(--sp-brand);
     opacity: 0.5;
@@ -931,13 +907,11 @@ body {
     padding-left: 8px;
 }
 
-.target-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 8px;
-    font-size: var(--text-body-size-small);
-    white-space: nowrap;
+.site-icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--sp-radius-chip);
 }
 
 .site-badge {

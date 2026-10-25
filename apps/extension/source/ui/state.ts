@@ -46,7 +46,8 @@ export type AnswerEntry = {
 
 export type Entry = PromptEntry | AnswerEntry;
 
-export type ChatTarget = { id: string; label: string };
+// pageUrl is the chat tab's address, only for its favicon
+export type ChatTarget = { id: string; label: string; pageUrl?: string };
 
 // the first-run screen: the offer, the model download, and how it ended
 export type Setup = { step: 'offer' | 'denied' | 'ready' | 'failed' } | { step: 'download'; scan: ScanStep };

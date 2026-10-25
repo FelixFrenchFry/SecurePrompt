@@ -77,14 +77,31 @@ export const requestModelPermission = async (): Promise<boolean> =>
 // the chat page a response names, even a failed one ("Refresh ChatGPT and try again")
 const toTarget = (response: RuntimeResponse | undefined): ChatTarget | undefined =>
 {
-    return response?.provider != null && response.providerLabel != null ? { id: response.provider, label: response.providerLabel } : undefined;
+    return response?.provider != null && response.providerLabel != null
+        ? { id: response.provider, label: response.providerLabel, ...(response.pageUrl == null ? {} : { pageUrl: response.pageUrl }) }
+        : undefined;
+};
+
+// the window this side panel lives in, so the chat target follows its tabs, not the last focused window
+const panelWindow = async (): Promise<{ windowId?: number }> =>
+{
+    try
+    {
+        const { id } = await browser.windows.getCurrent();
+
+        return id == null ? {} : { windowId: id };
+    }
+    catch
+    {
+        return {};
+    }
 };
 
 export const requestChatTarget = async (): Promise<ChatTarget | undefined> =>
 {
     try
     {
-        return toTarget((await browser.runtime.sendMessage({ type: GET_CHAT_TARGET_MESSAGE })) as RuntimeResponse | undefined);
+        return toTarget((await browser.runtime.sendMessage({ type: GET_CHAT_TARGET_MESSAGE, ...(await panelWindow()) })) as RuntimeResponse | undefined);
     }
     catch
     {
@@ -98,7 +115,7 @@ export const insertIntoChat = async (text: string): Promise<InsertResult> =>
 {
     try
     {
-        const response = (await browser.runtime.sendMessage({ type: INJECT_PROMPT_MESSAGE, text })) as RuntimeResponse | undefined;
+        const response = (await browser.runtime.sendMessage({ type: INJECT_PROMPT_MESSAGE, text, ...(await panelWindow()) })) as RuntimeResponse | undefined;
         const target = toTarget(response);
         const message =
             response?.ok === true

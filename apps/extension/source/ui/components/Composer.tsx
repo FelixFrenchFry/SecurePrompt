@@ -2,7 +2,7 @@ import { FileIcon, PaperclipIcon, XIcon } from '@primer/octicons-react';
 import { useRef } from 'react';
 import { formatTextFileSize, SUPPORTED_TEXT_FILE_ACCEPT } from '../../documents/extract-text-file';
 import type { AttachedFile } from '../../masking/compose';
-import type { ChatTarget, ScanStep } from '../state';
+import type { ScanStep } from '../state';
 import { Button, IconButton } from './Button';
 import { ScanProgress } from './ScanProgress';
 
@@ -10,7 +10,6 @@ type ComposerProps = {
     prompt: string;
     files: AttachedFile[];
     scan: ScanStep | undefined;
-    target: ChatTarget | undefined;
     // placeholders of this session in the text, a sign the user pasted an AI answer here
     knownPlaceholders: number;
     onPromptChange: (prompt: string) => void;
@@ -22,32 +21,10 @@ type ComposerProps = {
     onCancel: () => void;
 };
 
-// the chat page the prompt goes to, or a hint to open one
-const TargetChip = ({ target }: { target: ChatTarget | undefined }) =>
-{
-    if (target == null)
-    {
-        return (
-            <span className="target-chip muted" data-tooltip="Open ChatGPT, Claude, Gemini or Perplexity to insert prompts there. Copying works anytime.">
-                No chat open
-            </span>
-        );
-    }
-
-    return (
-        <span className="target-chip" data-tooltip={`Goes to ${target.label} in the open tab`}>
-            <span className="site-badge" aria-hidden="true">
-                {target.label.charAt(0)}
-            </span>
-            {target.label}
-        </span>
-    );
-};
-
-// the prompt input: text, files, the chat site and Mask
+// the prompt input: text, files and Mask
 export const Composer = (props: ComposerProps) =>
 {
-    const { prompt, files, scan, target, knownPlaceholders } = props;
+    const { prompt, files, scan, knownPlaceholders } = props;
     const fileInput = useRef<HTMLInputElement>(null);
     const scanning = scan != null;
     const hasInput = prompt.trim().length > 0 || files.some((file) => file.text.trim().length > 0);
@@ -96,9 +73,7 @@ export const Composer = (props: ComposerProps) =>
                             <Button small variant="invisible" data-tooltip={`${knownPlaceholders} ${knownPlaceholders === 1 ? 'placeholder' : 'placeholders'} from this session`} onClick={props.onMoveToAnswer}>
                                 Looks like an answer, unmask it
                             </Button>
-                        ) : (
-                            <TargetChip target={target} />
-                        )}
+                        ) : null}
                         <span className="grow" />
                         <Button small variant="primary" disabled={!hasInput} data-tooltip="Mask (Ctrl+Enter)" onClick={props.onMask}>
                             Mask

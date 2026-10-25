@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import {
+    AI_CHAT_SITE_NAMES,
     getAiChatProviderByUrl,
     type AiChatProvider,
 } from '../source/chat-targets';
@@ -44,77 +45,38 @@ const chromeRuntime = (globalThis as typeof globalThis & { chrome: ChromeRuntime
 
 export default defineBackground(() =>
 {
-    let lastAiChatTabId: number | undefined;
-
     const getChatProvider = (url: string | undefined) =>
     {
         return getAiChatProviderByUrl(url);
     };
 
-    const getTab = async (tabId: number | undefined) =>
+    // only the active tab of the side panel's window counts (the last focused one without it), so prompts
+    // never go to a chat the user can't see
+    const findTargetAiChatTab = async (windowId: unknown) =>
     {
-        if (tabId == null)
-        {
-            return undefined;
-        }
-
-        try
-        {
-            return await browser.tabs.get(tabId);
-        }
-        catch
-        {
-            return undefined;
-        }
-    };
-
-    const findTargetAiChatTab = async () =>
-    {
-        const [activeTab] = await browser.tabs.query({
-            active: true,
-            lastFocusedWindow: true,
-        });
+        const [activeTab] = await browser.tabs.query(
+            typeof windowId === 'number' ? { active: true, windowId } : { active: true, lastFocusedWindow: true },
+        );
         const activeProvider = getChatProvider(activeTab?.url);
 
-        if (activeTab?.id != null && activeProvider != null)
+        if (activeTab?.id == null || activeProvider == null)
         {
-            lastAiChatTabId = activeTab.id;
-            return {
-                tab: activeTab,
-                provider: activeProvider,
-            };
+            return undefined;
         }
 
-        const previousTab = await getTab(lastAiChatTabId);
-        const previousProvider = getChatProvider(previousTab?.url);
-
-        if (previousTab?.id != null && previousProvider != null)
-        {
-            return {
-                tab: previousTab,
-                provider: previousProvider,
-            };
-        }
-
-        return undefined;
+        return {
+            tab: activeTab,
+            provider: activeProvider,
+        };
     };
 
-    const rememberAiChatTab = (tabId: number | undefined, url: string | undefined) =>
-    {
-        if (tabId != null && getChatProvider(url) != null)
-        {
-            lastAiChatTabId = tabId;
-        }
-    };
-
-    const openSidePanelForTab = async (tabId: number | undefined, url: string | undefined) =>
+    const openSidePanelForTab = async (tabId: number | undefined) =>
     {
         if (tabId == null || browser.sidePanel?.open == null)
         {
             return;
         }
 
-        rememberAiChatTab(tabId, url);
         await browser.sidePanel.open({ tabId });
     };
 
@@ -140,6 +102,21 @@ export default defineBackground(() =>
             error:
                 'The AI chat page did not confirm the prompt insertion. Refresh the page and try again.',
         };
+    };
+
+    // the tab's address for its favicon, without query or hash
+    const pageUrlOf = (url: string | undefined): Pick<RuntimeResponse, 'pageUrl'> =>
+    {
+        try
+        {
+            const { origin, pathname } = new URL(url ?? '');
+
+            return { pageUrl: `${origin}${pathname}` };
+        }
+        catch
+        {
+            return {};
+        }
     };
 
     const withProvider = (
@@ -181,30 +158,30 @@ export default defineBackground(() =>
         }
     };
 
-    const injectPromptIntoActiveTab = async (text: string): Promise<RuntimeResponse> =>
+    const injectPromptIntoActiveTab = async (text: string, windowId: unknown): Promise<RuntimeResponse> =>
     {
-        const target = await findTargetAiChatTab();
+        const target = await findTargetAiChatTab(windowId);
 
         if (target?.tab.id == null)
         {
             return {
                 ok: false,
-                error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
+                error: `Switch to a ${AI_CHAT_SITE_NAMES} tab to insert.`,
             };
         }
 
-        return sendPromptToTab(target.tab.id, target.provider, text);
+        return { ...(await sendPromptToTab(target.tab.id, target.provider, text)), ...pageUrlOf(target.tab.url) };
     };
 
-    const getCurrentChatTarget = async (): Promise<RuntimeResponse> =>
+    const getCurrentChatTarget = async (windowId: unknown): Promise<RuntimeResponse> =>
     {
-        const target = await findTargetAiChatTab();
+        const target = await findTargetAiChatTab(windowId);
 
         if (target?.tab.id == null)
         {
             return {
                 ok: false,
-                error: 'Open ChatGPT, Claude, Gemini, or Perplexity before sending.',
+                error: `Switch to a ${AI_CHAT_SITE_NAMES} tab to insert.`,
             };
         }
 
@@ -212,6 +189,7 @@ export default defineBackground(() =>
             ok: true,
             provider: target.provider.id,
             providerLabel: target.provider.label,
+            ...pageUrlOf(target.tab.url),
         };
     };
 
@@ -223,14 +201,14 @@ export default defineBackground(() =>
 
     browser.action.onClicked.addListener((tab) =>
     {
-        void openSidePanelForTab(tab.id, tab.url).catch(() => undefined);
+        void openSidePanelForTab(tab.id).catch(() => undefined);
     });
 
     chromeRuntime.onMessage.addListener((message, sender, sendResponse) =>
     {
         if (message.type === INJECT_PROMPT_MESSAGE && typeof message.text === 'string')
         {
-            void injectPromptIntoActiveTab(message.text)
+            void injectPromptIntoActiveTab(message.text, message.windowId)
                 .then(sendResponse)
                 .catch(() =>
                 {
@@ -245,7 +223,7 @@ export default defineBackground(() =>
 
         if (message.type === GET_CHAT_TARGET_MESSAGE)
         {
-            void getCurrentChatTarget()
+            void getCurrentChatTarget(message.windowId)
                 .then(sendResponse)
                 .catch(() =>
                 {
@@ -260,7 +238,7 @@ export default defineBackground(() =>
 
         if (message.type === OPEN_SIDEPANEL_MESSAGE)
         {
-            void openSidePanelForTab(sender.tab?.id, sender.tab?.url).catch(() => undefined);
+            void openSidePanelForTab(sender.tab?.id).catch(() => undefined);
         }
 
         return false;

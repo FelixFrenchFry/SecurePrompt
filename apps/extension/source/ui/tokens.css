@@ -11,7 +11,7 @@
 
 /* SecurePrompt's own tokens, taken from Primer's except the logo's brand color */
 :root {
-    /* the logo's darker taupe, for Unmask and the Answer page, readable with white text in both themes */
+    /* the logo's darker taupe, for main buttons and the selected page, readable with white text in both themes */
     --sp-brand: #6b5d52;
     --sp-brand-hover: color-mix(in srgb, var(--sp-brand) 85%, var(--fgColor-default));
 

@@ -43,8 +43,8 @@ export default defineConfig({
                 128: '/icons/logo-128x128.png',
             },
         },
-        // offscreen hosts the model in a hidden extension page
-        permissions: ['sidePanel', 'clipboardWrite', 'storage', 'offscreen'],
+        // offscreen hosts the model in a hidden extension page, favicon reads chat-site icons from Chrome's local cache
+        permissions: ['sidePanel', 'clipboardWrite', 'storage', 'offscreen', 'favicon'],
         // test builds hold the model hosts from the start, as tests can't confirm a permission prompt
         host_permissions: testBuild ? [...AI_CHAT_MATCHES, ...MODEL_HOST_PERMISSIONS] : AI_CHAT_MATCHES,
         content_security_policy: {

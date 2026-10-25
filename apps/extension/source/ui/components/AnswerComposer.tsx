@@ -35,7 +35,7 @@ export const AnswerComposer = ({ text, knownPlaceholders, onTextChange, onUnmask
                 <span className="small muted grow">
                     {!hasText ? '' : knownPlaceholders === 0 ? 'No placeholders from this session' : `${knownPlaceholders} ${knownPlaceholders === 1 ? 'placeholder' : 'placeholders'} to unmask`}
                 </span>
-                <Button small variant="brand" disabled={!hasText} data-tooltip="Unmask (Ctrl+Enter)" onClick={onUnmask}>
+                <Button small variant="primary" disabled={!hasText} data-tooltip="Unmask (Ctrl+Enter)" onClick={onUnmask}>
                     Unmask
                 </Button>
             </div>

@@ -74,7 +74,7 @@ export const AnswerCard = ({ entry, parts, onToggle, onCopy }: AnswerCardProps) 
                     onClick={onToggle}
                 />
                 <span className="grow" />
-                <Button small variant="brand" icon={copied ? CheckIcon : CopyIcon} onClick={copy}>
+                <Button small variant="primary" icon={copied ? CheckIcon : CopyIcon} onClick={copy}>
                     {copied ? 'Copied' : 'Copy with originals'}
                 </Button>
             </div>

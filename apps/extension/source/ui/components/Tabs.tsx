@@ -7,7 +7,7 @@ const PAGES: Array<{ page: Page; label: string; icon: Icon; counted: [string, st
 ];
 
 // Primer's segmented control between masking prompts and unmasking answers; the selected half
-// takes its page's button color, green like Mask or taupe like Unmask
+// takes the logo's taupe, like the main buttons
 export const Tabs = ({ active, counts, onSelect }: { active: Page; counts: Record<Page, number>; onSelect: (page: Page) => void }) =>
 {
     return (
@@ -17,7 +17,7 @@ export const Tabs = ({ active, counts, onSelect }: { active: Page; counts: Recor
                     <button
                         key={page}
                         type="button"
-                        className={`segment segment-${page}${page === active ? ' is-active' : ''}`}
+                        className={`segment${page === active ? ' is-active' : ''}`}
                         aria-current={page === active ? 'page' : undefined}
                         data-tooltip={`${counts[page]} ${counts[page] === 1 ? counted[0] : counted[1]} in this session`}
                         onClick={() => onSelect(page)}

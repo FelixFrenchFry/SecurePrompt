@@ -1,6 +1,8 @@
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon, PaperAirplaneIcon, PencilIcon, ShieldCheckIcon } from '@primer/octicons-react';
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon, PencilIcon, ShieldCheckIcon } from '@primer/octicons-react';
+import { SiteIcon } from './SiteIcon';
 import type { Category, Span } from '@secureprompt/core';
 import { useState } from 'react';
+import { AI_CHAT_SITE_NAMES } from '../../chat-targets';
 import { categoryCounts, excerptOf, outputText, placeholderDetails, type OutputPart } from '../../masking/output';
 import type { ChatTarget, PromptEntry } from '../state';
 import { Button, IconButton } from './Button';
@@ -144,9 +146,22 @@ export const PromptCard = (props: PromptCardProps) =>
                     />
                 ) : null}
                 <span className="grow" />
-                <Button small variant={sentTo == null ? 'primary' : 'default'} icon={PaperAirplaneIcon} disabled={target == null} onClick={props.onInsert}>
-                    {target == null ? 'Insert into chat' : `${sentTo == null ? 'Insert into' : 'Insert again into'} ${target.label}`}
-                </Button>
+                {target == null ? (
+                    // aria-disabled instead of disabled, so the tooltip explains how to enable it
+                    <Button
+                        small
+                        variant={sentTo == null ? 'primary' : 'default'}
+                        aria-disabled="true"
+                        data-tooltip={`Switch to a ${AI_CHAT_SITE_NAMES} tab to insert. Copying works anytime.`}
+                    >
+                        Insert into chat
+                    </Button>
+                ) : (
+                    <Button small variant={sentTo == null ? 'primary' : 'default'} onClick={props.onInsert}>
+                        {`${sentTo == null ? 'Insert into' : 'Insert again into'} ${target.label}`}
+                        <SiteIcon target={target} />
+                    </Button>
+                )}
             </div>
         </section>
     );

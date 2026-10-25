@@ -376,7 +376,6 @@ export const App = () =>
                             prompt={state.prompt}
                             files={state.files}
                             scan={state.scan}
-                            target={state.target}
                             knownPlaceholders={knownPlaceholders}
                             onPromptChange={(prompt) => dispatch({ type: 'promptChanged', prompt })}
                             onAddFiles={(files) => void addFiles(files)}
