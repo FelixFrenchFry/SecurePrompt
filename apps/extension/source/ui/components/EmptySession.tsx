@@ -1,5 +1,6 @@
 import type { Category } from '@secureprompt/core';
-import { categoryClass } from '../categories';
+import { categoryColor } from '../categories';
+import { CategoryIcon } from './CategoryIcon';
 
 // example text: plain strings, and masked values shown as placeholder or original
 type ExamplePart = string | { category: Category; placeholder: string; original: string };
@@ -19,14 +20,17 @@ const Example = ({ parts, rows }: { parts: ExamplePart[]; rows: Array<{ label: s
                             {
                                 return part;
                             }
-                            const color = categoryClass(part.category);
                             return masked ? (
-                                <span key={index} className={`placeholder example-placeholder ${color}`}>
+                                <span key={index} className="placeholder example-placeholder">
+                                    <CategoryIcon category={part.category} />
                                     {part.placeholder}
                                 </span>
                             ) : (
-                                <mark key={index} className={`restored ${color}`}>
-                                    {part.original}
+                                <mark key={index} className="restored">
+                                    <CategoryIcon category={part.category} />
+                                    <span className="restored-text" style={{ textDecorationColor: categoryColor(part.category) }}>
+                                        {part.original}
+                                    </span>
                                 </mark>
                             );
                         })}

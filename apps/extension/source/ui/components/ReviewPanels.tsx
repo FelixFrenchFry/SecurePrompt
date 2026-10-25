@@ -2,8 +2,9 @@ import { ArrowLeftIcon, CheckIcon, CopyIcon, EyeClosedIcon, EyeIcon, TagIcon, XI
 import type { Category } from '@secureprompt/core';
 import { useState } from 'react';
 import type { PlaceholderDetails } from '../../masking/output';
-import { CATEGORY_INFO, categoryClass } from '../categories';
+import { CATEGORY_INFO, placeholderLabel } from '../categories';
 import { Button, IconButton } from './Button';
+import { CategoryIcon } from './CategoryIcon';
 import { Select } from './Select';
 import { useCopied } from './useCopied';
 
@@ -52,13 +53,20 @@ export const PlaceholderPanel = ({ details, original, revealed, categories, onTo
 {
     const [picking, setPicking] = useState(false);
     const { copied, onCopy: copy } = useCopied(onCopy);
-    const facts = [CATEGORY_INFO[details.category].label, sourceText(details), details.mentions > 1 ? `${details.mentions} mentions` : undefined].filter(Boolean);
+    const facts = [placeholderLabel(details.category, details.placeholder), sourceText(details), details.mentions > 1 ? `${details.mentions} mentions` : undefined].filter(Boolean);
 
     return (
         <div className="menu">
             <div className="menu-head">
                 <div className="menu-title">{original}</div>
-                <div className="small muted">{facts.join(' · ')}</div>
+                <div className="menu-facts small muted">
+                    <CategoryIcon category={details.category} />
+                    {facts.join(' · ')}
+                </div>
+                <div className="small muted">
+                    {revealed ? 'Sent as is, instead of ' : 'Sent as '}
+                    <span className="mono">{details.placeholder}</span>
+                </div>
             </div>
             <div className="menu-divider" />
             {picking ? (
@@ -68,10 +76,11 @@ export const PlaceholderPanel = ({ details, original, revealed, categories, onTo
                         <button
                             key={category}
                             type="button"
-                            className={`label category-button ${categoryClass(category)}${category === details.category ? ' is-current' : ''}`}
+                            className={`label category-button${category === details.category ? ' is-current' : ''}`}
                             aria-pressed={category === details.category}
                             onClick={() => (category === details.category ? setPicking(false) : onChangeCategory(category))}
                         >
+                            <CategoryIcon category={category} />
                             {CATEGORY_INFO[category].label}
                         </button>
                     ))}

@@ -415,7 +415,9 @@ body {
     line-height: 18px;
 }
 
-.example-placeholder {
+/* a placeholder as the AI writes it: a mask label showing the raw placeholder */
+.placeholder.example-placeholder {
+    font-family: var(--fontStack-monospace);
     cursor: default;
 }
 
@@ -726,11 +728,38 @@ body {
     font-size: var(--text-body-size-small);
 }
 
-/* restored originals in the answer, tinted by category, and placeholders the session doesn't know */
+/* visible originals, as plain text so they don't look masked: the category's icon, then the value underlined in the
+   category's color (set inline). Restored values in answers get a solid line, values sent as is a dashed one (.revealed) */
 .restored {
-    padding: 1px 2px;
-    border-radius: var(--sp-radius-chip);
+    background: transparent;
+    color: inherit;
 }
+
+.restored,
+.revealed {
+    /* no line break between the icon and the value; the value itself still wraps */
+    white-space: nowrap;
+}
+
+.restored .category-icon,
+.revealed .category-icon {
+    margin-right: 3px;
+    vertical-align: -2px;
+}
+
+.restored-text,
+.revealed-text {
+    white-space: pre-wrap;
+    text-decoration-line: underline;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 4px;
+}
+
+.revealed-text {
+    text-decoration-style: dashed;
+}
+
+/* placeholders the session doesn't know */
 
 .unknown-placeholder {
     padding: 1px 4px;
@@ -938,20 +967,45 @@ body {
 
 /* review */
 
-.label {
+/* masks and category labels: neutral gray, with the category's colored icon */
+.label,
+.placeholder {
     display: inline-flex;
     align-items: center;
-    padding: 0 6px;
-    border: 1px solid;
-    border-radius: var(--sp-radius-chip);
+    gap: 4px;
+    box-sizing: border-box;
+    height: 20px;
+    margin: 0;
+    padding: 0 7px 0 5px;
+    border: 1px solid var(--sp-mask-border);
+    border-radius: var(--sp-radius);
+    background: var(--sp-mask-bg);
+    color: var(--fgColor-default);
+    font: inherit;
     font-size: var(--text-body-size-small);
-    line-height: 18px;
+    font-weight: var(--base-text-weight-medium);
+    line-height: 1;
+    white-space: nowrap;
+    /* centered on the capital letters around it (measured with Mona Sans at 14px) */
+    vertical-align: -2px;
 }
 
-.label-fixed {
+/* a category's name with its icon, as in the settings list */
+.category-name {
     flex: none;
-    justify-content: center;
-    width: 64px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: 96px;
+    font-weight: var(--base-text-weight-medium);
+}
+
+.list-item:has(input:not(:checked)) .category-name {
+    color: var(--fgColor-muted);
+}
+
+.list-item:has(input:not(:checked)) .category-icon {
+    color: var(--fgColor-muted);
 }
 
 .preview {
@@ -963,34 +1017,21 @@ body {
     overflow-wrap: anywhere;
 }
 
-.placeholder {
-    margin: 0;
-    padding: 0 4px;
-    border: 1px solid;
-    border-radius: var(--sp-radius-chip);
-    font-family: var(--fontStack-monospace);
-    /* as tall as the text around it: monospace capitals are shorter at the same size
-       (Consolas 0.64 vs Segoe UI 0.70 of the font size), so scale them to the system font's */
-    font-size: inherit;
-    font-size-adjust: cap-height 0.7;
-    line-height: 18px;
+.preview .placeholder {
     cursor: pointer;
 }
 
-.preview .placeholder.is-selected {
-    outline: 2px solid var(--fgColor-accent);
-    outline-offset: 1px;
+.preview .placeholder:hover {
+    border-color: var(--sp-mask-border-hover);
 }
 
+/* every mention of the placeholder whose details are open */
+.preview .placeholder.is-selected {
+    border-color: var(--sp-mask-border-open);
+}
+
+/* a value the user chose to send as is (styled with .restored above), inline so it never changes the line height */
 .revealed {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-decoration: underline dashed var(--fgColor-attention);
-    text-underline-offset: 4px;
     cursor: pointer;
 }
 
@@ -1047,13 +1088,21 @@ body {
 
 .category-button {
     cursor: pointer;
-    font: inherit;
-    font-size: var(--text-body-size-small);
+}
+
+.category-button:hover {
+    border-color: var(--sp-mask-border-hover);
 }
 
 .category-button.is-current {
-    outline: 2px solid var(--fgColor-accent);
-    outline-offset: 1px;
+    border-color: var(--sp-mask-border-open);
+}
+
+/* the placeholder's name and what the chat page gets, under the original */
+.menu-facts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .stack {
@@ -1244,58 +1293,44 @@ input[type='radio']:focus-visible {
     }
 }
 
-/* category colors for placeholders and labels */
+/* category icons: the only place a category's color shows */
+
+.category-icon {
+    flex: none;
+}
 
 .category-email {
-    color: var(--sp-email-fg);
-    background: var(--sp-email-bg);
-    border-color: var(--sp-email-border);
+    color: var(--sp-email);
 }
 
 .category-phone {
-    color: var(--sp-phone-fg);
-    background: var(--sp-phone-bg);
-    border-color: var(--sp-phone-border);
+    color: var(--sp-phone);
 }
 
 .category-person {
-    color: var(--sp-person-fg);
-    background: var(--sp-person-bg);
-    border-color: var(--sp-person-border);
+    color: var(--sp-person);
 }
 
 .category-address {
-    color: var(--sp-address-fg);
-    background: var(--sp-address-bg);
-    border-color: var(--sp-address-border);
+    color: var(--sp-address);
 }
 
 .category-account {
-    color: var(--sp-account-fg);
-    background: var(--sp-account-bg);
-    border-color: var(--sp-account-border);
+    color: var(--sp-account);
 }
 
 .category-date {
-    color: var(--sp-date-fg);
-    background: var(--sp-date-bg);
-    border-color: var(--sp-date-border);
+    color: var(--sp-date);
 }
 
 .category-network {
-    color: var(--sp-network-fg);
-    background: var(--sp-network-bg);
-    border-color: var(--sp-network-border);
+    color: var(--sp-network);
 }
 
 .category-secret {
-    color: var(--sp-secret-fg);
-    background: var(--sp-secret-bg);
-    border-color: var(--sp-secret-border);
+    color: var(--sp-secret);
 }
 
 .category-other {
-    color: var(--sp-other-fg);
-    background: var(--sp-other-bg);
-    border-color: var(--sp-other-border);
+    color: var(--sp-other);
 }

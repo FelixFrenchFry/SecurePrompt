@@ -1,7 +1,8 @@
 import { CATEGORIES } from '@secureprompt/core';
 import type { ExtensionSettings, PromptHeaderMode, ThemeSetting } from '../../settings/types';
-import { CATEGORY_INFO, categoryClass } from '../categories';
+import { CATEGORY_INFO } from '../categories';
 import { Button } from './Button';
+import { CategoryIcon } from './CategoryIcon';
 import { Select } from './Select';
 
 const HEADER_MODES: Array<{ mode: PromptHeaderMode; label: string }> = [
@@ -40,12 +41,14 @@ export const SettingsScreen = ({ settings, sessionSize, onChange, onForget }: Se
                                 checked={settings.enabledCategories[category]}
                                 onChange={(event) => change('enabledCategories', { ...settings.enabledCategories, [category]: event.target.checked })}
                             />
-                            <span className={`label label-fixed ${categoryClass(category)}`}>{CATEGORY_INFO[category].label}</span>
+                            <span className="category-name">
+                                <CategoryIcon category={category} size={16} />
+                                {CATEGORY_INFO[category].label}
+                            </span>
                             <span className="small muted">{CATEGORY_INFO[category].description}</span>
                         </label>
                     ))}
                 </div>
-                <p className="small muted">Titles like "Herr" and vague times like "morgen" always stay readable.</p>
             </section>
             <section>
                 <h2 className="section-title">Detection</h2>

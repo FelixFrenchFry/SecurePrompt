@@ -1,7 +1,8 @@
 import type { Span } from '@secureprompt/core';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { excerptOf, type OutputPart } from '../../masking/output';
-import { categoryClass } from '../categories';
+import { categoryColor, placeholderLabel } from '../categories';
+import { CategoryIcon } from './CategoryIcon';
 import type { Anchor } from './Popover';
 
 type MaskedPreviewProps = {
@@ -116,17 +117,30 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
 
                     if (part.kind === 'revealed')
                     {
+                        // an inline span, not a <button>: a button is a box taller than the text and pushes the lines apart
                         return (
-                            <button
+                            <span
                                 key={index}
-                                type="button"
+                                role="button"
+                                tabIndex={0}
                                 className="revealed"
-                                data-tooltip={`${part.placeholder}, sent as is`}
+                                data-tooltip={`${placeholderLabel(part.category, part.placeholder)}, sent as is`}
                                 aria-expanded={isOpen}
                                 onClick={() => onSelectPlaceholder(part.placeholder, index)}
+                                onKeyDown={(event) =>
+                                {
+                                    if (event.key === 'Enter' || event.key === ' ')
+                                    {
+                                        event.preventDefault();
+                                        onSelectPlaceholder(part.placeholder, index);
+                                    }
+                                }}
                             >
-                                {part.text}
-                            </button>
+                                <CategoryIcon category={part.category} />
+                                <span className="revealed-text" style={{ textDecorationColor: categoryColor(part.category) }}>
+                                    {part.text}
+                                </span>
+                            </span>
                         );
                     }
 
@@ -134,13 +148,16 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
                         <button
                             key={index}
                             type="button"
-                            className={`placeholder ${categoryClass(part.category)}${part.placeholder === selected ? ' is-selected' : ''}`}
+                            className={`placeholder${part.placeholder === selected ? ' is-selected' : ''}`}
+                            // copying the preview copies the placeholder itself, see copy.ts
+                            data-placeholder={part.placeholder}
                             // the hidden value at a glance, on one line; it stays in the side panel like the input
                             data-tooltip={excerptOf(part.text.replace(/\s+/g, ' ').trim())}
                             aria-expanded={isOpen}
                             onClick={() => onSelectPlaceholder(part.placeholder, index)}
                         >
-                            {part.placeholder}
+                            <CategoryIcon category={part.category} />
+                            {placeholderLabel(part.category, part.placeholder)}
                         </button>
                     );
                 })}

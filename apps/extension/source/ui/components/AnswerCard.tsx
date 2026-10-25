@@ -1,8 +1,9 @@
 import { CheckIcon, CopyIcon, EyeClosedIcon, EyeIcon, ReplyIcon } from '@primer/octicons-react';
 import type { AnswerPart } from '../../masking/restore';
-import { categoryClass } from '../categories';
+import { categoryColor } from '../categories';
 import type { AnswerEntry } from '../state';
 import { Button, IconButton } from './Button';
+import { CategoryIcon } from './CategoryIcon';
 import { Flash } from './Flash';
 import { useCopied } from './useCopied';
 
@@ -48,8 +49,11 @@ export const AnswerCard = ({ entry, parts, onToggle, onCopy }: AnswerCardProps) 
                           }
 
                           return (
-                              <mark key={index} className={`restored ${categoryClass(part.category)}`} data-tooltip={part.placeholder}>
-                                  {part.text}
+                              <mark key={index} className="restored" data-tooltip={part.placeholder}>
+                                  <CategoryIcon category={part.category} />
+                                  <span className="restored-text" style={{ textDecorationColor: categoryColor(part.category) }}>
+                                      {part.text}
+                                  </span>
                               </mark>
                           );
                       })}

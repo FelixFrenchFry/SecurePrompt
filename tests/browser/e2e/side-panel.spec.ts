@@ -13,12 +13,22 @@ const CANARY = {
     iban: 'DE89 3704 0044 0532 0130 00',
 };
 
+// the page's copy API, typed as far as the copy check needs it, as the tests compile without DOM types
+type CopyTarget = { dispatchEvent: (event: unknown) => boolean };
+type CopyPage = {
+    document: { getSelection: () => { selectAllChildren: (node: CopyTarget) => void } | null };
+    DataTransfer: new () => { getData: (format: string) => string };
+    ClipboardEvent: new (type: string, init: { clipboardData: unknown; bubbles: boolean; cancelable: boolean }) => unknown;
+};
+
 test('masks a prompt in the side panel without leaking it to the network, storage or console', async ({}, testInfo) =>
 {
     const netLog = testInfo.outputPath('net-log.json');
     const { context, worker } = await launchExtension(netLog);
     const consoleMessages: string[] = [];
     let output = '';
+    let copied = '';
+    let copiedPage = '';
     let stored = '';
 
     context.on('console', (message) => consoleMessages.push(message.text()));
@@ -38,8 +48,23 @@ test('masks a prompt in the side panel without leaking it to the network, storag
         // the review shows the masked prompt once the model has run
         const preview = page.getByLabel('Masked prompt');
 
-        await expect(preview).toContainText('PERSON_001', { timeout: 300_000 });
+        await expect(preview).toContainText('Person 1', { timeout: 300_000 });
         output = await preview.innerText();
+
+        // copying gives what the chat page gets: placeholders, not labels, from the preview and from the whole page (Ctrl+A)
+        const copy = (element: CopyTarget) =>
+        {
+            const { document, DataTransfer, ClipboardEvent } = globalThis as unknown as CopyPage;
+            const data = new DataTransfer();
+
+            document.getSelection()?.selectAllChildren(element);
+            element.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
+
+            return data.getData('text/plain');
+        };
+
+        copied = await preview.evaluate(copy);
+        copiedPage = await page.locator('body').evaluate(copy);
 
         // persistent storage must hold no prompt text, chrome.storage.session may hold mappings
         stored = JSON.stringify(
@@ -59,11 +84,16 @@ test('masks a prompt in the side panel without leaking it to the network, storag
 
     const traffic = readFileSync(netLog, 'utf8') + readFileSync(process.env.SECUREPROMPT_MIRROR_LOG!, 'utf8');
 
-    expect(output).toMatch(/PERSON_001.*EMAIL_001.*PHONE_001.*ACCOUNT_001/s);
+    expect(output).toMatch(/Person 1.*Email 1.*Phone 1.*Account 1/s);
+    expect(copied).toMatch(/PERSON_001.*EMAIL_001.*PHONE_001.*ACCOUNT_001/s);
+    expect(copied).not.toContain('Person 1');
+    expect(copiedPage).toMatch(/PERSON_001.*EMAIL_001.*PHONE_001.*ACCOUNT_001/s);
+    expect(copiedPage).not.toContain('Person 1');
 
     for (const value of Object.values(CANARY))
     {
         expect(output, 'masked output').not.toContain(value);
+        expect(copied, 'copied output').not.toContain(value);
         expect(traffic, 'network').not.toContain(value);
         expect(traffic, 'network').not.toContain(encodeURIComponent(value));
         expect(stored, 'persistent storage').not.toContain(value);
@@ -83,7 +113,7 @@ test('restores an answer after the side panel was closed and opened again', asyn
         await first.goto(sidePanel);
         await first.getByLabel('Prompt', { exact: true }).fill(`Schreib ${CANARY.name} unter ${CANARY.email}.`);
         await first.getByRole('button', { name: 'Mask', exact: true }).click();
-        await expect(first.getByLabel('Masked prompt')).toContainText('PERSON_001', { timeout: 300_000 });
+        await expect(first.getByLabel('Masked prompt')).toContainText('Person 1', { timeout: 300_000 });
         await first.close();
 
         // a new side panel continues the browser session from chrome.storage.session

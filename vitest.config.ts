@@ -15,6 +15,7 @@ export default defineConfig({
                 'packages/*/src/**/*.ts',
                 'apps/extension/source/masking/*.ts',
                 'apps/extension/source/ui/state.ts',
+                'apps/extension/source/ui/categories.ts',
                 'apps/extension/source/settings/types.ts',
                 'apps/extension/source/model/download-progress.ts',
                 'apps/extension/source/sites/composer-text.ts',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../../source/ui/App';
+import { initializeCopy } from '../../source/ui/copy';
 import { initializeTooltips } from '../../source/ui/tooltip';
 import '../../source/ui/tokens.css';
 import '../../source/ui/app.css';
@@ -13,6 +14,7 @@ if (root == null)
 }
 
 initializeTooltips();
+initializeCopy();
 createRoot(root).render(
     <React.StrictMode>
         <App />
