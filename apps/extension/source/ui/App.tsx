@@ -4,20 +4,27 @@ import { browser } from 'wxt/browser';
 import { extractTextFile } from '../documents/extract-text-file';
 import { composeInput, type AttachedFile } from '../masking/compose';
 import { outputParts, outputText, trimSelection } from '../masking/output';
-import { answerParts, restoredText } from '../masking/restore';
+import { answerParts, knownPlaceholderCount, restoredText } from '../masking/restore';
 import { loadExtensionSettings, saveExtensionSettings } from '../settings/storage';
 import { enabledCategorySet, prependPromptHeader, type ExtensionSettings } from '../settings/types';
-import { AnswerScreen } from './components/AnswerScreen';
+import { AnswerCard } from './components/AnswerCard';
+import { AnswerComposer } from './components/AnswerComposer';
+import { Composer } from './components/Composer';
+import { EmptyAnswers, EmptyPrompts } from './components/EmptySession';
+import { Button } from './components/Button';
+import { Flash } from './components/Flash';
 import { Header, SettingsHeader } from './components/Header';
 import { PrivacyNote } from './components/PrivacyNote';
-import { PromptScreen } from './components/PromptScreen';
-import { ReviewScreen } from './components/ReviewScreen';
+import { PromptCard } from './components/PromptCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { Tabs } from './components/Tabs';
 import { copyText, createServices, hasModelPermission, insertIntoChat, requestChatTarget, requestModelPermission } from './services';
 import { clearStoredSession, loadStoredSession, storeSession } from './session-storage';
-import { createInitialState, reducer, selectableCategories, type ModelNote } from './state';
+import { awaitingAnswer, createInitialState, editBlocker, reducer, selectableCategories, type ModelNote, type PromptEntry } from './state';
+
+// the reviewed output of a prompt entry, with the values the user chose to send as written
+const partsOf = (entry: PromptEntry) => outputParts(entry.run.input, entry.run.result, new Set(entry.revealed));
 
 export const App = () =>
 {
@@ -29,9 +36,14 @@ export const App = () =>
     const running = useRef<AbortController | undefined>(undefined);
     // masking waits for the stored session, so values keep their placeholders after a reopen
     const sessionLoaded = useRef<Promise<void>>(Promise.resolve());
-    const { settings, review } = state;
-    const parts = useMemo(() => (review == null ? [] : outputParts(review.run.input, review.run.result, new Set(review.revealed))), [review]);
-    const answer = useMemo(() => answerParts(state.answer, services.masker.originalFor), [state.answer, state.sessionSize, services]);
+    const timeline = useRef<HTMLElement>(null);
+    const { settings, entries } = state;
+    const originalFor = services.masker.originalFor;
+    const knownPlaceholders = useMemo(() => knownPlaceholderCount(state.prompt, originalFor), [state.prompt, state.sessionSize, originalFor]);
+    const knownInAnswer = useMemo(() => knownPlaceholderCount(state.answerDraft, originalFor), [state.answerDraft, state.sessionSize, originalFor]);
+    const page = state.view === 'answer' ? 'answer' : 'prompt';
+    const pageEntries = entries.filter((entry) => entry.kind === page);
+    const waitingFor = awaitingAnswer(entries);
 
     useEffect(() =>
     {
@@ -63,6 +75,12 @@ export const App = () =>
     {
         document.documentElement.dataset.colorMode = settings.theme === 'system' ? 'auto' : settings.theme;
     }, [settings.theme]);
+
+    // a new card, or switching pages, shows the newest card at the bottom
+    useEffect(() =>
+    {
+        timeline.current?.scrollTo({ top: timeline.current.scrollHeight });
+    }, [pageEntries.length, page]);
 
     // the chat page to insert into follows the active tab
     useEffect(() =>
@@ -221,35 +239,44 @@ export const App = () =>
     };
 
     // what copy and insert hand over: the reviewed output with the note for the AI
-    const finalText = () => prependPromptHeader(outputText(parts), settings);
+    const finalText = (entry: PromptEntry) => prependPromptHeader(outputText(partsOf(entry)), settings);
 
-    const insert = async () =>
+    const insert = async (entry: PromptEntry) =>
     {
-        const result = await insertIntoChat(finalText());
+        const result = await insertIntoChat(finalText(entry));
 
-        dispatch({ type: 'insertFinished', ok: result.ok, message: result.message });
+        dispatch({ type: 'insertFinished', id: entry.id, ok: result.ok, message: result.message, ...(result.target == null ? {} : { target: result.target.label }) });
         dispatch({ type: 'targetChanged', ...(result.target == null ? {} : { target: result.target }) });
     };
 
-    const selectText = (selection: Span | undefined) =>
+    const selectText = (entry: PromptEntry, selection: Span | undefined) =>
     {
-        const trimmed = selection == null || review == null ? undefined : trimSelection(review.run.input, selection);
+        const trimmed = selection == null ? undefined : trimSelection(entry.run.input, selection);
 
-        dispatch({ type: 'textSelected', ...(trimmed == null ? {} : { selection: trimmed }) });
+        dispatch({ type: 'textSelected', id: entry.id, ...(trimmed == null ? {} : { selection: trimmed }) });
     };
 
-    const maskSelection = (category: Category) =>
+    const maskSelection = (entry: PromptEntry, category: Category) =>
     {
-        if (review?.selection == null)
+        if (entry.selection == null)
         {
             return;
         }
 
-        const run = services.masker.addSelection(review.run, { ...review.selection, category }, enabledCategorySet(settings.enabledCategories));
+        const run = services.masker.addSelection(entry.run, { ...entry.selection, category }, enabledCategorySet(settings.enabledCategories));
 
         window.getSelection()?.removeAllRanges();
         sessionUpdated();
-        dispatch({ type: 'selectionMasked', run });
+        dispatch({ type: 'selectionMasked', id: entry.id, run });
+    };
+
+    // every mention of a placeholder under another category the user picked
+    const changeCategory = (entry: PromptEntry, placeholder: string, category: Category) =>
+    {
+        const run = services.masker.relabel(entry.run, placeholder, category, enabledCategorySet(settings.enabledCategories));
+
+        sessionUpdated();
+        dispatch({ type: 'selectionMasked', id: entry.id, run });
     };
 
     if (state.view === 'settings')
@@ -284,47 +311,83 @@ export const App = () =>
     }
 
     return (
-        <div className="app">
+        <div className={pageEntries.length === 0 ? 'app is-empty' : 'app'}>
             <Header model={state.model} onOpenSettings={() => dispatch({ type: 'settingsOpened' })} />
-            <Tabs active={state.view === 'answer' ? 'answer' : 'prompt'} onSelect={(tab) => dispatch({ type: 'tabSelected', tab })} />
-            {state.view === 'answer' ? (
-                <AnswerScreen
-                    answer={state.answer}
-                    parts={answer}
-                    sessionSize={state.sessionSize}
-                    onAnswerChange={(text) => dispatch({ type: 'answerChanged', answer: text })}
-                    onCopy={() => copyText(restoredText(answer))}
-                />
-            ) : state.view === 'review' && review != null ? (
-                <ReviewScreen
-                    review={review}
-                    parts={parts}
-                    target={state.target}
-                    categories={selectableCategories(settings)}
-                    originalFor={services.masker.originalFor}
-                    onEdit={() => dispatch({ type: 'promptEdited' })}
-                    onSelectPlaceholder={(placeholder) => dispatch({ type: 'placeholderSelected', ...(placeholder == null ? {} : { placeholder }) })}
-                    onTogglePlaceholder={(placeholder) => dispatch({ type: 'placeholderToggled', placeholder })}
-                    onSelectText={selectText}
-                    onMaskSelection={maskSelection}
-                    onCopy={() => copyText(finalText())}
-                    onInsert={() => void insert()}
-                />
-            ) : (
-                <PromptScreen
-                    prompt={state.prompt}
-                    files={state.files}
-                    fileError={state.fileError}
-                    scan={state.scan}
-                    scanError={state.scanError}
-                    target={state.target}
-                    onPromptChange={(prompt) => dispatch({ type: 'promptChanged', prompt })}
-                    onAddFiles={(files) => void addFiles(files)}
-                    onRemoveFile={(id) => dispatch({ type: 'fileRemoved', id })}
-                    onMask={() => void mask()}
-                    onCancel={() => running.current?.abort()}
-                />
-            )}
+            <Tabs
+                active={page}
+                counts={{ prompt: entries.filter((entry) => entry.kind === 'prompt').length, answer: entries.filter((entry) => entry.kind === 'answer').length }}
+                onSelect={(selected) => dispatch({ type: 'pageSelected', page: selected })}
+            />
+            <main ref={timeline} className="screen timeline" aria-label={page === 'prompt' ? 'Prompt history' : 'Answer history'}>
+                {pageEntries.length > 0 ? null : page === 'prompt' ? <EmptyPrompts /> : <EmptyAnswers />}
+                {pageEntries.map((entry) =>
+                    entry.kind === 'prompt' ? (
+                        <PromptCard
+                            key={entry.id}
+                            entry={entry}
+                            parts={partsOf(entry)}
+                            target={state.target}
+                            categories={selectableCategories(settings)}
+                            originalFor={originalFor}
+                            onEdit={() => dispatch({ type: 'entryEdited', id: entry.id })}
+                            editBlocked={editBlocker(state)}
+                            onToggle={() => dispatch({ type: 'entryToggled', id: entry.id })}
+                            onSelectPlaceholder={(placeholder) => dispatch({ type: 'placeholderSelected', id: entry.id, ...(placeholder == null ? {} : { placeholder }) })}
+                            onTogglePlaceholder={(placeholder) => dispatch({ type: 'placeholderToggled', id: entry.id, placeholder })}
+                            onSelectText={(selection) => selectText(entry, selection)}
+                            onMaskSelection={(category) => maskSelection(entry, category)}
+                            onChangeCategory={(placeholder, category) => changeCategory(entry, placeholder, category)}
+                            onCopyText={copyText}
+                            onCopy={() => copyText(finalText(entry))}
+                            onInsert={() => void insert(entry)}
+                        />
+                    ) : (
+                        <AnswerCard
+                            key={entry.id}
+                            entry={entry}
+                            parts={answerParts(entry.text, originalFor)}
+                            onToggle={() => dispatch({ type: 'entryToggled', id: entry.id })}
+                            onCopy={() => copyText(restoredText(answerParts(entry.text, originalFor)))}
+                        />
+                    ),
+                )}
+                {page === 'prompt' && waitingFor != null ? (
+                    <div className="waiting-hint">
+                        <span className="grow">When {waitingFor.sentTo} answers, unmask the answer on the Answer page.</span>
+                        <Button small onClick={() => dispatch({ type: 'pageSelected', page: 'answer' })}>
+                            Go to Answer
+                        </Button>
+                    </div>
+                ) : null}
+            </main>
+            <div className="composer-area">
+                {page === 'answer' ? (
+                    <AnswerComposer
+                        text={state.answerDraft}
+                        knownPlaceholders={knownInAnswer}
+                        onTextChange={(text) => dispatch({ type: 'answerDraftChanged', text })}
+                        onUnmask={() => dispatch({ type: 'answerRestored' })}
+                    />
+                ) : (
+                    <>
+                        {state.fileError == null ? null : <Flash tone="danger">{state.fileError}</Flash>}
+                        {state.scanError == null ? null : <Flash tone="danger">{state.scanError}</Flash>}
+                        <Composer
+                            prompt={state.prompt}
+                            files={state.files}
+                            scan={state.scan}
+                            target={state.target}
+                            knownPlaceholders={knownPlaceholders}
+                            onPromptChange={(prompt) => dispatch({ type: 'promptChanged', prompt })}
+                            onAddFiles={(files) => void addFiles(files)}
+                            onRemoveFile={(id) => dispatch({ type: 'fileRemoved', id })}
+                            onMask={() => void mask()}
+                            onMoveToAnswer={() => dispatch({ type: 'promptMovedToAnswer' })}
+                            onCancel={() => running.current?.abort()}
+                        />
+                    </>
+                )}
+            </div>
             <PrivacyNote />
         </div>
     );

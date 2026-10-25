@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { composeInput, type AttachedFile } from '../../../apps/extension/source/masking/compose';
-import { categoryCounts, outputParts, outputText, placeholderDetails, trimSelection } from '../../../apps/extension/source/masking/output';
+import { categoryCounts, excerptOf, outputParts, outputText, placeholderDetails, trimSelection } from '../../../apps/extension/source/masking/output';
 import { maskDetections } from '../../../packages/core/src/pipeline/run';
 import { createSession } from '../../../packages/core/src/session';
 import { detectionOf } from '../../support/detections';
@@ -40,12 +40,29 @@ describe('outputParts and outputText', () =>
         expect(parts[1]).toEqual({ kind: 'text', text: ' (', start: 12 });
     });
 
+    it('keeps each masked mention\'s original for the review tooltip', () =>
+    {
+        const parts = outputParts(TEXT, result, new Set());
+
+        expect(parts[0]).toEqual({ kind: 'mask', placeholder: 'PERSON_001', category: 'PERSON', text: 'Anna Schmidt' });
+        expect(parts.at(-1)).toEqual({ kind: 'mask', placeholder: 'PERSON_001', category: 'PERSON', text: 'Schmidt' });
+    });
+
     it('sends every mention of a revealed placeholder as written', () =>
     {
         const parts = outputParts(TEXT, result, new Set(['PERSON_001']));
 
         expect(outputText(parts)).toBe('Anna Schmidt (EMAIL_001), Gruß Schmidt');
         expect(parts.filter((part) => part.kind === 'revealed')).toHaveLength(2);
+    });
+});
+
+describe('excerptOf', () =>
+{
+    it('shortens long values to 40 characters', () =>
+    {
+        expect(excerptOf('L01X00T47')).toBe('L01X00T47');
+        expect(excerptOf('x'.repeat(41))).toBe(`${'x'.repeat(39)}…`);
     });
 });
 

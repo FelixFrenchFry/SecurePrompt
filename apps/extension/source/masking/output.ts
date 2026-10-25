@@ -3,8 +3,13 @@ import { CATEGORIES, type Category, type DetectionSource, type PipelineResult, t
 // a piece of the reviewed prompt: kept text, a placeholder, or a value the user chose to send as is
 export type OutputPart =
     | { kind: 'text'; text: string; start: number }
-    | { kind: 'mask'; placeholder: string; category: Category }
+    | { kind: 'mask'; placeholder: string; category: Category; text: string }
     | { kind: 'revealed'; placeholder: string; category: Category; text: string };
+
+const EXCERPT_LENGTH = 40;
+
+// a value shortened for a tooltip or popover, never the full text of a long address or key
+export const excerptOf = (text: string): string => (text.length > EXCERPT_LENGTH ? `${text.slice(0, EXCERPT_LENGTH - 1)}…` : text);
 
 export const outputParts = (input: string, result: PipelineResult, revealed: ReadonlySet<string>): OutputPart[] =>
 {
@@ -16,10 +21,9 @@ export const outputParts = (input: string, result: PipelineResult, revealed: Rea
         }
 
         const { placeholder, category } = segment;
+        const text = input.slice(segment.sourceStart, segment.sourceEnd);
 
-        return revealed.has(placeholder)
-            ? { kind: 'revealed', placeholder, category, text: input.slice(segment.sourceStart, segment.sourceEnd) }
-            : { kind: 'mask', placeholder, category };
+        return { kind: revealed.has(placeholder) ? 'revealed' : 'mask', placeholder, category, text };
     });
 };
 

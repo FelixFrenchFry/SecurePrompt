@@ -2,7 +2,8 @@ import type { Icon } from '@primer/octicons-react';
 import type { ButtonHTMLAttributes } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-    variant?: 'default' | 'primary' | 'invisible';
+    // primary is green for Mask, brand taupe for Unmask
+    variant?: 'default' | 'primary' | 'brand' | 'invisible';
     small?: boolean;
     icon?: Icon;
 };
@@ -27,7 +28,7 @@ type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>
 export const IconButton = ({ icon: ButtonIcon, label, className, ...rest }: IconButtonProps) =>
 {
     return (
-        <button type="button" className={`icon-button ${className ?? ''}`} aria-label={label} title={label} {...rest}>
+        <button type="button" className={`icon-button ${className ?? ''}`} aria-label={label} data-tooltip={label} {...rest}>
             <ButtonIcon size={16} />
         </button>
     );

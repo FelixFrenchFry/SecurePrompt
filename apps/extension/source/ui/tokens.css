@@ -9,8 +9,12 @@
 @import '@primer/primitives/dist/css/functional/size/radius.css';
 @import '@primer/primitives/dist/css/functional/size/border.css';
 
-/* SecurePrompt's own tokens, all taken from Primer's */
+/* SecurePrompt's own tokens, taken from Primer's except the logo's brand color */
 :root {
+    /* the logo's darker taupe, for Unmask and the Answer page, readable with white text in both themes */
+    --sp-brand: #6b5d52;
+    --sp-brand-hover: color-mix(in srgb, var(--sp-brand) 85%, var(--fgColor-default));
+
     /* two corner radii only: controls and panels, and placeholder chips */
     --sp-radius: var(--borderRadius-medium);
     --sp-radius-chip: var(--borderRadius-small);

@@ -4,19 +4,26 @@ import type { MaskRun } from '../masking/masker';
 import type { DownloadProgress } from '../model/download-progress';
 import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings } from '../settings/types';
 
-// the side panel's state, changed only through the reducer below
+// the side panel's state, changed only through the reducer below: two pages with the same layout,
+// masked prompts on one and unmasked answers on the other, each with its own composer
 
-export type View = 'prompt' | 'review' | 'answer' | 'settings' | 'setup';
+export type Page = 'prompt' | 'answer';
+
+export type View = Page | 'settings' | 'setup';
 
 export type ModelStatus = 'off' | 'idle' | 'downloading' | 'loading' | 'ready' | 'failed';
 
 export type ScanStep = { step: 'starting' } | ({ step: 'downloading' } & DownloadProgress) | { step: 'loading' } | { step: 'scanning'; percent: number };
 
-// why the model didn't run on a reviewed prompt
+// why the model didn't run on a masked prompt
 export type ModelNote = 'permission' | 'failed';
 
-export type Review = {
+export type PromptEntry = {
+    kind: 'prompt';
+    id: number;
     run: MaskRun;
+    // what was in the composer, so Edit can put it back
+    source: { prompt: string; files: AttachedFile[] };
     modelNote?: ModelNote;
     // placeholders the user chose to send as their original values
     revealed: string[];
@@ -24,7 +31,20 @@ export type Review = {
     // text the user selected in the preview, to mask by hand
     selection?: Span;
     insert?: { ok: boolean; message: string };
+    // the chat it was inserted into; a sent prompt shows collapsed until opened
+    sentTo?: string;
+    expanded: boolean;
 };
+
+export type AnswerEntry = {
+    kind: 'answer';
+    id: number;
+    // the AI's answer as pasted, with placeholders
+    text: string;
+    showMasked: boolean;
+};
+
+export type Entry = PromptEntry | AnswerEntry;
 
 export type ChatTarget = { id: string; label: string };
 
@@ -34,15 +54,17 @@ export type Setup = { step: 'offer' | 'denied' | 'ready' | 'failed' } | { step: 
 export type State = {
     view: View;
     // where settings return to
-    previousView: Exclude<View, 'settings' | 'setup'>;
+    page: Page;
+    // the prompt composer's text and files
     prompt: string;
     files: AttachedFile[];
     fileError?: string;
     scan?: ScanStep;
     scanError?: string;
-    review?: Review;
-    // the pasted AI answer, restored in the Answer tab
-    answer: string;
+    // the answer composer's pasted text
+    answerDraft: string;
+    entries: Entry[];
+    nextId: number;
     // how many masked values this browser session keeps for restoring
     sessionSize: number;
     setup?: Setup;
@@ -64,16 +86,19 @@ export type Action =
     | { type: 'scanProgressed'; scan: ScanStep }
     | { type: 'scanFinished'; run: MaskRun; modelNote?: ModelNote }
     | { type: 'scanStopped'; error?: string }
-    | { type: 'promptEdited' }
-    | { type: 'placeholderSelected'; placeholder?: string }
-    | { type: 'placeholderToggled'; placeholder: string }
-    | { type: 'textSelected'; selection?: Span }
-    | { type: 'selectionMasked'; run: MaskRun }
-    | { type: 'insertFinished'; ok: boolean; message: string }
+    | { type: 'pageSelected'; page: Page }
+    | { type: 'answerDraftChanged'; text: string }
+    | { type: 'answerRestored' }
+    | { type: 'promptMovedToAnswer' }
+    | { type: 'entryEdited'; id: number }
+    | { type: 'entryToggled'; id: number }
+    | { type: 'placeholderSelected'; id: number; placeholder?: string }
+    | { type: 'placeholderToggled'; id: number; placeholder: string }
+    | { type: 'textSelected'; id: number; selection?: Span }
+    | { type: 'selectionMasked'; id: number; run: MaskRun }
+    | { type: 'insertFinished'; id: number; ok: boolean; message: string; target?: string }
     | { type: 'modelChanged'; model: ModelStatus }
     | { type: 'targetChanged'; target?: ChatTarget }
-    | { type: 'tabSelected'; tab: 'prompt' | 'answer' }
-    | { type: 'answerChanged'; answer: string }
     | { type: 'sessionChanged'; size: number }
     | { type: 'sessionForgotten' }
     | { type: 'setupShown' }
@@ -82,7 +107,18 @@ export type Action =
 
 export const createInitialState = (settings: ExtensionSettings = DEFAULT_EXTENSION_SETTINGS): State =>
 {
-    return { view: 'prompt', previousView: 'prompt', prompt: '', files: [], answer: '', sessionSize: 0, model: settings.localModelDetectionEnabled ? 'idle' : 'off', settings };
+    return {
+        view: 'prompt',
+        page: 'prompt',
+        prompt: '',
+        answerDraft: '',
+        files: [],
+        entries: [],
+        nextId: 1,
+        sessionSize: 0,
+        model: settings.localModelDetectionEnabled ? 'idle' : 'off',
+        settings,
+    };
 };
 
 // a model switched on stays in its last known state, switched off it's 'off'
@@ -94,11 +130,6 @@ const modelFor = (settings: ExtensionSettings, current: ModelStatus): ModelStatu
     }
 
     return current === 'off' ? 'idle' : current;
-};
-
-const updateReview = (state: State, change: (review: Review) => Review): State =>
-{
-    return state.review == null ? state : { ...state, review: change(state.review) };
 };
 
 // drops optional keys set to undefined, as the state never holds them
@@ -114,6 +145,33 @@ const without = <T extends object, K extends keyof T>(value: T, ...keys: K[]): O
     return copy;
 };
 
+// changes one prompt entry; with closeOthers, any open placeholder or selection elsewhere closes
+const updatePrompt = (state: State, id: number, change: (entry: PromptEntry) => PromptEntry, closeOthers = false): State =>
+{
+    if (!state.entries.some((entry) => entry.kind === 'prompt' && entry.id === id))
+    {
+        return state;
+    }
+
+    return {
+        ...state,
+        entries: state.entries.map((entry) =>
+        {
+            if (entry.kind !== 'prompt')
+            {
+                return entry;
+            }
+
+            if (entry.id === id)
+            {
+                return change(entry);
+            }
+
+            return closeOthers ? without(entry, 'selected', 'selection') : entry;
+        }),
+    };
+};
+
 export const reducer = (state: State, action: Action): State =>
 {
     switch (action.type)
@@ -122,9 +180,13 @@ export const reducer = (state: State, action: Action): State =>
         case 'settingsChanged':
             return { ...state, settings: action.settings, model: modelFor(action.settings, state.model) };
         case 'settingsOpened':
-            return state.view === 'settings' || state.view === 'setup' ? state : { ...state, view: 'settings', previousView: state.view };
+            return state.view === 'prompt' || state.view === 'answer' ? { ...state, view: 'settings', page: state.view } : state;
         case 'settingsClosed':
-            return { ...state, view: state.previousView === 'review' && state.review == null ? 'prompt' : state.previousView };
+            return { ...state, view: state.page };
+        case 'pageSelected':
+            return { ...state, view: action.page, page: action.page };
+        case 'answerDraftChanged':
+            return { ...state, answerDraft: action.text };
         case 'promptChanged':
             return { ...state, prompt: action.prompt };
         case 'filesAdded':
@@ -144,70 +206,139 @@ export const reducer = (state: State, action: Action): State =>
             // the first-run download reports like a scan
             return state.setup?.step === 'download' ? { ...state, setup: { step: 'download', scan: action.scan } } : state;
         case 'scanFinished':
-            return {
-                ...without(state, 'scan'),
-                view: 'review',
-                review: { run: action.run, revealed: [], ...(action.modelNote == null ? {} : { modelNote: action.modelNote }) },
+        {
+            const entry: PromptEntry = {
+                kind: 'prompt',
+                id: state.nextId,
+                run: action.run,
+                source: { prompt: state.prompt, files: state.files },
+                revealed: [],
+                expanded: true,
+                ...(action.modelNote == null ? {} : { modelNote: action.modelNote }),
             };
+
+            return { ...without(state, 'scan'), prompt: '', files: [], entries: [...closeAll(state.entries), entry], nextId: state.nextId + 1 };
+        }
         case 'scanStopped':
             return { ...without(state, 'scan'), ...(action.error == null ? {} : { scanError: action.error }) };
-        case 'promptEdited':
-            return { ...without(state, 'review'), view: 'prompt' };
-        case 'placeholderSelected':
-            return updateReview(state, (review) =>
-            {
-                return action.placeholder == null ? without(review, 'selected') : { ...without(review, 'selection'), selected: action.placeholder };
-            });
-        case 'placeholderToggled':
-            return updateReview(state, (review) =>
-            {
-                const revealed = review.revealed.includes(action.placeholder)
-                    ? review.revealed.filter((placeholder) => placeholder !== action.placeholder)
-                    : [...review.revealed, action.placeholder];
+        case 'answerRestored':
+        {
+            const entry: AnswerEntry = { kind: 'answer', id: state.nextId, text: state.answerDraft, showMasked: false };
 
-                return { ...without(review, 'insert'), revealed };
+            return { ...state, answerDraft: '', entries: [...closeAll(state.entries), entry], nextId: state.nextId + 1 };
+        }
+        case 'promptMovedToAnswer':
+        {
+            // a pasted answer in the prompt composer moves to where it gets unmasked, after any answer already there
+            const answerDraft = state.answerDraft.trim().length === 0 ? state.prompt : `${state.answerDraft}\n\n${state.prompt}`;
+
+            return { ...state, view: 'answer', page: 'answer', prompt: '', answerDraft };
+        }
+        case 'entryEdited':
+        {
+            const entry = state.entries.find((candidate) => candidate.id === action.id);
+
+            if (entry?.kind !== 'prompt' || entry.sentTo != null || editBlocker(state) != null)
+            {
+                return state;
+            }
+
+            return { ...state, prompt: entry.source.prompt, files: entry.source.files, entries: state.entries.filter((candidate) => candidate !== entry) };
+        }
+        case 'entryToggled':
+            return {
+                ...state,
+                entries: state.entries.map((entry) =>
+                {
+                    if (entry.id !== action.id)
+                    {
+                        return entry;
+                    }
+
+                    return entry.kind === 'prompt' ? without({ ...entry, expanded: !entry.expanded }, 'selected', 'selection') : { ...entry, showMasked: !entry.showMasked };
+                }),
+            };
+        case 'placeholderSelected':
+            return updatePrompt(
+                state,
+                action.id,
+                (entry) => (action.placeholder == null ? without(entry, 'selected') : { ...without(entry, 'selection'), selected: action.placeholder }),
+                action.placeholder != null,
+            );
+        case 'placeholderToggled':
+            return updatePrompt(state, action.id, (entry) =>
+            {
+                const revealed = entry.revealed.includes(action.placeholder)
+                    ? entry.revealed.filter((placeholder) => placeholder !== action.placeholder)
+                    : [...entry.revealed, action.placeholder];
+
+                return { ...without(entry, 'insert'), revealed };
             });
         case 'textSelected':
-            return updateReview(state, (review) =>
-            {
-                const rest = without(review, 'selection');
-
-                return action.selection == null ? rest : { ...without(rest, 'selected'), selection: action.selection };
-            });
+            return updatePrompt(
+                state,
+                action.id,
+                (entry) => (action.selection == null ? without(entry, 'selection') : { ...without(entry, 'selected'), selection: action.selection }),
+                action.selection != null,
+            );
         case 'selectionMasked':
-            return updateReview(state, (review) => ({ ...without(review, 'selection', 'insert'), run: action.run }));
+            return updatePrompt(state, action.id, (entry) => ({ ...without(entry, 'selection', 'insert'), run: action.run }));
         case 'insertFinished':
-            return updateReview(state, (review) => ({ ...review, insert: { ok: action.ok, message: action.message } }));
+            return updatePrompt(state, action.id, (entry) =>
+            {
+                const insert = { ok: action.ok, message: action.message };
+
+                // a sent prompt folds away, its answer comes next
+                return action.ok && action.target != null
+                    ? { ...without(entry, 'selected', 'selection'), insert, sentTo: action.target, expanded: false }
+                    : { ...entry, insert };
+            });
         case 'modelChanged':
             return { ...state, model: state.settings.localModelDetectionEnabled ? action.model : 'off' };
         case 'targetChanged':
             return action.target == null ? without(state, 'target') : { ...state, target: action.target };
-        case 'tabSelected':
-            return { ...state, view: action.tab === 'answer' ? 'answer' : state.review == null ? 'prompt' : 'review' };
-        case 'answerChanged':
-            return { ...state, answer: action.answer };
         case 'sessionChanged':
             return { ...state, sessionSize: action.size };
         case 'sessionForgotten':
-            // a review without its originals can't be checked anymore
-            return {
-                ...without(state, 'review'),
-                answer: '',
-                sessionSize: 0,
-                view: state.view === 'settings' ? 'settings' : 'prompt',
-                previousView: state.previousView === 'answer' ? 'answer' : 'prompt',
-            };
+            // prompts and answers without their originals can't be checked or restored anymore
+            return { ...state, entries: [], sessionSize: 0 };
         case 'setupShown':
             return { ...state, view: 'setup', setup: { step: 'offer' } };
         case 'setupChanged':
             return state.setup == null ? state : { ...state, setup: action.setup };
         case 'setupClosed':
-            return { ...without(state, 'setup'), view: 'prompt' };
+            return { ...without(state, 'setup'), view: state.page };
     }
+};
+
+// open placeholders and selections close when something new joins the timeline
+const closeAll = (entries: readonly Entry[]): Entry[] =>
+{
+    return entries.map((entry) => (entry.kind === 'prompt' ? without(entry, 'selected', 'selection') : entry));
 };
 
 // the categories a hand-made selection may use: the enabled ones
 export const selectableCategories = (settings: ExtensionSettings): Category[] =>
 {
     return CATEGORIES.filter((category) => settings.enabledCategories[category]);
+};
+
+// why an unsent prompt can't go back into the composer now: a running scan clears the composer,
+// and a draft there would be replaced
+export const editBlocker = (state: Pick<State, 'scan' | 'prompt' | 'files'>): string | undefined =>
+{
+    if (state.scan != null)
+    {
+        return 'Wait for masking to finish to edit this prompt';
+    }
+
+    return state.prompt.trim().length > 0 || state.files.length > 0 ? 'Clear the input to edit this prompt' : undefined;
+};
+
+// the last prompt was sent and no answer followed yet
+export const awaitingAnswer = (entries: readonly Entry[]): PromptEntry | undefined =>
+{
+    const last = entries.at(-1);
+
+    return last?.kind === 'prompt' && last.sentTo != null ? last : undefined;
 };

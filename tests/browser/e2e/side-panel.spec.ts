@@ -33,7 +33,7 @@ test('masks a prompt in the side panel without leaking it to the network, storag
         await page.locator('textarea').first().fill(
             `Bitte leite das an ${CANARY.name} weiter, erreichbar unter ${CANARY.email} oder ${CANARY.phone}. Überweisung auf ${CANARY.iban}.`,
         );
-        await page.getByRole('button', { name: 'Mask prompt', exact: true }).click();
+        await page.getByRole('button', { name: 'Mask', exact: true }).click();
 
         // the review shows the masked prompt once the model has run
         const preview = page.getByLabel('Masked prompt');
@@ -81,8 +81,8 @@ test('restores an answer after the side panel was closed and opened again', asyn
         const first = await context.newPage();
 
         await first.goto(sidePanel);
-        await first.getByLabel('Prompt').fill(`Schreib ${CANARY.name} unter ${CANARY.email}.`);
-        await first.getByRole('button', { name: 'Mask prompt', exact: true }).click();
+        await first.getByLabel('Prompt', { exact: true }).fill(`Schreib ${CANARY.name} unter ${CANARY.email}.`);
+        await first.getByRole('button', { name: 'Mask', exact: true }).click();
         await expect(first.getByLabel('Masked prompt')).toContainText('PERSON_001', { timeout: 300_000 });
         await first.close();
 
@@ -92,11 +92,41 @@ test('restores an answer after the side panel was closed and opened again', asyn
         await reopened.goto(sidePanel);
         await reopened.getByRole('button', { name: 'Answer', exact: true }).click();
         await reopened.getByLabel('AI answer').fill('Hallo PERSON_001, ich schreibe an EMAIL_001. PERSON_009 hilft.');
+        await reopened.getByRole('button', { name: 'Unmask', exact: true }).click();
 
         const restored = reopened.getByLabel('Answer with originals');
 
         await expect(restored).toHaveText(`Hallo ${CANARY.name}, ich schreibe an ${CANARY.email}. PERSON_009 hilft.`);
         await expect(reopened.getByRole('alert')).toContainText('PERSON_009');
+    }
+    finally
+    {
+        await context.close();
+    }
+});
+
+test('shows one shared tooltip on hover and keyboard focus, and hides it on Escape', async () =>
+{
+    const { context, worker } = await launchExtension();
+
+    try
+    {
+        const page = await context.newPage();
+        const tooltip = page.getByRole('tooltip');
+
+        await page.goto(`chrome-extension://${new URL(worker.url()).host}/sidepanel.html`);
+        await page.getByRole('button', { name: 'Add text file' }).hover();
+        await expect(tooltip).toHaveText('Add text file');
+        await expect(page.getByRole('button', { name: 'Add text file' })).toHaveAttribute('aria-describedby', 'sp-tooltip');
+
+        await page.getByRole('button', { name: 'Settings' }).focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        await expect(tooltip).toHaveText('Settings');
+
+        await page.keyboard.press('Escape');
+        await expect(tooltip).toBeHidden();
+        await expect(page.locator('[title]')).toHaveCount(0);
     }
     finally
     {

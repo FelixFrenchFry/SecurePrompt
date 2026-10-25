@@ -37,6 +37,12 @@ export const answerParts = (answer: string, originalFor: (placeholder: string) =
     return parts;
 };
 
+// how many placeholders of this session a text holds, which tells a pasted answer from a new prompt
+export const knownPlaceholderCount = (text: string, originalFor: (placeholder: string) => string | undefined): number =>
+{
+    return answerParts(text, originalFor).filter((part) => part.kind === 'restored').length;
+};
+
 // the answer with every known placeholder replaced by its original
 export const restoredText = (parts: readonly AnswerPart[]): string =>
 {

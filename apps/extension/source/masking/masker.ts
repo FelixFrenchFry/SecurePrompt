@@ -58,18 +58,39 @@ export const createMasker = (options: MaskerOptions) =>
         return { input, result, modelFailed: useModel && result.failedDetectors.includes(model.id), milliseconds: now() - startedAt };
     };
 
-    // the run again with a span the user selected, which wins over detected values
-    const addSelection = (run: MaskRun, selection: Pick<Detection, 'start' | 'end' | 'category'>, categories: ReadonlySet<Category>): MaskRun =>
+    // the run again with spans the user chose, which win over detected values and earlier choices
+    const remask = (run: MaskRun, chosen: readonly Detection[], categories: ReadonlySet<Category>): MaskRun =>
     {
-        const earlier = run.result.spans.map(({ placeholder: _placeholder, ...detection }): Detection => detection);
-        const manual: Detection = { ...selection, source: 'manual', detector: 'manual', score: 1, validated: true };
+        const earlier = run.result.spans
+            .map(({ placeholder: _placeholder, ...detection }): Detection => detection)
+            .filter((detection) => !chosen.some((choice) => choice.start < detection.end && detection.start < choice.end));
         const result = maskDetections(run.input, earlier.filter((detection) => detection.source !== 'manual'), {
             session,
             enabledCategories: categories,
-            manualDetections: [...earlier.filter((detection) => detection.source === 'manual'), manual],
+            manualDetections: [...earlier.filter((detection) => detection.source === 'manual'), ...chosen],
         });
 
         return { ...run, result: { ...result, failedDetectors: run.result.failedDetectors } };
+    };
+
+    const manual = (span: Pick<Detection, 'start' | 'end' | 'category'>, aliasOf?: string): Detection =>
+    {
+        return { ...span, source: 'manual', detector: 'manual', score: 1, validated: true, ...(aliasOf == null ? {} : { aliasOf }) };
+    };
+
+    // a span the user selected in the preview
+    const addSelection = (run: MaskRun, selection: Pick<Detection, 'start' | 'end' | 'category'>, categories: ReadonlySet<Category>): MaskRun =>
+    {
+        return remask(run, [manual(selection)], categories);
+    };
+
+    // every mention of a placeholder under another category, still sharing one placeholder
+    const relabel = (run: MaskRun, placeholder: string, category: Category, categories: ReadonlySet<Category>): MaskRun =>
+    {
+        const original = session.originalFor(placeholder);
+        const mentions = run.result.spans.filter((span) => span.placeholder === placeholder);
+
+        return mentions.length === 0 ? run : remask(run, mentions.map((span) => manual({ start: span.start, end: span.end, category }, original)), categories);
     };
 
     const originalFor = (placeholder: string): string | undefined => session.originalFor(placeholder);
@@ -96,7 +117,7 @@ export const createMasker = (options: MaskerOptions) =>
         session = createSession();
     };
 
-    return { mask, addSelection, originalFor, snapshot, load, forget, size: () => session.placeholders().length };
+    return { mask, addSelection, relabel, originalFor, snapshot, load, forget, size: () => session.placeholders().length };
 };
 
 export type Masker = ReturnType<typeof createMasker>;

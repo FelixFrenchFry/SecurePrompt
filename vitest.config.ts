@@ -17,6 +17,7 @@ export default defineConfig({
                 'apps/extension/source/ui/state.ts',
                 'apps/extension/source/settings/types.ts',
                 'apps/extension/source/model/download-progress.ts',
+                'apps/extension/source/sites/composer-text.ts',
             ],
             reporter: ['text', 'html', 'lcov', 'json-summary'],
             reportsDirectory: 'coverage',

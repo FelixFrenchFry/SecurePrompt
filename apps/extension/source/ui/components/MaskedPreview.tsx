@@ -1,6 +1,6 @@
 import type { Span } from '@secureprompt/core';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { OutputPart } from '../../masking/output';
+import { excerptOf, type OutputPart } from '../../masking/output';
 import { categoryClass } from '../categories';
 import type { Anchor } from './Popover';
 
@@ -34,12 +34,30 @@ const sourceOffset = (node: Node, offset: number): number | undefined =>
     return Number(start) + within;
 };
 
-// a rectangle relative to the container the popovers are placed in
-const anchorOf = (rect: DOMRect, container: HTMLElement): Anchor =>
+// the text line a rectangle sits on, so a chip and its revealed text (different heights) anchor the popover at the same place
+const lineOf = (rect: DOMRect, preview: HTMLElement): { top: number; bottom: number } =>
+{
+    const style = getComputedStyle(preview);
+    const lineHeight = parseFloat(style.lineHeight);
+
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0)
+    {
+        return rect;
+    }
+
+    const contentTop = preview.getBoundingClientRect().top + preview.clientTop + parseFloat(style.paddingTop);
+    const line = Math.floor((rect.top + rect.height / 2 - contentTop) / lineHeight);
+
+    return { top: contentTop + line * lineHeight, bottom: contentTop + (line + 1) * lineHeight };
+};
+
+// a rectangle's line, relative to the container the popovers are placed in
+const anchorOf = (rect: DOMRect, preview: HTMLElement, container: HTMLElement): Anchor =>
 {
     const origin = container.getBoundingClientRect();
+    const line = lineOf(rect, preview);
 
-    return { top: rect.top - origin.top, bottom: rect.bottom - origin.top, left: rect.left - origin.left };
+    return { top: line.top - origin.top, bottom: line.bottom - origin.top, left: rect.left - origin.left };
 };
 
 export const MaskedPreview = (props: MaskedPreviewProps) =>
@@ -55,7 +73,9 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
     {
         const element = selectedIndex == null ? undefined : preview.current?.children[selectedIndex];
 
-        setPlaceholderAnchor(element == null || container.current == null ? undefined : anchorOf(element.getBoundingClientRect(), container.current));
+        setPlaceholderAnchor(
+            element == null || preview.current == null || container.current == null ? undefined : anchorOf(element.getBoundingClientRect(), preview.current, container.current),
+        );
     }, [parts, selectedIndex]);
 
     const readSelection = () =>
@@ -68,13 +88,13 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
         const lines = range?.getClientRects();
         const last = lines?.[lines.length - 1];
 
-        if (start == null || end == null || end <= start || last == null || container.current == null)
+        if (start == null || end == null || end <= start || last == null || preview.current == null || container.current == null)
         {
             onSelectText(undefined);
             return;
         }
 
-        setSelectionAnchor(anchorOf(last, container.current));
+        setSelectionAnchor(anchorOf(last, preview.current, container.current));
         onSelectText({ start, end });
     };
 
@@ -101,7 +121,7 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
                                 key={index}
                                 type="button"
                                 className="revealed"
-                                title={`${part.placeholder}, sent as is`}
+                                data-tooltip={`${part.placeholder}, sent as is`}
                                 aria-expanded={isOpen}
                                 onClick={() => onSelectPlaceholder(part.placeholder, index)}
                             >
@@ -115,6 +135,8 @@ export const MaskedPreview = (props: MaskedPreviewProps) =>
                             key={index}
                             type="button"
                             className={`placeholder ${categoryClass(part.category)}${part.placeholder === selected ? ' is-selected' : ''}`}
+                            // the hidden value at a glance, on one line; it stays in the side panel like the input
+                            data-tooltip={excerptOf(part.text.replace(/\s+/g, ' ').trim())}
                             aria-expanded={isOpen}
                             onClick={() => onSelectPlaceholder(part.placeholder, index)}
                         >

@@ -97,6 +97,19 @@ describe('createMasker', () =>
         expect(reopened.originalFor('PERSON_001')).toBeUndefined();
     });
 
+    it('moves every mention of a placeholder to another category under one new placeholder', async () =>
+    {
+        const masker = createMasker({ rules, model });
+        const run = await masker.mask(TEXT, { useModel: true, categories: ALL });
+        const relabeled = masker.relabel(run, 'PERSON_001', 'ACCOUNT', ALL);
+        const again = masker.relabel(relabeled, 'ACCOUNT_001', 'OTHER', ALL);
+
+        expect(relabeled.result.maskedText).toBe('ACCOUNT_001 schreibt an EMAIL_001. Gruß, ACCOUNT_001');
+        expect(masker.originalFor('ACCOUNT_001')).toBe('Anna Schmidt');
+        expect(again.result.maskedText).toBe('OTHER_001 schreibt an EMAIL_001. Gruß, OTHER_001');
+        expect(masker.relabel(run, 'PERSON_404', 'DATE', ALL)).toBe(run);
+    });
+
     it('adds a selection that wins over detections and keeps earlier selections', async () =>
     {
         const masker = createMasker({ rules, model });

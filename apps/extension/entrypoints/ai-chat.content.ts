@@ -10,6 +10,7 @@ import {
     type AiChatProviderId,
     getAiChatProviderByUrl,
 } from '../source/chat-targets';
+import { composerHolds } from '../source/sites/composer-text';
 import { mountLauncher } from '../source/sites/launcher';
 
 const BUTTON_ID = 'secureprompt-open-sidepanel';
@@ -225,21 +226,9 @@ const getComposerText = (element: HTMLElement) =>
     return element.innerText || element.textContent || '';
 };
 
-const normalizeComposerText = (text: string) =>
-{
-    return text
-        .replace(/\r\n?/g, '\n')
-        .replace(/\u00a0/g, ' ')
-        .replace(/[\u200b\u2060\ufeff]/g, '')
-        .trim();
-};
-
 const isPromptInserted = (element: HTMLElement, text: string) =>
 {
-    const expectedText = normalizeComposerText(text);
-    const actualText = normalizeComposerText(getComposerText(element));
-
-    return actualText === expectedText;
+    return composerHolds(getComposerText(element), text);
 };
 
 const waitForComposerUpdate = async () =>
@@ -508,7 +497,7 @@ const insertPromptIntoComposer = async (text: string): Promise<RuntimeResponse> 
 export default defineContentScript({
     matches: AI_CHAT_MATCHES,
     runAt: 'document_idle',
-    main()
+    main(ctx)
     {
         const extensionRuntime = getExtensionRuntime();
 
@@ -517,13 +506,29 @@ export default defineContentScript({
             return;
         }
 
-        mountLauncher({
+        // after the extension is reloaded or updated, this script keeps running on open chat pages
+        // without its extension: the button then removes itself, and reloading the page brings a new one
+        const launcher = mountLauncher({
             id: BUTTON_ID,
             onOpen: () =>
             {
-                void Promise.resolve(extensionRuntime.sendMessage({ type: OPEN_SIDEPANEL_MESSAGE })).catch(() => undefined);
+                try
+                {
+                    if (extensionRuntime.id == null)
+                    {
+                        throw new Error('Extension context invalidated');
+                    }
+
+                    void Promise.resolve(extensionRuntime.sendMessage({ type: OPEN_SIDEPANEL_MESSAGE })).catch(() => undefined);
+                }
+                catch
+                {
+                    launcher.remove();
+                }
             },
         });
+
+        ctx.onInvalidated(() => launcher.remove());
 
         if (window.__securepromptMessageListenerRegistered !== true)
         {

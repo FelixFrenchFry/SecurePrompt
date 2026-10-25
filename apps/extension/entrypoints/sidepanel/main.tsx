@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../../source/ui/App';
+import { initializeTooltips } from '../../source/ui/tooltip';
 import '../../source/ui/tokens.css';
 import '../../source/ui/app.css';
 
@@ -11,6 +12,7 @@ if (root == null)
     throw new Error('SecurePrompt root element is missing.');
 }
 
+initializeTooltips();
 createRoot(root).render(
     <React.StrictMode>
         <App />

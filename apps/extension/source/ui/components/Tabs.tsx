@@ -1,26 +1,35 @@
-type Tab = 'prompt' | 'answer';
+import { ChatLockedIcon, UnlockIcon, type Icon } from '@primer/octicons-react';
+import type { Page } from '../state';
 
-const TABS: Array<{ tab: Tab; label: string }> = [
-    { tab: 'prompt', label: 'Prompt' },
-    { tab: 'answer', label: 'Answer' },
+const PAGES: Array<{ page: Page; label: string; icon: Icon; counted: [string, string] }> = [
+    { page: 'prompt', label: 'Prompt', icon: ChatLockedIcon, counted: ['masked prompt', 'masked prompts'] },
+    { page: 'answer', label: 'Answer', icon: UnlockIcon, counted: ['unmasked answer', 'unmasked answers'] },
 ];
 
-// Primer's underline navigation between masking a prompt and restoring the answer
-export const Tabs = ({ active, onSelect }: { active: Tab; onSelect: (tab: Tab) => void }) =>
+// Primer's segmented control between masking prompts and unmasking answers; the selected half
+// takes its page's button color, green like Mask or taupe like Unmask
+export const Tabs = ({ active, counts, onSelect }: { active: Page; counts: Record<Page, number>; onSelect: (page: Page) => void }) =>
 {
     return (
         <nav className="tabs" aria-label="Side panel">
-            {TABS.map(({ tab, label }) => (
-                <button
-                    key={tab}
-                    type="button"
-                    className={tab === active ? 'tab is-active' : 'tab'}
-                    aria-current={tab === active ? 'page' : undefined}
-                    onClick={() => onSelect(tab)}
-                >
-                    {label}
-                </button>
-            ))}
+            <div className="segmented">
+                {PAGES.map(({ page, label, icon: TabIcon, counted }) => (
+                    <button
+                        key={page}
+                        type="button"
+                        className={`segment segment-${page}${page === active ? ' is-active' : ''}`}
+                        aria-current={page === active ? 'page' : undefined}
+                        data-tooltip={`${counts[page]} ${counts[page] === 1 ? counted[0] : counted[1]} in this session`}
+                        onClick={() => onSelect(page)}
+                    >
+                        <TabIcon size={16} />
+                        {label}
+                        <span className="segment-count" aria-hidden="true">
+                            {counts[page]}
+                        </span>
+                    </button>
+                ))}
+            </div>
         </nav>
     );
 };
