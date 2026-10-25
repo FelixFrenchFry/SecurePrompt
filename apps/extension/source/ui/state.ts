@@ -11,12 +11,10 @@ export type Page = 'prompt' | 'answer';
 
 export type View = Page | 'settings' | 'setup';
 
-export type ModelStatus = 'off' | 'idle' | 'downloading' | 'loading' | 'ready' | 'failed';
+// missing: the download permission isn't granted yet; idle: allowed, loads on first use
+export type ModelStatus = 'missing' | 'idle' | 'downloading' | 'loading' | 'ready' | 'failed';
 
 export type ScanStep = { step: 'starting' } | ({ step: 'downloading' } & DownloadProgress) | { step: 'loading' } | { step: 'scanning'; percent: number };
-
-// why the model didn't run on a masked prompt
-export type ModelNote = 'permission' | 'failed';
 
 export type PromptEntry = {
     kind: 'prompt';
@@ -24,7 +22,6 @@ export type PromptEntry = {
     run: MaskRun;
     // what was in the composer, so Edit can put it back
     source: { prompt: string; files: AttachedFile[] };
-    modelNote?: ModelNote;
     // placeholders the user chose to send as their original values
     revealed: string[];
     selected?: string;
@@ -85,7 +82,7 @@ export type Action =
     | { type: 'fileRemoved'; id: string }
     | { type: 'scanStarted' }
     | { type: 'scanProgressed'; scan: ScanStep }
-    | { type: 'scanFinished'; run: MaskRun; modelNote?: ModelNote }
+    | { type: 'scanFinished'; run: MaskRun }
     | { type: 'scanStopped'; error?: string }
     | { type: 'pageSelected'; page: Page }
     | { type: 'answerDraftChanged'; text: string }
@@ -102,7 +99,8 @@ export type Action =
     | { type: 'targetChanged'; target?: ChatTarget }
     | { type: 'sessionChanged'; size: number }
     | { type: 'sessionForgotten' }
-    | { type: 'setupShown' }
+    // denied: Mask was clicked but Chrome didn't allow the model download
+    | { type: 'setupShown'; step?: 'offer' | 'denied' }
     | { type: 'setupChanged'; setup: Setup }
     | { type: 'setupClosed' };
 
@@ -117,20 +115,9 @@ export const createInitialState = (settings: ExtensionSettings = DEFAULT_EXTENSI
         entries: [],
         nextId: 1,
         sessionSize: 0,
-        model: settings.localModelDetectionEnabled ? 'idle' : 'off',
+        model: 'idle',
         settings,
     };
-};
-
-// a model switched on stays in its last known state, switched off it's 'off'
-const modelFor = (settings: ExtensionSettings, current: ModelStatus): ModelStatus =>
-{
-    if (!settings.localModelDetectionEnabled)
-    {
-        return 'off';
-    }
-
-    return current === 'off' ? 'idle' : current;
 };
 
 // drops optional keys set to undefined, as the state never holds them
@@ -179,7 +166,7 @@ export const reducer = (state: State, action: Action): State =>
     {
         case 'settingsLoaded':
         case 'settingsChanged':
-            return { ...state, settings: action.settings, model: modelFor(action.settings, state.model) };
+            return { ...state, settings: action.settings };
         case 'settingsOpened':
             return state.view === 'prompt' || state.view === 'answer' ? { ...state, view: 'settings', page: state.view } : state;
         case 'settingsClosed':
@@ -215,7 +202,6 @@ export const reducer = (state: State, action: Action): State =>
                 source: { prompt: state.prompt, files: state.files },
                 revealed: [],
                 expanded: true,
-                ...(action.modelNote == null ? {} : { modelNote: action.modelNote }),
             };
 
             return { ...without(state, 'scan'), prompt: '', files: [], entries: [...closeAll(state.entries), entry], nextId: state.nextId + 1 };
@@ -295,7 +281,7 @@ export const reducer = (state: State, action: Action): State =>
                     : { ...entry, insert };
             });
         case 'modelChanged':
-            return { ...state, model: state.settings.localModelDetectionEnabled ? action.model : 'off' };
+            return { ...state, model: action.model };
         case 'targetChanged':
             return action.target == null ? without(state, 'target') : { ...state, target: action.target };
         case 'sessionChanged':
@@ -304,7 +290,8 @@ export const reducer = (state: State, action: Action): State =>
             // prompts and answers without their originals can't be checked or restored anymore
             return { ...state, entries: [], sessionSize: 0 };
         case 'setupShown':
-            return { ...state, view: 'setup', setup: { step: 'offer' } };
+            // the model counts as missing until a download starts
+            return { ...state, view: 'setup', setup: { step: action.step ?? 'offer' }, model: state.model === 'idle' ? 'missing' : state.model };
         case 'setupChanged':
             return state.setup == null ? state : { ...state, setup: action.setup };
         case 'setupClosed':

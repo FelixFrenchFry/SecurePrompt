@@ -5,7 +5,7 @@ import { GET_CHAT_TARGET_MESSAGE, INJECT_PROMPT_MESSAGE, type RuntimeResponse } 
 import { createOffscreenDetector, type ModelLoading } from '../model/client';
 import { createDownloadProgress } from '../model/download-progress';
 import { requestModelHost } from '../model/host';
-import { MODEL_HOST_PERMISSIONS } from '../model/protocol';
+import { MODEL_DOWNLOAD_BYTES, MODEL_HOST_PERMISSIONS } from '../model/protocol';
 import type { ChatTarget, ModelStatus, ScanStep } from './state';
 
 // the side panel's links to the browser: the model, the chat page and the permission prompt
@@ -14,7 +14,7 @@ export type ModelListener = { onModel: (model: ModelStatus) => void; onScan: (sc
 
 export const createServices = (listener: ModelListener) =>
 {
-    const downloads = createDownloadProgress();
+    const downloads = createDownloadProgress(MODEL_DOWNLOAD_BYTES);
 
     // transformers.js reports each file's bytes, 'done' per file and 'ready' once the model is loaded
     const onLoading = (loading: ModelLoading) =>
@@ -94,6 +94,26 @@ const panelWindow = async (): Promise<{ windowId?: number }> =>
     catch
     {
         return {};
+    }
+};
+
+// closes this side panel, with window.close as the fallback for Chrome versions without sidePanel.close
+export const closeSidePanel = async () =>
+{
+    try
+    {
+        const { windowId } = await panelWindow();
+
+        if (windowId == null)
+        {
+            throw new Error('No window');
+        }
+
+        await browser.sidePanel.close({ windowId });
+    }
+    catch
+    {
+        window.close();
     }
 };
 

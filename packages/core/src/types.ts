@@ -89,6 +89,6 @@ export type PipelineResult = {
     maskedText: string;
     spans: MaskedSpan[];
     segments: Segment[];
-    // detectors that threw, the result is built from the others (rules only if the model failed)
+    // detectors that threw, the result is built from the others, so callers decide whether that's acceptable
     failedDetectors: string[];
 };

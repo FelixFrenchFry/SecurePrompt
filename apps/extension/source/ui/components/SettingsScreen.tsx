@@ -21,8 +21,6 @@ const THEMES: Array<{ theme: ThemeSetting; label: string }> = [
 
 const HELP = {
     mask: 'Kinds of personal data replaced with placeholders before your prompt is sent. Unchecked kinds are sent as they are.',
-    detection:
-        'Rules find fixed formats like emails, phone numbers and IBANs. The local AI model also finds names, addresses and other context. Both run only on this device.',
     note: 'Text added before your masked prompt, telling the AI to keep the placeholders exactly as they are, so they can be swapped back in its answer.',
     theme: 'Light or dark look of the side panel.',
     session:
@@ -85,24 +83,6 @@ export const SettingsScreen = ({ settings, sessionSize, onChange, onForget }: Se
                             <span className="small muted">{CATEGORY_INFO[category].description}</span>
                         </label>
                     ))}
-                </div>
-            </section>
-            <section>
-                <SectionTitle help={HELP.detection}>Detection model</SectionTitle>
-                <div className="list">
-                    <label className="list-item list-item-top">
-                        <input
-                            type="checkbox"
-                            checked={settings.localModelDetectionEnabled}
-                            onChange={(event) => change('localModelDetectionEnabled', event.target.checked)}
-                        />
-                        <span>
-                            <span className="block">Use the local AI model</span>
-                            <span className="small muted">
-                                Finds names, addresses and other context. Downloads about 330 MB once from Hugging Face, then runs on this device. Rules always run.
-                            </span>
-                        </span>
-                    </label>
                 </div>
             </section>
             <section>

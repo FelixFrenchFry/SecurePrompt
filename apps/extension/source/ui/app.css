@@ -94,19 +94,6 @@ body {
     background: transparent;
 }
 
-.footer {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 16px 16px;
-}
-
-.footer-stack {
-    flex-direction: column;
-    align-items: stretch;
-}
-
 /* Prompt and Answer pages, Primer's segmented control */
 
 /* the header and the tabs share a slightly darker band, set apart by color instead of lines */
@@ -459,10 +446,6 @@ body {
     min-width: 0;
 }
 
-.block {
-    display: block;
-}
-
 .no-margin {
     margin: 0;
 }
@@ -775,6 +758,14 @@ body {
 
 /* first run */
 
+/* the setup's buttons, stacked at full width below its text */
+.setup-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 .setup-title {
     margin: 0 0 8px;
     font-size: 20px;
@@ -799,6 +790,12 @@ body {
 .facts li svg {
     flex: none;
     margin-top: 2px;
+}
+
+/* the model's name can be longer than the side panel is wide */
+.facts a {
+    color: var(--fgColor-accent);
+    overflow-wrap: anywhere;
 }
 
 .list-row {
@@ -1245,10 +1242,6 @@ body {
     border-top: 1px solid var(--borderColor-default);
 }
 
-.list-item-top {
-    align-items: flex-start;
-}
-
 .list-item:hover {
     background: var(--control-transparent-bgColor-hover);
 }
@@ -1259,10 +1252,6 @@ body {
 
 .list-item:last-child {
     border-radius: 0 0 var(--sp-radius) var(--sp-radius);
-}
-
-.list-item-top input {
-    margin-top: 2px;
 }
 
 /* note options: a radio row with a show/hide arrow, and the note's text below when open. After the list-item rules,

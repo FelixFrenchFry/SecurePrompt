@@ -4,6 +4,7 @@ import { useEffect, useMemo, useReducer, useRef } from 'react';
 import { browser } from 'wxt/browser';
 import { extractTextFile } from '../documents/extract-text-file';
 import { composeInput, type AttachedFile } from '../masking/compose';
+import { DetectorFailedError, ModelFailedError } from '../masking/masker';
 import { outputParts, outputText, trimSelection } from '../masking/output';
 import { answerParts, knownPlaceholderCount, restoredText } from '../masking/restore';
 import { loadExtensionSettings, saveExtensionSettings } from '../settings/storage';
@@ -20,9 +21,9 @@ import { PromptCard } from './components/PromptCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { Tabs } from './components/Tabs';
-import { copyText, createServices, hasModelPermission, insertIntoChat, requestChatTarget, requestModelPermission } from './services';
+import { closeSidePanel, copyText, createServices, hasModelPermission, insertIntoChat, requestChatTarget, requestModelPermission } from './services';
 import { clearStoredSession, loadStoredSession, storeSession } from './session-storage';
-import { awaitingAnswer, createInitialState, editBlocker, reducer, selectableCategories, type ModelNote, type PromptEntry } from './state';
+import { awaitingAnswer, createInitialState, editBlocker, reducer, selectableCategories, type PromptEntry } from './state';
 
 // the reviewed output of a prompt entry, with the values the user chose to send as written
 const partsOf = (entry: PromptEntry) => outputParts(entry.run.input, entry.run.result, new Set(entry.revealed));
@@ -59,17 +60,17 @@ export const App = () =>
         });
 
         void loadExtensionSettings()
-            .then(async (loaded) =>
-            {
-                dispatch({ type: 'settingsLoaded', settings: loaded });
-
-                // the first run explains the model download before Chrome asks for it
-                if (loaded.localModelDetectionEnabled && !loaded.modelSetupDone && !(await hasModelPermission()))
-                {
-                    dispatch({ type: 'setupShown' });
-                }
-            })
+            .then((loaded) => dispatch({ type: 'settingsLoaded', settings: loaded }))
             .catch(() => undefined);
+
+        // masking needs the model, so without its download permission the setup screen explains it first
+        void hasModelPermission().then((allowed) =>
+        {
+            if (!allowed)
+            {
+                dispatch({ type: 'setupShown' });
+            }
+        });
     }, [services]);
 
     useEffect(() =>
@@ -154,9 +155,13 @@ export const App = () =>
 
     const mask = async () =>
     {
-        const useModel = settings.localModelDetectionEnabled;
         // asked first, as Chrome shows the permission prompt only right after a click
-        const allowed = useModel && (await requestModelPermission());
+        if (!(await requestModelPermission()))
+        {
+            dispatch({ type: 'setupShown', step: 'denied' });
+            return;
+        }
+
         const controller = new AbortController();
 
         running.current?.abort();
@@ -168,24 +173,31 @@ export const App = () =>
             await sessionLoaded.current;
 
             const run = await services.masker.mask(composeInput(state.prompt, state.files), {
-                useModel: allowed,
                 categories: enabledCategorySet(settings.enabledCategories),
                 signal: controller.signal,
                 onModelProgress: (fraction) => dispatch({ type: 'scanProgressed', scan: { step: 'scanning', percent: Math.round(fraction * 100) } }),
             });
-            const modelNote: ModelNote | undefined = !useModel ? undefined : !allowed ? 'permission' : run.modelFailed ? 'failed' : undefined;
 
-            if (allowed)
-            {
-                dispatch({ type: 'modelChanged', model: run.modelFailed ? 'failed' : 'ready' });
-            }
-
+            dispatch({ type: 'modelChanged', model: 'ready' });
             sessionUpdated();
-            dispatch({ type: 'scanFinished', run, ...(modelNote == null ? {} : { modelNote }) });
+            dispatch({ type: 'scanFinished', run });
         }
         catch (error)
         {
-            dispatch({ type: 'scanStopped', ...(error instanceof PipelineCancelledError ? {} : { error: 'Could not mask the prompt. Nothing was sent.' }) });
+            // no rules-only fallback: without the model, names and addresses would go through unmasked
+            if (error instanceof ModelFailedError)
+            {
+                dispatch({ type: 'modelChanged', model: 'failed' });
+                dispatch({ type: 'scanStopped', error: 'The model couldn\'t run, so nothing was masked or sent. Try again.' });
+            }
+            else if (error instanceof DetectorFailedError)
+            {
+                dispatch({ type: 'scanStopped', error: 'A detection rule failed, so nothing was masked or sent.' });
+            }
+            else
+            {
+                dispatch({ type: 'scanStopped', ...(error instanceof PipelineCancelledError ? {} : { error: 'Could not mask the prompt. Nothing was sent.' }) });
+            }
         }
         finally
         {
@@ -217,7 +229,6 @@ export const App = () =>
             await services.warmUp(controller.signal);
             dispatch({ type: 'modelChanged', model: 'ready' });
             dispatch({ type: 'setupChanged', setup: { step: 'ready' } });
-            changeSettings({ ...settings, localModelDetectionEnabled: true, modelSetupDone: true });
         }
         catch (error)
         {
@@ -299,11 +310,7 @@ export const App = () =>
                     setup={state.setup}
                     onDownload={() => void downloadModel()}
                     onCancel={() => running.current?.abort()}
-                    onRulesOnly={() =>
-                    {
-                        changeSettings({ ...settings, localModelDetectionEnabled: false, modelSetupDone: true });
-                        dispatch({ type: 'setupClosed' });
-                    }}
+                    onNotNow={() => void closeSidePanel()}
                     onDone={() => dispatch({ type: 'setupClosed' })}
                 />
                 <PrivacyNote />

@@ -49,7 +49,35 @@ export type PipelineOptions = {
     onProgress?: (progress: PipelineProgress) => void;
 };
 
+// prepared spans, before placeholder assignment changes a session
+export type PipelineDetections = {
+    detections: readonly Detection[];
+    failedDetectors: readonly string[];
+};
+
 const ALL_CATEGORIES: ReadonlySet<Category> = new Set(CATEGORIES);
+
+const checkCancelled = (signal?: CancelSignal) =>
+{
+    if (signal?.aborted === true)
+    {
+        throw new PipelineCancelledError();
+    }
+};
+
+const timed = async <T>(timing: PipelineTiming | undefined, stage: PipelineStage, run: () => T | Promise<T>): Promise<T> =>
+{
+    if (timing == null)
+    {
+        return run();
+    }
+
+    const startedAt = timing.now();
+    const result = await run();
+
+    timing.record(stage, timing.now() - startedAt);
+    return result;
+};
 
 // a detection ending inside a number extends to its end, so no digit follows a placeholder
 const extendOverGluedDigits = (text: string, detections: readonly Detection[]): Detection[] =>
@@ -83,58 +111,41 @@ const createMasking = (text: string, session: MaskSession, enabledCategories: Re
 
     const merge = (found: ReadonlyArray<readonly Detection[]>) => mergeDetections(text, found, enabledCategories);
 
-    const render = (detections: readonly Detection[], failedDetectors: readonly string[]): PipelineResult =>
-    {
-        const spans = assignPlaceholders(text, detections, session, reserved);
-
-        return { ...renderMaskedText(text, spans), spans, failedDetectors: [...failedDetectors] };
-    };
-
-    return { reserved, prepare, merge, render };
+    return { reserved, prepare, merge };
 };
 
 export type MaskOptions = Pick<PipelineOptions, 'session' | 'enabledCategories' | 'manualDetections'>;
+
+// prepared spans are rendered directly, without another merge or propagation pass
+export const renderDetections = (text: string, detected: PipelineDetections, session: MaskSession): PipelineResult =>
+{
+    const spans = assignPlaceholders(text, detected.detections, session, findReservedPlaceholders(text));
+
+    return { ...renderMaskedText(text, spans), spans, failedDetectors: [...detected.failedDetectors] };
+};
 
 // masks detections that are already known, such as an earlier result with a manual selection added
 export const maskDetections = (text: string, detections: readonly Detection[], options: MaskOptions): PipelineResult =>
 {
     const masking = createMasking(text, options.session, options.enabledCategories ?? ALL_CATEGORIES);
 
-    return masking.render(masking.prepare(masking.merge([detections, options.manualDetections ?? []])), []);
+    return renderDetections(text, {
+        detections: masking.prepare(masking.merge([detections, options.manualDetections ?? []])),
+        failedDetectors: [],
+    }, options.session);
 };
 
-export const runPipeline = async (text: string, options: PipelineOptions): Promise<PipelineResult> =>
+// detection may await external work; all trial placeholders stay on copies of the session
+export const detectPipeline = async (text: string, options: PipelineOptions): Promise<PipelineDetections> =>
 {
     const { detectors, session, timing, signal, onProgress } = options;
     const enabledCategories = options.enabledCategories ?? ALL_CATEGORIES;
     const residualPasses = options.residualPasses ?? 1;
     const failedDetectors = new Set<string>();
 
-    const checkCancelled = () =>
-    {
-        if (signal?.aborted === true)
-        {
-            throw new PipelineCancelledError();
-        }
-    };
-
-    checkCancelled();
+    checkCancelled(signal);
 
     const masking = createMasking(text, session, enabledCategories);
-
-    const timed = async <T>(stage: PipelineStage, run: () => T | Promise<T>): Promise<T> =>
-    {
-        if (timing == null)
-        {
-            return run();
-        }
-
-        const startedAt = timing.now();
-        const result = await run();
-
-        timing.record(stage, timing.now() - startedAt);
-        return result;
-    };
 
     const detectAll = async (input: string, stage: PipelineProgress['stage']) =>
     {
@@ -175,24 +186,24 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
         );
 
         // a detector stopped by the signal may return partial results, so they're never used
-        checkCancelled();
+        checkCancelled(signal);
 
         return found;
     };
 
-    const found = await timed('detect', () => detectAll(text, 'detect'));
-    let detections = await timed('prepare', () => masking.prepare(masking.merge([...found, options.manualDetections ?? []])));
+    const found = await timed(timing, 'detect', () => detectAll(text, 'detect'));
+    let detections = await timed(timing, 'prepare', () => masking.prepare(masking.merge([...found, options.manualDetections ?? []])));
 
     for (let pass = 0; pass < residualPasses && detections.length > 0; pass += 1)
     {
         // a trial rendering on a copy of the session, so unused placeholders aren't registered
         const trialSession = session.fork();
-        const trial = await timed('residualMap', () =>
+        const trial = await timed(timing, 'residualMap', () =>
         {
             return renderMaskedText(text, assignPlaceholders(text, detections, trialSession, masking.reserved));
         });
-        const residualFound = await timed('residualDetect', () => detectAll(trial.maskedText, 'residualDetect'));
-        const additions = await timed('residualMap', () =>
+        const residualFound = await timed(timing, 'residualDetect', () => detectAll(trial.maskedText, 'residualDetect'));
+        const additions = await timed(timing, 'residualMap', () =>
         {
             const maskedProtected = findProtectedRanges(trial.maskedText, trialSession);
             const residual = excludeProtected(
@@ -217,8 +228,17 @@ export const runPipeline = async (text: string, options: PipelineOptions): Promi
 
         const current = detections;
 
-        detections = await timed('prepare', () => masking.prepare([...current, ...additions]));
+        detections = await timed(timing, 'prepare', () => masking.prepare([...current, ...additions]));
     }
 
-    return timed('render', () => masking.render(detections, [...failedDetectors]));
+    checkCancelled(signal);
+    return { detections, failedDetectors: [...failedDetectors] };
+};
+
+export const runPipeline = async (text: string, options: PipelineOptions): Promise<PipelineResult> =>
+{
+    const detected = await detectPipeline(text, options);
+
+    checkCancelled(options.signal);
+    return timed(options.timing, 'render', () => renderDetections(text, detected, options.session));
 };

@@ -12,7 +12,7 @@ import {
     type State,
 } from '../../../apps/extension/source/ui/state';
 
-const run: MaskRun = { input: 'Anna', result: { maskedText: 'PERSON_001', spans: [], segments: [], failedDetectors: [] }, modelFailed: false, milliseconds: 5 };
+const run: MaskRun = { input: 'Anna', result: { maskedText: 'PERSON_001', spans: [], segments: [], failedDetectors: [] }, milliseconds: 5 };
 const file = { id: 'a', fileName: 'a.txt', format: 'txt', size: 1, text: 'a' } as const;
 
 const after = (...actions: Action[]): State => actions.reduce(reducer, createInitialState());
@@ -50,11 +50,6 @@ describe('masking from the composer', () =>
         expect(stopped).not.toHaveProperty('scanError');
         expect(after({ type: 'scanStarted' }, { type: 'scanStopped', error: 'Could not mask' }).scanError).toBe('Could not mask');
         expect(after({ type: 'scanStopped', error: 'x' }, { type: 'scanStarted' }).scanError).toBeUndefined();
-    });
-
-    it('keeps why the model did not run', () =>
-    {
-        expect(prompt(after({ type: 'scanFinished', run, modelNote: 'permission' })).modelNote).toBe('permission');
     });
 
     it('puts an unsent prompt back into the composer for editing', () =>
@@ -198,8 +193,6 @@ describe('files', () =>
 
 describe('settings, model and first run', () =>
 {
-    const withoutModel = { ...DEFAULT_EXTENSION_SETTINGS, localModelDetectionEnabled: false };
-
     it('opens settings from either page and returns to it', () =>
     {
         expect(after({ type: 'settingsOpened' }).view).toBe('settings');
@@ -208,14 +201,24 @@ describe('settings, model and first run', () =>
         expect(after({ type: 'setupShown' }, { type: 'settingsOpened' }).view).toBe('setup');
     });
 
-    it('shows the model as off while it is switched off', () =>
+    it('starts with the model idle and keeps its state when settings change', () =>
     {
-        const off = after({ type: 'settingsChanged', settings: withoutModel }, { type: 'modelChanged', model: 'ready' });
-
-        expect(off.model).toBe('off');
-        expect(reducer(off, { type: 'settingsChanged', settings: DEFAULT_EXTENSION_SETTINGS }).model).toBe('idle');
+        expect(createInitialState().model).toBe('idle');
         expect(after({ type: 'modelChanged', model: 'ready' }, { type: 'settingsLoaded', settings: DEFAULT_EXTENSION_SETTINGS }).model).toBe('ready');
-        expect(createInitialState(withoutModel).model).toBe('off');
+    });
+
+    it('shows the download again with a warning when Chrome did not allow it', () =>
+    {
+        expect(after({ type: 'setupShown', step: 'denied' })).toMatchObject({ view: 'setup', setup: { step: 'denied' } });
+    });
+
+    it('marks the model as missing on the setup screen until a download starts', () =>
+    {
+        const shown = after({ type: 'setupShown' });
+
+        expect(shown.model).toBe('missing');
+        expect(reducer(shown, { type: 'setupClosed' })).toMatchObject({ view: 'prompt', model: 'missing' });
+        expect(after({ type: 'modelChanged', model: 'failed' }, { type: 'setupShown' }).model).toBe('failed');
     });
 
     it('shows the first-run offer, follows the download and closes', () =>

@@ -7,9 +7,12 @@ export {
     type SessionSnapshot,
 } from './session';
 export {
+    detectPipeline,
     maskDetections,
+    renderDetections,
     runPipeline,
     type MaskOptions,
+    type PipelineDetections,
     type PipelineOptions,
     type PipelineProgress,
     type PipelineStage,

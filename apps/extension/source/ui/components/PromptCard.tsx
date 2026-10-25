@@ -12,11 +12,6 @@ import { Popover } from './Popover';
 import { PlaceholderPanel, SelectionBar } from './ReviewPanels';
 import { useCopied } from './useCopied';
 
-const MODEL_NOTES = {
-    permission: 'The model download wasn\'t allowed, so only rules masked this prompt.',
-    failed: 'The model couldn\'t run, so only rules masked this prompt.',
-};
-
 type PromptCardProps = {
     entry: PromptEntry;
     parts: OutputPart[];
@@ -43,7 +38,7 @@ const seconds = (milliseconds: number) => `${(milliseconds / 1000).toFixed(1)} s
 export const PromptCard = (props: PromptCardProps) =>
 {
     const { entry, parts, target } = props;
-    const { run, selected, selection, revealed, insert, modelNote, sentTo, expanded } = entry;
+    const { run, selected, selection, revealed, insert, sentTo, expanded } = entry;
     const values = categoryCounts(run.result).reduce((sum, count) => sum + count.count, 0);
     const details = selected == null ? undefined : placeholderDetails(run.result, selected);
     const { copied, onCopy } = useCopied(props.onCopy);
@@ -80,11 +75,6 @@ export const PromptCard = (props: PromptCardProps) =>
     return (
         <section className="card" aria-label="Prompt card">
             {head}
-            {modelNote == null ? null : (
-                <div className="card-section">
-                    <Flash tone="warning">{MODEL_NOTES[modelNote]} Names and addresses may be missed, so check the preview.</Flash>
-                </div>
-            )}
             <MaskedPreview
                 parts={parts}
                 selected={selected}

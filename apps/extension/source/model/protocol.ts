@@ -11,6 +11,9 @@ export const MODEL_HOST_PERMISSIONS = [
     'https://*.xethub.hf.co/*',
 ];
 
+// bytes of the pinned model revision's files (tokenizer, config, INT8 model), for the download bar
+export const MODEL_DOWNLOAD_BYTES = 342_988_605;
+
 export type ModelRequest =
     | { type: 'detect'; id: number; text: string }
     | { type: 'cancel'; id: number };

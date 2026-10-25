@@ -1,8 +1,10 @@
 import {
     createSession,
+    detectPipeline,
     maskDetections,
+    PipelineCancelledError,
+    renderDetections,
     restoreSession,
-    runPipeline,
     type Category,
     type CancelSignal,
     type Detection,
@@ -15,13 +17,32 @@ export type MaskRun = {
     // the text that was masked: the prompt with its files
     input: string;
     result: PipelineResult;
-    // the model was asked to run but failed, so the result comes from the rules only
-    modelFailed: boolean;
     milliseconds: number;
 };
 
+// the model couldn't run, so nothing was masked: names and addresses would go through unmasked
+export class ModelFailedError extends Error
+{
+    override name = 'ModelFailedError';
+
+    constructor()
+    {
+        super('The model failed, so nothing was masked');
+    }
+}
+
+// a rule failed, so its findings are missing and the prompt would go out partly unmasked
+export class DetectorFailedError extends Error
+{
+    override name = 'DetectorFailedError';
+
+    constructor()
+    {
+        super('A detection rule failed, so nothing was masked');
+    }
+}
+
 export type MaskOptions = {
-    useModel: boolean;
     categories: ReadonlySet<Category>;
     signal?: CancelSignal;
     // the model's own progress, 0 to 1, as the rules finish at once and would make it jump
@@ -39,23 +60,48 @@ export const createMasker = (options: MaskerOptions) =>
 {
     const { rules, model, now = () => performance.now() } = options;
     let session = createSession();
+    let generation = 0;
 
-    const mask = async (input: string, { useModel, categories, signal, onModelProgress }: MaskOptions): Promise<MaskRun> =>
+    // rules and model always run together, and a detector that fails stops the run with nothing masked
+    const mask = async (input: string, { categories, signal, onModelProgress }: MaskOptions): Promise<MaskRun> =>
     {
         const startedAt = now();
+        const startedGeneration = generation;
         const reportingModel: Detector = {
             id: model.id,
             detect: (text, context) => model.detect(text, { ...context, ...(onModelProgress == null ? {} : { onProgress: onModelProgress }) }),
         };
-        const result = await runPipeline(input, {
-            detectors: useModel ? [...rules, reportingModel] : rules,
-            session,
+        const detected = await detectPipeline(input, {
+            detectors: [...rules, reportingModel],
+            session: session.fork(),
             enabledCategories: categories,
             residualPasses: 0,
             ...(signal == null ? {} : { signal }),
         });
 
-        return { input, result, modelFailed: useModel && result.failedDetectors.includes(model.id), milliseconds: now() - startedAt };
+        // a reset invalidates the work even if its detector ignored cancellation
+        if (signal?.aborted === true || startedGeneration !== generation)
+        {
+            throw new PipelineCancelledError();
+        }
+
+        if (detected.failedDetectors.includes(model.id))
+        {
+            throw new ModelFailedError();
+        }
+
+        // the other detectors are rules, and a missing rule would leave its values unmasked
+        if (detected.failedDetectors.length > 0)
+        {
+            throw new DetectorFailedError();
+        }
+
+        // no await between taking the current mappings and publishing their additions
+        const nextSession = session.fork();
+        const result = renderDetections(input, detected, nextSession);
+
+        session = nextSession;
+        return { input, result, milliseconds: now() - startedAt };
     };
 
     // the run again with spans the user chose, which win over detected values and earlier choices
@@ -104,6 +150,7 @@ export const createMasker = (options: MaskerOptions) =>
         try
         {
             session = restoreSession(stored as SessionSnapshot);
+            generation += 1;
             return true;
         }
         catch
@@ -114,6 +161,7 @@ export const createMasker = (options: MaskerOptions) =>
 
     const forget = () =>
     {
+        generation += 1;
         session = createSession();
     };
 
