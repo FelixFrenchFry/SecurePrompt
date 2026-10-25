@@ -1,6 +1,6 @@
 import { CATEGORIES, type Category } from '@secureprompt/core';
 
-export type PromptHeaderMode = 'none' | 'basic' | 'detailed' | 'custom';
+export type PromptHeaderMode = 'none' | 'note' | 'custom';
 
 export type ThemeSetting = 'system' | 'light' | 'dark';
 
@@ -16,11 +16,15 @@ export type ExtensionSettings = {
     customPromptHeader: string;
 };
 
-export const BASIC_PROMPT_HEADER =
-    'NOTE: Sensitive values in the prompt were replaced with stable typed placeholders such as EMAIL_001, PHONE_001, PERSON_001, ADDRESS_001, ACCOUNT_001, DATE_001, NETWORK_001, SECRET_001, and OTHER_001. Repeated placeholders refer to the same original value within this prompt. Do not infer or reconstruct originals, but preserve placeholders and the surrounding operational meaning.';
-
-export const DETAILED_PROMPT_HEADER =
-    'NOTE: Sensitive values in the prompt were replaced locally with stable typed placeholders before submission. EMAIL_001 represents an email address. PHONE_001 represents a phone number. PERSON_001 represents a private person or name. ADDRESS_001 represents a street address, postal address, or private location. ACCOUNT_001 represents an account, customer, payment, invoice, bank, tax, subscription, tenant, contract, ticket, or similar identifier. DATE_001 represents a date or time value. NETWORK_001 represents a URL, domain, hostname, IP address, endpoint, email link, or private infrastructure reference. SECRET_001 represents a credential, token, API key, password, private key, connection string, webhook, or similar secret. OTHER_001 represents a sensitive value that does not fit one of the named categories. Repeated placeholders refer to the same original value within this specific prompt. Different placeholder numbers usually refer to different original values, even within the same category. Do not infer, reconstruct, guess, or invent original private values. Preserve placeholders when referring to them, keep category distinctions intact, and preserve the surrounding operational meaning.';
+export const PROMPT_HEADER =
+    'Privacy note: Some potentially sensitive values in this message were replaced with placeholders in the format PERSON_001, EMAIL_005, PHONE_071, and so on. ' +
+    'Treat them as the real values: Use them naturally, and don’t mention that anything was replaced or try to guess the originals. ' +
+    'The same placeholder means the same value throughout this chat, and different placeholders mean different values. ' +
+    'Always write a placeholder with its exact spelling (capitals, underscore, all digits, no backslash), also inside code. ' +
+    'Keep placeholders in visible text, not inside link targets or math, and prefer standard Markdown over special formats. ' +
+    'Don’t make up new placeholders. ' +
+    'A tool on the user’s device swaps the placeholders in your answer back to the real values, so they only work if written exactly as given. ' +
+    'Answer in the language of the message below.';
 
 const PROMPT_HEADER_SEPARATOR = '\n\n';
 
@@ -34,8 +38,9 @@ export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
     localModelDetectionEnabled: true,
     modelSetupDone: false,
     enabledCategories: DEFAULT_ENABLED_CATEGORIES,
-    promptHeaderMode: 'basic',
-    customPromptHeader: '',
+    promptHeaderMode: 'note',
+    // the custom note starts as an editable copy of the explaining note
+    customPromptHeader: PROMPT_HEADER,
 };
 
 export const enabledCategorySet = (enabled: EnabledCategories): ReadonlySet<Category> =>
@@ -53,6 +58,8 @@ export const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
 
     const stored = value as Partial<Record<keyof ExtensionSettings, unknown>>;
     const defaults = DEFAULT_EXTENSION_SETTINGS;
+    const promptHeaderMode = oneOf(stored.promptHeaderMode, ['none', 'note', 'custom'] as const, defaults.promptHeaderMode);
+    const customPromptHeader = typeof stored.customPromptHeader === 'string' ? stored.customPromptHeader : defaults.customPromptHeader;
 
     return {
         theme: oneOf(stored.theme, ['system', 'light', 'dark'] as const, defaults.theme),
@@ -60,8 +67,10 @@ export const normalizeExtensionSettings = (value: unknown): ExtensionSettings =>
             typeof stored.localModelDetectionEnabled === 'boolean' ? stored.localModelDetectionEnabled : defaults.localModelDetectionEnabled,
         modelSetupDone: typeof stored.modelSetupDone === 'boolean' ? stored.modelSetupDone : defaults.modelSetupDone,
         enabledCategories: normalizeCategories(stored.enabledCategories, defaults.enabledCategories),
-        promptHeaderMode: oneOf(stored.promptHeaderMode, ['none', 'basic', 'detailed', 'custom'] as const, defaults.promptHeaderMode),
-        customPromptHeader: typeof stored.customPromptHeader === 'string' ? stored.customPromptHeader : defaults.customPromptHeader,
+        promptHeaderMode,
+        // an empty custom note, as older versions stored by default, starts again from the explaining note unless it's in use
+        customPromptHeader:
+            promptHeaderMode !== 'custom' && customPromptHeader.trim().length === 0 ? defaults.customPromptHeader : customPromptHeader,
     };
 };
 
@@ -86,14 +95,9 @@ const normalizeCategories = (value: unknown, fallback: EnabledCategories): Enabl
 
 export const getPromptHeaderText = (settings: Pick<ExtensionSettings, 'promptHeaderMode' | 'customPromptHeader'>) =>
 {
-    if (settings.promptHeaderMode === 'basic')
+    if (settings.promptHeaderMode === 'note')
     {
-        return BASIC_PROMPT_HEADER;
-    }
-
-    if (settings.promptHeaderMode === 'detailed')
-    {
-        return DETAILED_PROMPT_HEADER;
+        return PROMPT_HEADER;
     }
 
     if (settings.promptHeaderMode === 'custom')

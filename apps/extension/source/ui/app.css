@@ -722,6 +722,32 @@ body {
     pointer-events: none;
 }
 
+/* the full-size dropdown, as TabBlackBox's settings dropdowns: muted background and a stroked chevron */
+.select:not(.select-small) select {
+    width: 160px;
+    height: auto;
+    min-height: 34px;
+    padding: 6px 40px 6px 12px;
+    border-color: var(--borderColor-default);
+    background: var(--bgColor-muted);
+}
+
+.select:not(.select-small) select:hover {
+    background: var(--bgColor-muted);
+}
+
+.select:not(.select-small) select:focus-visible {
+    outline: 2px solid var(--focus-outline-color);
+    outline-offset: 3px;
+}
+
+.select:not(.select-small)::after {
+    right: 12px;
+    background: var(--fgColor-default);
+    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")
+        center / contain no-repeat;
+}
+
 .select-small select {
     height: 28px;
     padding-left: 8px;
@@ -806,10 +832,24 @@ body {
     padding: 8px 8px 8px 12px;
 }
 
-.custom-header {
+/* the arrow keeps the row as tall as rows without one */
+.note-toggle {
+    margin: -6px -6px -6px 0;
+}
+
+/* the gap above keeps the box apart from the row's hover background */
+.note-text {
+    display: block;
+    width: calc(100% - 24px);
     min-height: 96px;
-    margin-top: 8px;
+    margin: 6px 12px 12px;
+    field-sizing: content;
     resize: vertical;
+}
+
+.note-text[readonly] {
+    color: var(--fgColor-muted);
+    resize: none;
 }
 
 /* the prompt composer: a chat-style input at the bottom, growing with its text */
@@ -1180,9 +1220,38 @@ body {
 }
 
 .section-title {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin: 0 0 8px;
     font-size: var(--text-body-size-medium);
     font-weight: var(--base-text-weight-semibold);
+}
+
+/* the question mark after a settings title, explaining it in the shared tooltip */
+.help-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin: -2px 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--sp-radius);
+    background: transparent;
+    color: var(--fgColor-muted);
+    cursor: help;
+}
+
+.help-button:hover {
+    background: var(--bgColor-muted);
+    color: var(--fgColor-default);
+}
+
+.help-button:focus-visible {
+    outline: 2px solid var(--fgColor-accent);
+    outline-offset: -1px;
 }
 
 .list {
@@ -1220,6 +1289,24 @@ body {
 
 .list-item-top input {
     margin-top: 2px;
+}
+
+/* note options: a radio row with a show/hide arrow, and the note's text below when open. After the list-item rules,
+   so their corner radii don't override these */
+.note-option + .note-option {
+    border-top: 1px solid var(--borderColor-default);
+}
+
+.note-option > .list-item {
+    border-radius: 0;
+}
+
+.note-option:first-child > .list-item {
+    border-radius: var(--sp-radius) var(--sp-radius) 0 0;
+}
+
+.note-option:last-child > .list-item:last-child {
+    border-radius: 0 0 var(--sp-radius) var(--sp-radius);
 }
 
 /* checkboxes and radio buttons drawn like Primer's */

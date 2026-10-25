@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-    BASIC_PROMPT_HEADER,
     DEFAULT_EXTENSION_SETTINGS,
     enabledCategorySet,
     normalizeExtensionSettings,
     prependPromptHeader,
+    PROMPT_HEADER,
 } from '../../../apps/extension/source/settings/types';
 
 describe('normalizeExtensionSettings', () =>
@@ -39,16 +39,33 @@ describe('normalizeExtensionSettings', () =>
         });
         expect([...enabledCategorySet(settings.enabledCategories)]).not.toContain('DATE');
     });
+
+    it('moves the former short and detailed notes to the single note', () =>
+    {
+        expect(normalizeExtensionSettings({ promptHeaderMode: 'basic' }).promptHeaderMode).toBe('note');
+        expect(normalizeExtensionSettings({ promptHeaderMode: 'detailed' }).promptHeaderMode).toBe('note');
+    });
+
+    it('starts the custom note from the explaining note when none was written', () =>
+    {
+        expect(DEFAULT_EXTENSION_SETTINGS.customPromptHeader).toBe(PROMPT_HEADER);
+        expect(normalizeExtensionSettings({ customPromptHeader: '' }).customPromptHeader).toBe(PROMPT_HEADER);
+        expect(normalizeExtensionSettings({ customPromptHeader: '  ' }).customPromptHeader).toBe(PROMPT_HEADER);
+    });
+
+    it('keeps an emptied custom note while the custom note is chosen', () =>
+    {
+        expect(normalizeExtensionSettings({ promptHeaderMode: 'custom', customPromptHeader: '' }).customPromptHeader).toBe('');
+    });
 });
 
 describe('prependPromptHeader', () =>
 {
     it('adds the chosen note before the prompt', () =>
     {
-        expect(prependPromptHeader('Hi PERSON_001', DEFAULT_EXTENSION_SETTINGS)).toBe(`${BASIC_PROMPT_HEADER}\n\nHi PERSON_001`);
+        expect(prependPromptHeader('Hi PERSON_001', DEFAULT_EXTENSION_SETTINGS)).toBe(`${PROMPT_HEADER}\n\nHi PERSON_001`);
         expect(prependPromptHeader('Hi', { promptHeaderMode: 'custom', customPromptHeader: '  Note  ' })).toBe('Note\n\nHi');
         expect(prependPromptHeader('Hi', { promptHeaderMode: 'custom', customPromptHeader: ' ' })).toBe('Hi');
         expect(prependPromptHeader('Hi', { promptHeaderMode: 'none', customPromptHeader: '' })).toBe('Hi');
-        expect(prependPromptHeader('Hi', { promptHeaderMode: 'detailed', customPromptHeader: '' })).toMatch(/^NOTE: .*\n\nHi$/s);
     });
 });

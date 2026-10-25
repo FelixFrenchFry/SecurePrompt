@@ -10,6 +10,31 @@ const LEAVE_MS = 120;
 
 let initialized = false;
 
+// wrapped text keeps the box at its maximum width, so narrow it to the longest line
+const fitToText = (tooltip: HTMLElement) =>
+{
+    tooltip.style.width = '';
+
+    const range = document.createRange();
+
+    range.selectNodeContents(tooltip);
+
+    const lines = [...range.getClientRects()];
+
+    if (lines.length < 2)
+    {
+        return;
+    }
+
+    const style = getComputedStyle(tooltip);
+    const frame =
+        style.boxSizing === 'border-box'
+            ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+            : 0;
+
+    tooltip.style.width = `${Math.ceil(Math.max(...lines.map((line) => line.width)) + frame)}px`;
+};
+
 // below the element, or above it when there's no room, and always inside the window
 const place = (tooltip: HTMLElement, anchor: HTMLElement) =>
 {
@@ -82,6 +107,7 @@ export const initializeTooltips = () =>
             tooltip.showPopover();
         }
 
+        fitToText(tooltip);
         place(tooltip, node);
     };
 
@@ -132,10 +158,18 @@ export const initializeTooltips = () =>
             leave();
         }
     });
-    // a click starts something else, like a copy or a page change
+    // a click starts something else, like a copy or a page change; help buttons have no action, so theirs stays
     document.addEventListener('click', (event) =>
     {
-        if (target != null && find(event.target) === target)
+        const node = find(event.target);
+
+        if (node?.hasAttribute('data-tooltip-help') === true)
+        {
+            show(node);
+            return;
+        }
+
+        if (target != null && node === target)
         {
             close();
         }
