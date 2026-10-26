@@ -3,7 +3,7 @@
     "version": "0.0.0",
     "private": true,
     "type": "module",
-    "license": "UNLICENSED",
+    "license": "MIT",
     "scripts": {
         "dev": "pnpm --filter @secureprompt/extension dev",
         "build": "pnpm --filter @secureprompt/extension build",
