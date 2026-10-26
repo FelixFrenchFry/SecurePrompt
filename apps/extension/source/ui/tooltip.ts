@@ -1,5 +1,5 @@
 // one tooltip for the whole side panel: any element with data-tooltip="…" gets it, shown at once on
-// hover or keyboard focus, in the top layer so scroll areas can't clip it (as in TabBlackBox)
+// hover or keyboard focus, in the top layer so scroll areas can't clip it
 
 const SELECTOR = '[data-tooltip]';
 const TOOLTIP_ID = 'sp-tooltip';

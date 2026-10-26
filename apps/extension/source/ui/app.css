@@ -49,7 +49,7 @@ body {
     gap: 16px;
 }
 
-/* the shared hover tooltip (tooltip.ts), a small Primer overlay as in TabBlackBox */
+/* the shared hover tooltip (tooltip.ts), a small Primer overlay */
 .tooltip {
     position: fixed;
     inset: auto;
@@ -681,7 +681,7 @@ body {
     pointer-events: none;
 }
 
-/* the full-size dropdown, as TabBlackBox's settings dropdowns: muted background and a stroked chevron */
+/* the full-size dropdown: muted background and a stroked chevron */
 .select:not(.select-small) select {
     width: 160px;
     height: auto;

@@ -102,7 +102,7 @@ pnpm install
 pnpm build
 ```
 
-In a Chromium browser, open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and select `.output/chrome-mv3` to add the extension.
+In a Chromium browser, open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked**, and select `apps/extension/.output/chrome-mv3` to add the extension.
 
 The side panel asks for permission to download the model from Hugging Face (about 340 MB). Until the model is ready, nothing is masked.
 
