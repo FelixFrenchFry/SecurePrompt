@@ -41,6 +41,10 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # fails when the notices file is out of date or a package has a license outside allowedLicenses
+      - name: Check third-party notices
+        run: pnpm notices:check
+
       - name: Check types
         run: pnpm typecheck
 

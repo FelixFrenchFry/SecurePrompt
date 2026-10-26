@@ -16,6 +16,8 @@
         "check:secrets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-secrets.ps1",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
+        "notices": "node scripts/generate-notices.mjs",
+        "notices:check": "node scripts/generate-notices.mjs --check",
         "test:install-browser": "node scripts/install-test-browser.mjs",
         "test:browser": "playwright test",
         "test:package": "pnpm build && vitest run --project package"

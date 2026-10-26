@@ -23,12 +23,12 @@ SecurePrompt runs in a Chromium browser side panel next to your AI chat tab. It 
 
 ### Supported chat sites
 
-- ChatGPT: chatgpt.com and chat.openai.com
-- Claude: claude.ai
-- Gemini: gemini.google.com
-- Mistral: chat.mistral.ai
-- Perplexity: perplexity.ai
-- Grok: grok.com
+- **ChatGPT:** [chatgpt.com](https://chatgpt.com) and [chat.openai.com](https://chat.openai.com)
+- **Claude:** [claude.ai](https://claude.ai)
+- **Gemini:** [gemini.google.com](https://gemini.google.com)
+- **Mistral:** [chat.mistral.ai](https://chat.mistral.ai)
+- **Perplexity:** [perplexity.ai](https://www.perplexity.ai)
+- **Grok:** [grok.com](https://grok.com)
 
 ### Walkthrough
 
@@ -131,3 +131,7 @@ The side panel asks for permission to download the model from Hugging Face (abou
 
 - Detection will miss some personal data, such as passwords in running text. Always read the masked text before you send it.
 - Restoring the originals only works if the AI keeps placeholders exactly as written.
+
+## License
+
+SecurePrompt is released under the [MIT License](LICENSE). The third-party software it includes keeps its own licenses, listed in [THIRD_PARTY_NOTICES.txt](apps/extension/public/THIRD_PARTY_NOTICES.txt). That file is also packaged inside the extension. The detection model is not included. It is downloaded from [Hugging Face](https://huggingface.co/bardsai/eu-pii-anonimization-multilang-v2) on first use and is licensed under the Apache License 2.0, as stated on its model card.
