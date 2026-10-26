@@ -1,3 +1,4 @@
 #!/bin/sh
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-secrets.ps1 -Staged
-pnpm.cmd format:check
+# stops the commit when the secret check finds something, before the format check runs
+node scripts/check-secrets.mjs --staged || exit 1
+pnpm format:check

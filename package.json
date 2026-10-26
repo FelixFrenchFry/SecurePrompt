@@ -13,7 +13,7 @@
         "test:unit": "vitest run --project unit",
         "test:integration": "vitest run --project integration",
         "test:coverage": "vitest run --coverage",
-        "check:secrets": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-secrets.ps1",
+        "check:secrets": "node scripts/check-secrets.mjs",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "notices": "node scripts/generate-notices.mjs",

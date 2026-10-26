@@ -141,11 +141,7 @@ onnxruntime-common 1.30.0
   License: MIT
   Copyright (c) Microsoft Corporation
 
-onnxruntime-common 1.31.0-dev.20260911-2a43ec07e
-  License: MIT
-  Copyright (c) Microsoft Corporation
-
-onnxruntime-web 1.31.0-dev.20260914-8d85527a0
+onnxruntime-web 1.30.0
   License: MIT
   Copyright (c) Microsoft Corporation
 

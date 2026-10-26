@@ -2,6 +2,9 @@ packages:
   - apps/*
   - packages/*
 
+overrides:
+  onnxruntime-web: 1.30.0
+
 allowBuilds:
   esbuild: true
   onnxruntime-node: true
